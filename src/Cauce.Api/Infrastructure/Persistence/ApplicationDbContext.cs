@@ -34,9 +34,9 @@ public class ApplicationDbContext : IdentityDbContext<User, IdentityRole<Guid>, 
             entity.Property(u => u.Id).HasColumnName("user_id");
             entity.Property(u => u.UserName).HasColumnName("username").HasMaxLength(150);
             entity.Property(u => u.NormalizedUserName).HasColumnName("normalized_username").HasMaxLength(150);
-            entity.Property(u => u.Email).HasColumnName("email").HasMaxLength(150);
-            entity.Property(u => u.NormalizedEmail).HasColumnName("normalized_email").HasMaxLength(150);
-            entity.Property(u => u.EmailConfirmed).HasColumnName("email_verified");
+            entity.Property(u => u.Email).HasColumnName("email").HasMaxLength(150).IsRequired();
+            entity.Property(u => u.NormalizedEmail).HasColumnName("normalized_email").HasMaxLength(150).IsRequired();
+            entity.Property(u => u.EmailConfirmed).HasColumnName("email_verified").HasDefaultValue(false);
             entity.Property(u => u.PasswordHash).HasColumnName("password_hash");
             entity.Property(u => u.SecurityStamp).HasColumnName("security_stamp");
             entity.Property(u => u.ConcurrencyStamp).HasColumnName("concurrency_stamp");
@@ -45,15 +45,15 @@ public class ApplicationDbContext : IdentityDbContext<User, IdentityRole<Guid>, 
             entity.Property(u => u.TwoFactorEnabled).HasColumnName("two_factor_enabled");
             entity.Property(u => u.LockoutEnd).HasColumnName("locked_until");
             entity.Property(u => u.LockoutEnabled).HasColumnName("lockout_enabled");
-            entity.Property(u => u.AccessFailedCount).HasColumnName("failed_login_attempts");
+            entity.Property(u => u.AccessFailedCount).HasColumnName("failed_login_attempts").HasDefaultValue(0);
 
             // Campos propios del diseño OE2
             entity.Property(u => u.FullName).HasColumnName("full_name").HasMaxLength(150).IsRequired();
             entity.Property(u => u.RoleId).HasColumnName("role_id");
             entity.Property(u => u.Status).HasColumnName("status").HasMaxLength(20).HasDefaultValue("pending_activation");
             entity.Property(u => u.KeycloakId).HasColumnName("keycloak_id").HasMaxLength(100);
-            entity.Property(u => u.CreatedAt).HasColumnName("created_at");
-            entity.Property(u => u.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(u => u.CreatedAt).HasColumnName("created_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
+            entity.Property(u => u.UpdatedAt).HasColumnName("updated_at").HasDefaultValueSql("CURRENT_TIMESTAMP");
             entity.Property(u => u.LastLoginAt).HasColumnName("last_login_at");
 
             // Relación con UserRole (ON DELETE RESTRICT como en el diseño)
@@ -61,6 +61,11 @@ public class ApplicationDbContext : IdentityDbContext<User, IdentityRole<Guid>, 
                 .WithMany(r => r.Users)
                 .HasForeignKey(u => u.RoleId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Índices únicos exigidos por el ERD (Dominio 1)
+            entity.HasIndex(u => u.NormalizedEmail).HasDatabaseName("EmailIndex").IsUnique();
+            entity.HasIndex(u => u.KeycloakId).IsUnique();
+
         });
 
         // --- Tabla user_roles ---
