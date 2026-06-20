@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Cauce.Api.Application.Interfaces;
 using Cauce.Api.Application.Services;
+using Cauce.Api.Infrastructure.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -149,6 +150,11 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 var app = builder.Build();
+
+// Servicios de aplicación
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IUserService, UserService>();
 
 // ===========================================================================
 // Pipeline HTTP
