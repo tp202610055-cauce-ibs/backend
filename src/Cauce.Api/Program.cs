@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Cauce.Api.Application.Interfaces;
+using Cauce.Api.Application.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -140,6 +142,12 @@ builder.Services.AddSwaggerGen(options =>
 // ===========================================================================
 // Construcción de la aplicación
 // ===========================================================================
+
+// ===========================================================================
+// 7) Registro de servicios de aplicación
+// ===========================================================================
+builder.Services.AddScoped<IAuthService, AuthService>();
+
 var app = builder.Build();
 
 // ===========================================================================
