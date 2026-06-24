@@ -162,9 +162,9 @@ Mientras tanto, el sistema vive en local. Para la sustentación de la tesis se h
 
 ## Quién más toca este repo
 
-**Mirian Contreras Paquita** se encarga del entrenamiento del modelo XGBoost que alimenta el motor de recomendaciones. Su trabajo es en Python y vive en otro lugar; el resultado (el archivo `.onnx`) se sube a este sistema vía el CLI command de provisioning de modelos (ver DEC-B3-08).
+**Mirian Contreras Paquita** se encarga del entrenamiento del modelo XGBoost que alimenta el motor de recomendaciones. Su trabajo es en Python y vive en otro lugar; el resultado (el archivo `.onnx`) se sube a este sistema vía el CLI command de provisioning de modelos.
 
-Cualquier cambio sobre `Cauce.Application/Recommendations/Inference/` o `Cauce.Infrastructure/Recommendations/Inference/` requiere coordinación con ella para mantener la tolerancia <0.001 entre la inferencia ONNX y la Python original.
+Cualquier cambio sobre `Cauce.Application/Recommendations/Inference/` o `Cauce.Infrastructure/Recommendations/Inference/` requiere coordinación con ella para mantener la tolerancia.
 
 ## Licencia
 
