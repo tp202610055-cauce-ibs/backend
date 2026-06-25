@@ -65,5 +65,20 @@ public enum AuditActionType
     /// <summary>
     /// Acceso a la historia clínica de un paciente desde el portal del nutricionista.
     /// </summary>
-    ViewPatientRecord
+    ViewPatientRecord,
+
+    /// <summary>
+    /// Registro de una nueva cuenta (paciente o nutricionista) en el sistema.
+    /// </summary>
+    Register,
+
+    /// <summary>
+    /// Solicitud de restablecimiento de contraseña.
+    /// </summary>
+    PasswordResetRequest,
+
+    /// <summary>
+    /// Confirmación de restablecimiento de contraseña.
+    /// </summary>
+    PasswordResetConfirm
 }
