@@ -7,6 +7,7 @@ using Cauce.Api.Middleware;
 using Cauce.Application;
 using Cauce.Infrastructure;
 using Cauce.Infrastructure.Identity;
+using Cauce.Infrastructure.Persistence.Seeders;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -30,6 +31,10 @@ if (builder.Environment.IsDevelopment())
 // 4. Inyección de dependencias por capa.
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// Clave de API administrativa (propia de la capa API).
+builder.Services.Configure<AdminApiKeyOptions>(
+    builder.Configuration.GetSection(AdminApiKeyOptions.SectionName));
 
 // Opciones de Keycloak para configurar la validación de JWT.
 var keycloakOptions = builder.Configuration
@@ -185,6 +190,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/api/v1/health/live");
+
+// Sembrado automático en desarrollo: aplica migraciones, puebla el catálogo de
+// roles y provisiona el nutricionista de prueba.
+if (app.Environment.IsDevelopment())
+{
+    await app.Services.RunDevelopmentSeedAsync();
+}
 
 // 15. Ejecución.
 app.Run();
