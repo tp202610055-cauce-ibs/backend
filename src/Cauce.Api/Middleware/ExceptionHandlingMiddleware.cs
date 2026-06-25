@@ -1,14 +1,17 @@
 using System.Diagnostics;
+using Cauce.Application.Common.Exceptions;
 using Cauce.Domain.Common.Exceptions;
-using Microsoft.AspNetCore.Mvc;
+using Cauce.Domain.Identity.Exceptions;
 using FluentValidation;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Cauce.Api.Middleware;
 
 /// <summary>
 /// Middleware que captura las excepciones no controladas del pipeline, las
 /// registra sin exponer datos personales (PII) y devuelve una respuesta de error
-/// estandarizada según RFC 7807 (<c>application/problem+json</c>).
+/// estandarizada según RFC 7807 (<c>application/problem+json</c>) con un código de
+/// error legible por máquina en la extensión <c>errorCode</c>.
 /// </summary>
 public sealed class ExceptionHandlingMiddleware
 {
@@ -52,26 +55,9 @@ public sealed class ExceptionHandlingMiddleware
     {
         var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
 
-        var problemDetails = exception switch
-        {
-            ValidationException validationException => BuildValidationProblem(validationException, traceId),
-            DomainException domainException => BuildDomainProblem(domainException, traceId),
-            UnauthorizedAccessException => BuildProblem(
-                StatusCodes.Status401Unauthorized,
-                "No autorizado",
-                "No tiene permisos para realizar esta operación.",
-                traceId),
-            KeyNotFoundException => BuildProblem(
-                StatusCodes.Status404NotFound,
-                "Recurso no encontrado",
-                "El recurso solicitado no existe.",
-                traceId),
-            _ => BuildProblem(
-                StatusCodes.Status500InternalServerError,
-                "Error interno del servidor",
-                "Ocurrió un error inesperado al procesar la solicitud.",
-                traceId)
-        };
+        var problemDetails = exception is ValidationException validationException
+            ? BuildValidationProblem(validationException, traceId)
+            : BuildProblemForException(exception, traceId);
 
         if (problemDetails.Status == StatusCodes.Status500InternalServerError)
         {
@@ -96,6 +82,45 @@ public sealed class ExceptionHandlingMiddleware
         await context.Response.WriteAsJsonAsync(problemDetails, problemDetails.GetType()).ConfigureAwait(false);
     }
 
+    private static ProblemDetails BuildProblemForException(Exception exception, string traceId)
+    {
+        var (status, title, errorCode, detail) = exception switch
+        {
+            DuplicateEmailException => (
+                StatusCodes.Status409Conflict, "Correo duplicado", "duplicate_email", exception.Message),
+            InvalidInvitationCodeException => (
+                StatusCodes.Status400BadRequest, "Código de invitación inválido", "invalid_invitation_code", exception.Message),
+            ExpiredInvitationCodeException => (
+                StatusCodes.Status400BadRequest, "Código de invitación expirado", "expired_invitation_code", exception.Message),
+            InvitationCodeAlreadyUsedException => (
+                StatusCodes.Status400BadRequest, "Código de invitación ya usado", "invitation_code_already_used", exception.Message),
+            AccountLockedException => (
+                StatusCodes.Status423Locked, "Cuenta bloqueada", "account_locked", exception.Message),
+            InvalidPasswordResetTokenException => (
+                StatusCodes.Status400BadRequest, "Token de restablecimiento inválido", "invalid_password_reset_token", exception.Message),
+            ExpiredPasswordResetTokenException => (
+                StatusCodes.Status400BadRequest, "Token de restablecimiento expirado", "expired_password_reset_token", exception.Message),
+            ConsentTextMismatchException => (
+                StatusCodes.Status400BadRequest, "Consentimiento no coincide", "consent_text_mismatch", exception.Message),
+            DomainException => (
+                StatusCodes.Status400BadRequest, "Regla de dominio violada", "domain_rule_violation", exception.Message),
+            KeycloakIntegrationException => (
+                StatusCodes.Status502BadGateway, "Error del proveedor de identidad", "keycloak_integration_error",
+                "No se pudo completar la operación con el proveedor de identidad."),
+            UnauthorizedAccessException => (
+                StatusCodes.Status403Forbidden, "Acceso denegado", "forbidden",
+                "No tiene permisos para realizar esta operación."),
+            KeyNotFoundException => (
+                StatusCodes.Status404NotFound, "Recurso no encontrado", "not_found",
+                "El recurso solicitado no existe."),
+            _ => (
+                StatusCodes.Status500InternalServerError, "Error interno del servidor", "internal_server_error",
+                "Ocurrió un error inesperado al procesar la solicitud.")
+        };
+
+        return BuildProblem(status, title, detail, errorCode, traceId);
+    }
+
     private static ProblemDetails BuildValidationProblem(ValidationException exception, string traceId)
     {
         var errors = exception.Errors
@@ -111,21 +136,11 @@ public sealed class ExceptionHandlingMiddleware
             Detail = "Una o más reglas de validación no se cumplieron."
         };
         problem.Extensions["traceId"] = traceId;
+        problem.Extensions["errorCode"] = "validation_error";
         return problem;
     }
 
-    private static ProblemDetails BuildDomainProblem(DomainException exception, string traceId)
-    {
-        var status = exception.GetType().Name.Contains("AlreadyUsed", StringComparison.OrdinalIgnoreCase)
-            || exception.GetType().Name.Contains("Conflict", StringComparison.OrdinalIgnoreCase)
-            || exception.GetType().Name.Contains("AlreadyRegistered", StringComparison.OrdinalIgnoreCase)
-            ? StatusCodes.Status409Conflict
-            : StatusCodes.Status400BadRequest;
-
-        return BuildProblem(status, "Regla de dominio violada", exception.Message, traceId);
-    }
-
-    private static ProblemDetails BuildProblem(int status, string title, string detail, string traceId)
+    private static ProblemDetails BuildProblem(int status, string title, string detail, string errorCode, string traceId)
     {
         var problem = new ProblemDetails
         {
@@ -134,6 +149,7 @@ public sealed class ExceptionHandlingMiddleware
             Detail = detail
         };
         problem.Extensions["traceId"] = traceId;
+        problem.Extensions["errorCode"] = errorCode;
         return problem;
     }
 }
