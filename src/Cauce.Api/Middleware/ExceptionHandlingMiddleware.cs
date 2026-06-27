@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Cauce.Application.Common.Exceptions;
 using Cauce.Domain.Common.Exceptions;
 using Cauce.Domain.Identity.Exceptions;
+using Cauce.Domain.Patients.Exceptions;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
@@ -102,6 +103,22 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status400BadRequest, "Token de restablecimiento expirado", "expired_password_reset_token", exception.Message),
             ConsentTextMismatchException => (
                 StatusCodes.Status400BadRequest, "Consentimiento no coincide", "consent_text_mismatch", exception.Message),
+            DuplicatePatientProfileException => (
+                StatusCodes.Status409Conflict, "Perfil de paciente duplicado", "duplicate_patient_profile", exception.Message),
+            PatientProfileNotFoundException => (
+                StatusCodes.Status404NotFound, "Perfil de paciente no encontrado", "patient_profile_not_found", exception.Message),
+            InvalidBiometricValueException => (
+                StatusCodes.Status400BadRequest, "Valor biométrico inválido", "invalid_biometric_value", exception.Message),
+            DuplicatePatientAllergyException => (
+                StatusCodes.Status409Conflict, "Alergia duplicada", "duplicate_patient_allergy", exception.Message),
+            AllergyNotFoundException => (
+                StatusCodes.Status404NotFound, "Alergia no encontrada", "allergy_not_found", exception.Message),
+            NutritionistAssignmentAlreadyExistsException => (
+                StatusCodes.Status409Conflict, "Asignación ya existente", "nutritionist_assignment_exists", exception.Message),
+            OnboardingAlreadyCompletedException => (
+                StatusCodes.Status409Conflict, "Onboarding ya completado", "onboarding_already_completed", exception.Message),
+            PatientAccessNotAuthorizedException => (
+                StatusCodes.Status403Forbidden, "Acceso al paciente no autorizado", "unauthorized_patient_access", exception.Message),
             DomainException => (
                 StatusCodes.Status400BadRequest, "Regla de dominio violada", "domain_rule_violation", exception.Message),
             KeycloakIntegrationException => (
