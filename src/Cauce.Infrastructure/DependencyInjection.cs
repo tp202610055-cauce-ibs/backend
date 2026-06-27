@@ -1,8 +1,10 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Infrastructure.Auditing;
 using Cauce.Infrastructure.Email;
 using Cauce.Infrastructure.Identity;
+using Cauce.Infrastructure.Patients;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Repositories;
 using Cauce.Infrastructure.Persistence.Seeders;
@@ -55,14 +57,24 @@ public static class DependencyInjection
         services.AddSingleton<IClientUrlProvider, ClientUrlProvider>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
 
+        // Servicios del módulo de pacientes.
+        services.AddSingleton<IBmiCalculator, BmiCalculator>();
+
         // Repositorios del módulo de identidad.
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IInvitationCodeRepository, InvitationCodeRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IConsentRecordRepository, ConsentRecordRepository>();
 
+        // Repositorios del módulo de pacientes.
+        services.AddScoped<IPatientProfileRepository, PatientProfileRepository>();
+        services.AddScoped<IAllergyRepository, AllergyRepository>();
+        services.AddScoped<IPatientAllergyRepository, PatientAllergyRepository>();
+        services.AddScoped<INutritionistPatientRepository, NutritionistPatientRepository>();
+
         // Seeders.
         services.AddScoped<UserRolesSeeder>();
+        services.AddScoped<AllergiesSeeder>();
         services.AddScoped<DevAdminSeeder>();
 
         // Cliente de administración de Keycloak (cliente HTTP tipado).
