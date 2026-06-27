@@ -1,5 +1,6 @@
 using Cauce.Domain.Auditing;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Patients;
 using Cauce.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -51,6 +52,26 @@ public sealed class CauceDbContext : DbContext
     /// Registros de consentimiento informado.
     /// </summary>
     public DbSet<ConsentRecord> ConsentRecords => Set<ConsentRecord>();
+
+    /// <summary>
+    /// Perfiles clínicos de pacientes.
+    /// </summary>
+    public DbSet<PatientProfile> PatientProfiles => Set<PatientProfile>();
+
+    /// <summary>
+    /// Catálogo de alergias e intolerancias.
+    /// </summary>
+    public DbSet<Allergy> Allergies => Set<Allergy>();
+
+    /// <summary>
+    /// Declaraciones de alergia de los pacientes.
+    /// </summary>
+    public DbSet<PatientAllergy> PatientAllergies => Set<PatientAllergy>();
+
+    /// <summary>
+    /// Asignaciones nutricionista-paciente.
+    /// </summary>
+    public DbSet<NutritionistPatient> NutritionistPatients => Set<NutritionistPatient>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
