@@ -29,6 +29,7 @@ public static class SeedingExtensions
             await context.Database.MigrateAsync(ct).ConfigureAwait(false);
 
             await services.GetRequiredService<UserRolesSeeder>().SeedAsync(ct).ConfigureAwait(false);
+            await services.GetRequiredService<AllergiesSeeder>().SeedAsync(ct).ConfigureAwait(false);
             await services.GetRequiredService<DevAdminSeeder>().SeedAsync(ct).ConfigureAwait(false);
         }
         catch (Exception exception)
