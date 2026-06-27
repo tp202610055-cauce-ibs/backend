@@ -4,14 +4,14 @@ namespace Cauce.Api.IntegrationTests.Identity.Support;
 
 /// <summary>
 /// Fixture que levanta un contenedor PostgreSQL real para las pruebas de
-/// integración. Si Docker no está disponible, marca el fixture como no disponible
-/// para que las pruebas se omitan en lugar de fallar.
+/// integración. Si Docker no está disponible (o su endpoint no se puede resolver),
+/// marca el fixture como no disponible para que las pruebas se omitan en lugar de
+/// fallar. La construcción del contenedor se hace dentro de <see cref="InitializeAsync"/>
+/// para que un endpoint mal configurado no rompa el constructor del fixture.
 /// </summary>
 public sealed class PostgresFixture : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _container = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
-        .Build();
+    private PostgreSqlContainer? _container;
 
     /// <summary>
     /// Indica si el contenedor está disponible (Docker presente y arranque exitoso).
@@ -28,6 +28,9 @@ public sealed class PostgresFixture : IAsyncLifetime
     {
         try
         {
+            _container = new PostgreSqlBuilder()
+                .WithImage("postgres:16-alpine")
+                .Build();
             await _container.StartAsync();
             ConnectionString = _container.GetConnectionString();
             IsAvailable = true;
@@ -41,7 +44,7 @@ public sealed class PostgresFixture : IAsyncLifetime
     /// <inheritdoc />
     public async Task DisposeAsync()
     {
-        if (IsAvailable)
+        if (_container is not null)
         {
             await _container.DisposeAsync();
         }
