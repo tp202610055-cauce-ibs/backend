@@ -27,6 +27,14 @@ public sealed class InvitationCodeRepository : IInvitationCodeRepository
     }
 
     /// <inheritdoc />
+    public Task<InvitationCode?> FindByUsedByPatientIdAsync(Guid patientId, CancellationToken ct = default)
+    {
+        return _context.Set<InvitationCode>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.UsedByPatientId == patientId, ct);
+    }
+
+    /// <inheritdoc />
     public async Task AddAsync(InvitationCode invitation, CancellationToken ct = default)
     {
         await _context.Set<InvitationCode>().AddAsync(invitation, ct).ConfigureAwait(false);
