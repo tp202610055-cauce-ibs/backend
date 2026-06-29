@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Cauce.Application.Common.Exceptions;
+using Cauce.Domain.ClinicalRegistry.Exceptions;
 using Cauce.Domain.Common.Exceptions;
 using Cauce.Domain.Identity.Exceptions;
 using Cauce.Domain.Patients.Exceptions;
@@ -119,6 +120,36 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict, "Onboarding ya completado", "onboarding_already_completed", exception.Message),
             PatientAccessNotAuthorizedException => (
                 StatusCodes.Status403Forbidden, "Acceso al paciente no autorizado", "unauthorized_patient_access", exception.Message),
+            FoodItemNotFoundException => (
+                StatusCodes.Status404NotFound, "Alimento no encontrado", "food_item_not_found", exception.Message),
+            CustomFoodNotFoundException => (
+                StatusCodes.Status404NotFound, "Alimento personalizado no encontrado", "custom_food_not_found", exception.Message),
+            DuplicateCustomFoodException => (
+                StatusCodes.Status409Conflict, "Alimento personalizado duplicado", "duplicate_custom_food", exception.Message),
+            CustomFoodInUseException => (
+                StatusCodes.Status409Conflict, "Alimento personalizado en uso", "custom_food_in_use", exception.Message),
+            DuplicateIngredientException => (
+                StatusCodes.Status409Conflict, "Ingrediente duplicado", "duplicate_ingredient", exception.Message),
+            IngredientNotFoundException => (
+                StatusCodes.Status404NotFound, "Ingrediente no encontrado", "ingredient_not_found", exception.Message),
+            MealNotFoundException => (
+                StatusCodes.Status404NotFound, "Comida no encontrada", "meal_not_found", exception.Message),
+            SymptomNotFoundException => (
+                StatusCodes.Status404NotFound, "Síntoma no encontrado", "symptom_not_found", exception.Message),
+            ClinicalNoteNotFoundException => (
+                StatusCodes.Status404NotFound, "Nota clínica no encontrada", "clinical_note_not_found", exception.Message),
+            InvalidClinicalNoteAssociationException => (
+                StatusCodes.Status400BadRequest, "Asociación de nota clínica inválida", "invalid_clinical_note_association", exception.Message),
+            DuplicateBaselineAssessmentException => (
+                StatusCodes.Status409Conflict, "Evaluación de línea base duplicada", "duplicate_baseline_assessment", exception.Message),
+            InvalidIbsSssDimensionException => (
+                StatusCodes.Status400BadRequest, "Dimensión IBS-SSS inválida", "invalid_ibs_sss_dimension", exception.Message),
+            InvalidMealRegistrationException => (
+                StatusCodes.Status400BadRequest, "Registro de comida inválido", "invalid_meal_registration", exception.Message),
+            PatientResourceAccessException => (
+                StatusCodes.Status403Forbidden, "Acceso a recurso no autorizado", "patient_resource_access_denied", exception.Message),
+            IdempotencyMismatchException => (
+                StatusCodes.Status409Conflict, "Conflicto de idempotencia", "idempotency_mismatch", exception.Message),
             DomainException => (
                 StatusCodes.Status400BadRequest, "Regla de dominio violada", "domain_rule_violation", exception.Message),
             KeycloakIntegrationException => (
