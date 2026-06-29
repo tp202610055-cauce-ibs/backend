@@ -13,4 +13,12 @@ public interface IUnitOfWork
     /// <param name="cancellationToken">Token de cancelación de la operación.</param>
     /// <returns>Número de registros afectados.</returns>
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Descarta los cambios rastreados aún no confirmados. Se usa para limpiar el
+    /// rastreador tras un fallo de confirmación (por ejemplo, una violación de
+    /// restricción única) y poder continuar procesando elementos independientes de un
+    /// lote sin reintentar la entidad fallida.
+    /// </summary>
+    void DiscardTrackedChanges();
 }
