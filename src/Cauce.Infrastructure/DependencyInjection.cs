@@ -1,7 +1,10 @@
 using Cauce.Application.Common.Interfaces;
+using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Infrastructure.Auditing;
+using Cauce.Infrastructure.Caching;
+using Cauce.Infrastructure.ClinicalRegistry;
 using Cauce.Infrastructure.Email;
 using Cauce.Infrastructure.Identity;
 using Cauce.Infrastructure.Patients;
@@ -11,6 +14,8 @@ using Cauce.Infrastructure.Persistence.Seeders;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using StackExchange.Redis;
 
 namespace Cauce.Infrastructure;
 
@@ -43,6 +48,7 @@ public static class DependencyInjection
         services.Configure<EmailOptions>(configuration.GetSection(EmailOptions.SectionName));
         services.Configure<ConsentDocumentOptions>(configuration.GetSection(ConsentDocumentOptions.SectionName));
         services.Configure<DevAdminOptions>(configuration.GetSection(DevAdminOptions.SectionName));
+        services.Configure<KeyDbOptions>(configuration.GetSection(KeyDbOptions.SectionName));
 
         // Servicios transversales.
         services.AddHttpContextAccessor();
@@ -60,6 +66,21 @@ public static class DependencyInjection
         // Servicios del módulo de pacientes.
         services.AddSingleton<IBmiCalculator, BmiCalculator>();
 
+        // Servicios del módulo de registro clínico.
+        services.AddSingleton<IFodmapAggregator, FodmapAggregator>();
+        services.AddSingleton<IIbsSssScorer, IbsSssScorer>();
+
+        // Almacén de idempotencia respaldado por KeyDB. AbortOnConnectFail=false evita que
+        // un KeyDB no disponible rompa el arranque; el almacén degrada (fail-open).
+        services.AddSingleton<IConnectionMultiplexer>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<KeyDbOptions>>().Value;
+            var configurationOptions = ConfigurationOptions.Parse(options.ConnectionString);
+            configurationOptions.AbortOnConnectFail = false;
+            return ConnectionMultiplexer.Connect(configurationOptions);
+        });
+        services.AddSingleton<IIdempotencyStore, KeyDbIdempotencyStore>();
+
         // Repositorios del módulo de identidad.
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IInvitationCodeRepository, InvitationCodeRepository>();
@@ -72,9 +93,18 @@ public static class DependencyInjection
         services.AddScoped<IPatientAllergyRepository, PatientAllergyRepository>();
         services.AddScoped<INutritionistPatientRepository, NutritionistPatientRepository>();
 
+        // Repositorios del módulo de registro clínico.
+        services.AddScoped<IFoodItemRepository, FoodItemRepository>();
+        services.AddScoped<ICustomFoodRepository, CustomFoodRepository>();
+        services.AddScoped<IMealRepository, MealRepository>();
+        services.AddScoped<ISymptomRepository, SymptomRepository>();
+        services.AddScoped<IClinicalNoteRepository, ClinicalNoteRepository>();
+        services.AddScoped<IIbsSssAssessmentRepository, IbsSssAssessmentRepository>();
+
         // Seeders.
         services.AddScoped<UserRolesSeeder>();
         services.AddScoped<AllergiesSeeder>();
+        services.AddScoped<FoodItemsSeeder>();
         services.AddScoped<DevAdminSeeder>();
 
         // Cliente de administración de Keycloak (cliente HTTP tipado).
