@@ -1,4 +1,5 @@
 using Cauce.Application.Common.Behaviors;
+using Cauce.Application.Common.Idempotency;
 using FluentValidation;
 using Mapster;
 using MapsterMapper;
@@ -27,11 +28,17 @@ public static class DependencyInjection
         services.AddMediatR(configuration =>
         {
             configuration.RegisterServicesFromAssembly(applicationAssembly);
+            // El comportamiento de idempotencia debe ir primero: intercepta los reintentos
+            // antes de validar o registrar, devolviendo el resultado almacenado.
+            configuration.AddOpenBehavior(typeof(IdempotencyBehavior<,>));
             configuration.AddOpenBehavior(typeof(LoggingBehavior<,>));
             configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));
         });
 
         services.AddValidatorsFromAssembly(applicationAssembly);
+
+        // Contexto de idempotencia con alcance de petición, actualizado por el behavior.
+        services.AddScoped<IIdempotencyContext, IdempotencyContext>();
 
         var typeAdapterConfig = TypeAdapterConfig.GlobalSettings;
         typeAdapterConfig.Scan(applicationAssembly);
