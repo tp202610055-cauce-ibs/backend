@@ -1,4 +1,5 @@
 using Cauce.Domain.Auditing;
+using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients;
 using Cauce.Infrastructure.Persistence.Entities;
@@ -72,6 +73,46 @@ public sealed class CauceDbContext : DbContext
     /// Asignaciones nutricionista-paciente.
     /// </summary>
     public DbSet<NutritionistPatient> NutritionistPatients => Set<NutritionistPatient>();
+
+    /// <summary>
+    /// Catálogo de alimentos.
+    /// </summary>
+    public DbSet<FoodItem> FoodItems => Set<FoodItem>();
+
+    /// <summary>
+    /// Alimentos personalizados de los pacientes.
+    /// </summary>
+    public DbSet<CustomFood> CustomFoods => Set<CustomFood>();
+
+    /// <summary>
+    /// Ingredientes de los alimentos personalizados.
+    /// </summary>
+    public DbSet<CustomFoodIngredient> CustomFoodIngredients => Set<CustomFoodIngredient>();
+
+    /// <summary>
+    /// Comidas registradas por los pacientes.
+    /// </summary>
+    public DbSet<Meal> Meals => Set<Meal>();
+
+    /// <summary>
+    /// Ítems de las comidas.
+    /// </summary>
+    public DbSet<MealItem> MealItems => Set<MealItem>();
+
+    /// <summary>
+    /// Síntomas reportados por los pacientes.
+    /// </summary>
+    public DbSet<Symptom> Symptoms => Set<Symptom>();
+
+    /// <summary>
+    /// Notas clínicas de los pacientes.
+    /// </summary>
+    public DbSet<ClinicalNote> ClinicalNotes => Set<ClinicalNote>();
+
+    /// <summary>
+    /// Evaluaciones IBS-SSS de los pacientes.
+    /// </summary>
+    public DbSet<IbsSssAssessment> IbsSssAssessments => Set<IbsSssAssessment>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
