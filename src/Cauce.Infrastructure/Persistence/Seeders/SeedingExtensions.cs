@@ -30,6 +30,7 @@ public static class SeedingExtensions
 
             await services.GetRequiredService<UserRolesSeeder>().SeedAsync(ct).ConfigureAwait(false);
             await services.GetRequiredService<AllergiesSeeder>().SeedAsync(ct).ConfigureAwait(false);
+            await services.GetRequiredService<FoodItemsSeeder>().SeedAsync(ct).ConfigureAwait(false);
             await services.GetRequiredService<DevAdminSeeder>().SeedAsync(ct).ConfigureAwait(false);
         }
         catch (Exception exception)
