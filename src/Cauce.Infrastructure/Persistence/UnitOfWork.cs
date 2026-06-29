@@ -24,4 +24,10 @@ public sealed class UnitOfWork : IUnitOfWork
     {
         return _context.SaveChangesAsync(cancellationToken);
     }
+
+    /// <inheritdoc />
+    public void DiscardTrackedChanges()
+    {
+        _context.ChangeTracker.Clear();
+    }
 }
