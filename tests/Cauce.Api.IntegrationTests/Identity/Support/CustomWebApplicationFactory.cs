@@ -35,14 +35,17 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     public const string AdminApiKey = "integration-test-admin-api-key-0123456789";
 
     private readonly string _connectionString;
+    private readonly string _redisConnectionString;
 
     /// <summary>
-    /// Inicializa la fábrica con la cadena de conexión del contenedor.
+    /// Inicializa la fábrica con las cadenas de conexión de los contenedores.
     /// </summary>
     /// <param name="connectionString">Cadena de conexión a PostgreSQL.</param>
-    public CustomWebApplicationFactory(string connectionString)
+    /// <param name="redisConnectionString">Cadena de conexión a Redis/KeyDB, opcional.</param>
+    public CustomWebApplicationFactory(string connectionString, string? redisConnectionString = null)
     {
         _connectionString = connectionString;
+        _redisConnectionString = redisConnectionString ?? "localhost:6379";
     }
 
     /// <summary>
@@ -65,6 +68,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Cauce"] = _connectionString,
+                ["KeyDb:ConnectionString"] = _redisConnectionString,
                 ["Keycloak:Authority"] = "https://test.cauce.local/realms/cauce",
                 ["Keycloak:Realm"] = "cauce",
                 ["Keycloak:Audience"] = "cauce-backend",
