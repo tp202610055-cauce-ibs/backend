@@ -2,6 +2,9 @@ using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
+using Cauce.Application.Common.Interfaces.Recommendations;
+using Cauce.Application.Recommendations.Configuration;
+using Cauce.Domain.Recommendations.Services;
 using Cauce.Infrastructure.Auditing;
 using Cauce.Infrastructure.Caching;
 using Cauce.Infrastructure.ClinicalRegistry;
@@ -11,6 +14,9 @@ using Cauce.Infrastructure.Patients;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Repositories;
 using Cauce.Infrastructure.Persistence.Seeders;
+using Cauce.Infrastructure.Recommendations.Engines;
+using Cauce.Infrastructure.Recommendations.Llm;
+using Cauce.Infrastructure.Recommendations.Readers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -101,11 +107,47 @@ public static class DependencyInjection
         services.AddScoped<IClinicalNoteRepository, ClinicalNoteRepository>();
         services.AddScoped<IIbsSssAssessmentRepository, IbsSssAssessmentRepository>();
 
+        // Módulo de recomendaciones.
+        services.AddOptions<RecommendationsOptions>()
+            .Bind(configuration.GetSection(RecommendationsOptions.SectionName))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<RecommendationsOptions>, RecommendationsOptionsValidator>();
+
+        // Selección del motor por configuración (DEC-B4-01).
+        services.AddSingleton<IRecommendationEngine>(serviceProvider =>
+        {
+            var recommendationsOptions = serviceProvider.GetRequiredService<IOptions<RecommendationsOptions>>().Value;
+            return recommendationsOptions.EngineKind switch
+            {
+                "Rule" => ActivatorUtilities.CreateInstance<FodmapRuleRecommendationEngine>(serviceProvider),
+                "Onnx" => ActivatorUtilities.CreateInstance<OnnxRecommendationEngine>(serviceProvider),
+                _ => throw new InvalidOperationException(
+                    $"EngineKind inválido '{recommendationsOptions.EngineKind}'. Se esperaba 'Rule' u 'Onnx'.")
+            };
+        });
+
+        // Orquestador LLM y respaldo.
+        services.AddSingleton<RecommendationGuardrailsValidator>();
+        services.AddSingleton<FallbackExplanationProvider>();
+        services.AddHttpClient<IExplanationOrchestrator, OllamaExplanationOrchestrator>();
+
+        // Servicios de dominio y lectores cross-module.
+        services.AddSingleton<AutoApprovalGuard>();
+        services.AddSingleton<AllergyHeuristicMatcher>();
+        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
+        services.AddScoped<IModelVersionRepository, ModelVersionRepository>();
+        services.AddScoped<IPatientClinicalHistoryReader, PatientClinicalHistoryReader>();
+        services.AddScoped<IPatientAllergyReader, PatientAllergyReader>();
+        services.AddScoped<IPatientProfileReader, PatientProfileReader>();
+        services.AddScoped<IFoodCatalogReader, FoodCatalogReader>();
+
         // Seeders.
         services.AddScoped<UserRolesSeeder>();
         services.AddScoped<AllergiesSeeder>();
         services.AddScoped<FoodItemsSeeder>();
         services.AddScoped<DevAdminSeeder>();
+        services.AddScoped<RecommendationsModelVersionsSeeder>();
 
         // Cliente de administración de Keycloak (cliente HTTP tipado).
         services.AddHttpClient<IKeycloakAdminClient, KeycloakAdminClient>();
