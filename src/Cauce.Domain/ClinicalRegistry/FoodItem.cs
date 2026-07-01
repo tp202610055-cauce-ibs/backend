@@ -61,6 +61,30 @@ public sealed class FoodItem : Entity, IAggregateRoot
     public string? FodmapTags { get; private set; }
 
     /// <summary>
+    /// Nivel ordinal de oligosacáridos (0–2). Atributo del alimento incorporado para el motor de
+    /// recomendaciones (DEC-B4-08); su enriquecimiento clínico es tarea previa al piloto.
+    /// </summary>
+    public byte OligosLevel { get; private set; }
+
+    /// <summary>
+    /// Nivel ordinal de fructosa (0–2). Atributo del alimento incorporado para el motor de
+    /// recomendaciones (DEC-B4-08).
+    /// </summary>
+    public byte FructoseLevel { get; private set; }
+
+    /// <summary>
+    /// Nivel ordinal de polioles (0–2). Atributo del alimento incorporado para el motor de
+    /// recomendaciones (DEC-B4-08).
+    /// </summary>
+    public byte PolyolsLevel { get; private set; }
+
+    /// <summary>
+    /// Nivel ordinal de lactosa (0–2). Atributo del alimento incorporado para el motor de
+    /// recomendaciones (DEC-B4-08).
+    /// </summary>
+    public byte LactoseLevel { get; private set; }
+
+    /// <summary>
     /// Indica si el alimento es de origen o consumo típicamente peruano.
     /// </summary>
     public bool IsPeruvian { get; private set; }
