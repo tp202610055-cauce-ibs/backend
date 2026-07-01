@@ -4,6 +4,7 @@ using Cauce.Domain.ClinicalRegistry.Exceptions;
 using Cauce.Domain.Common.Exceptions;
 using Cauce.Domain.Identity.Exceptions;
 using Cauce.Domain.Patients.Exceptions;
+using Cauce.Domain.Recommendations.Exceptions;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
@@ -150,6 +151,21 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status403Forbidden, "Acceso a recurso no autorizado", "patient_resource_access_denied", exception.Message),
             IdempotencyMismatchException => (
                 StatusCodes.Status409Conflict, "Conflicto de idempotencia", "idempotency_mismatch", exception.Message),
+            RecommendationNotFoundException => (
+                StatusCodes.Status404NotFound, "Recomendación no encontrada", "recommendation_not_found", exception.Message),
+            RecommendationAccessDeniedException => (
+                StatusCodes.Status403Forbidden, "Acceso a la recomendación no autorizado", "recommendation_access_denied",
+                "No tiene autorización para acceder a esta recomendación."),
+            InsufficientClinicalHistoryException => (
+                StatusCodes.Status422UnprocessableEntity, "Historial clínico insuficiente", "insufficient_clinical_history", exception.Message),
+            AllCandidatesFilteredByAllergiesException => (
+                StatusCodes.Status422UnprocessableEntity, "Candidatos filtrados por alergias", "all_candidates_filtered_by_allergies", exception.Message),
+            NoActiveModelVersionException => (
+                StatusCodes.Status422UnprocessableEntity, "Sin versión de modelo activa", "no_active_model_version", exception.Message),
+            RecommendationExpiredException => (
+                StatusCodes.Status409Conflict, "Recomendación expirada", "recommendation_expired", exception.Message),
+            InvalidRecommendationStateTransitionException => (
+                StatusCodes.Status409Conflict, "Transición de estado inválida", "conflict_state", exception.Message),
             DomainException => (
                 StatusCodes.Status400BadRequest, "Regla de dominio violada", "domain_rule_violation", exception.Message),
             KeycloakIntegrationException => (
