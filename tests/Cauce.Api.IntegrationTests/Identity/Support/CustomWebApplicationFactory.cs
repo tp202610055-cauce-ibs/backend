@@ -36,16 +36,19 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
     private readonly string _connectionString;
     private readonly string _redisConnectionString;
+    private readonly string? _ollamaEndpoint;
 
     /// <summary>
     /// Inicializa la fábrica con las cadenas de conexión de los contenedores.
     /// </summary>
     /// <param name="connectionString">Cadena de conexión a PostgreSQL.</param>
     /// <param name="redisConnectionString">Cadena de conexión a Redis/KeyDB, opcional.</param>
-    public CustomWebApplicationFactory(string connectionString, string? redisConnectionString = null)
+    /// <param name="ollamaEndpoint">Endpoint de Ollama, opcional; se usa para apuntar a un WireMock en pruebas.</param>
+    public CustomWebApplicationFactory(string connectionString, string? redisConnectionString = null, string? ollamaEndpoint = null)
     {
         _connectionString = connectionString;
         _redisConnectionString = redisConnectionString ?? "localhost:6379";
+        _ollamaEndpoint = ollamaEndpoint;
     }
 
     /// <summary>
@@ -65,7 +68,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
         builder.ConfigureAppConfiguration((_, configuration) =>
         {
-            configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            var settings = new Dictionary<string, string?>
             {
                 ["ConnectionStrings:Cauce"] = _connectionString,
                 ["KeyDb:ConnectionString"] = _redisConnectionString,
@@ -86,7 +89,15 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["AdminApi:Value"] = AdminApiKey,
                 ["DevAdmin:Enabled"] = "false",
                 ["Cors:AllowedOrigins"] = "http://localhost:5173"
-            });
+            };
+
+            if (_ollamaEndpoint is not null)
+            {
+                settings["Recommendations:Ollama:Endpoint"] = _ollamaEndpoint;
+                settings["Recommendations:Ollama:TimeoutSeconds"] = "2";
+            }
+
+            configuration.AddInMemoryCollection(settings);
         });
 
         builder.ConfigureTestServices(services =>
