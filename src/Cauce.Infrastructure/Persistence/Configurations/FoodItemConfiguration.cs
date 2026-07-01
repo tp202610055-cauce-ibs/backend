@@ -23,6 +23,10 @@ public sealed class FoodItemConfiguration : IEntityTypeConfiguration<FoodItem>
             table.HasCheckConstraint("ck_food_items_carbs", "carbs_g_per_100g >= 0");
             table.HasCheckConstraint("ck_food_items_fat", "fat_g_per_100g >= 0");
             table.HasCheckConstraint("ck_food_items_fiber", "fiber_g_per_100g >= 0");
+            table.HasCheckConstraint("ck_food_items_oligos_level", "oligos_level BETWEEN 0 AND 2");
+            table.HasCheckConstraint("ck_food_items_fructose_level", "fructose_level BETWEEN 0 AND 2");
+            table.HasCheckConstraint("ck_food_items_polyols_level", "polyols_level BETWEEN 0 AND 2");
+            table.HasCheckConstraint("ck_food_items_lactose_level", "lactose_level BETWEEN 0 AND 2");
         });
 
         builder.HasKey(x => x.Id);
@@ -51,6 +55,12 @@ public sealed class FoodItemConfiguration : IEntityTypeConfiguration<FoodItem>
             .IsRequired();
 
         builder.Property(x => x.FodmapTags).HasColumnName("fodmap_tags").HasColumnType("text");
+
+        builder.Property(x => x.OligosLevel).HasColumnName("oligos_level").HasDefaultValue((byte)0).IsRequired();
+        builder.Property(x => x.FructoseLevel).HasColumnName("fructose_level").HasDefaultValue((byte)0).IsRequired();
+        builder.Property(x => x.PolyolsLevel).HasColumnName("polyols_level").HasDefaultValue((byte)0).IsRequired();
+        builder.Property(x => x.LactoseLevel).HasColumnName("lactose_level").HasDefaultValue((byte)0).IsRequired();
+
         builder.Property(x => x.IsPeruvian).HasColumnName("is_peruvian").IsRequired();
         builder.Property(x => x.IsActive).HasColumnName("is_active").IsRequired();
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
