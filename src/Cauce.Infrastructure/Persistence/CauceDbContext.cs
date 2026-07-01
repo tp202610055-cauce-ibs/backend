@@ -2,6 +2,7 @@ using Cauce.Domain.Auditing;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients;
+using Cauce.Domain.Recommendations;
 using Cauce.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -113,6 +114,26 @@ public sealed class CauceDbContext : DbContext
     /// Evaluaciones IBS-SSS de los pacientes.
     /// </summary>
     public DbSet<IbsSssAssessment> IbsSssAssessments => Set<IbsSssAssessment>();
+
+    /// <summary>
+    /// Versiones del motor de recomendaciones.
+    /// </summary>
+    public DbSet<ModelVersion> ModelVersions => Set<ModelVersion>();
+
+    /// <summary>
+    /// Recomendaciones dietéticas generadas para los pacientes.
+    /// </summary>
+    public DbSet<Recommendation> Recommendations => Set<Recommendation>();
+
+    /// <summary>
+    /// Ítems de las recomendaciones.
+    /// </summary>
+    public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
+
+    /// <summary>
+    /// Retroalimentación de las recomendaciones.
+    /// </summary>
+    public DbSet<RecommendationFeedback> RecommendationFeedback => Set<RecommendationFeedback>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
