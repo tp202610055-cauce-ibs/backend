@@ -157,6 +157,14 @@ builder.Services.AddSwaggerGen(options =>
     {
         { jwtSecurityScheme, Array.Empty<string>() }
     });
+
+    // Documentación de endpoints a partir de los comentarios XML del ensamblado.
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
 });
 
 // 12. Health checks básicos.
@@ -201,13 +209,9 @@ if (app.Environment.IsDevelopment())
 // 15. Ejecución.
 app.Run();
 
-/// <summary>
-/// Mapea los roles del realm de Keycloak, presentes en el claim <c>realm_access</c>
-/// como objeto JSON, a claims de rol estándar de ASP.NET Core para que funcione la
-/// autorización basada en <c>[Authorize(Roles = "...")]</c> y las políticas por rol.
-/// </summary>
-/// <param name="context">Contexto del evento de validación del token.</param>
-/// <returns>Tarea completada una vez mapeados los roles.</returns>
+// Mapea los roles del realm de Keycloak, presentes en el claim realm_access como objeto JSON,
+// a claims de rol estándar de ASP.NET Core para que funcione la autorización basada en
+// [Authorize(Roles = "...")] y las políticas por rol.
 static Task MapKeycloakRealmRoles(TokenValidatedContext context)
 {
     if (context.Principal?.Identity is not ClaimsIdentity identity)
