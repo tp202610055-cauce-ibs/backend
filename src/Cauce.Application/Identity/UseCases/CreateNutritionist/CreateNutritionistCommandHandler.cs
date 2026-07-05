@@ -73,12 +73,9 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
 
             user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, request.Email, request.FullName, nutritionistRoleId);
             await _userRepository.AddAsync(user, cancellationToken).ConfigureAwait(false);
-            await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-            await _emailSender
-                .SendNutritionistTemporaryCredentialsAsync(user.Email, user.FullName, temporaryPassword, cancellationToken)
-                .ConfigureAwait(false);
-
+            // Auditoría explícita ANTES del SaveChanges: users no tiene trigger; una sola transacción
+            // persiste la cuenta y la bitácora de forma atómica (DEC-B5-01 capa 3, acta A8).
             await _auditLogger.LogAsync(
                 AuditActionType.Register,
                 nameof(User),
@@ -87,6 +84,12 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
                 newValuesHash: null,
                 additionalContext: JsonSerializer.Serialize(new { actor = "admin_api_key", role = UserRoles.Nutritionist }),
                 cancellationToken).ConfigureAwait(false);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+
+            await _emailSender
+                .SendNutritionistTemporaryCredentialsAsync(user.Email, user.FullName, temporaryPassword, cancellationToken)
+                .ConfigureAwait(false);
         }
         catch (Exception exception)
         {
