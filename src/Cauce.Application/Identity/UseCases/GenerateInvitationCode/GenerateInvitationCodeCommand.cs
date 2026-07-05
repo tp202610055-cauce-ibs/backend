@@ -1,3 +1,6 @@
+using Cauce.Application.Common.Interfaces;
+using Cauce.Domain.Auditing.Enums;
+using Cauce.Domain.Identity;
 using MediatR;
 
 namespace Cauce.Application.Identity.UseCases.GenerateInvitationCode;
@@ -9,4 +12,14 @@ namespace Cauce.Application.Identity.UseCases.GenerateInvitationCode;
 /// </summary>
 /// <param name="NutritionistUserId">Identificador de Keycloak del nutricionista autenticado.</param>
 public sealed record GenerateInvitationCodeCommand(
-    Guid NutritionistUserId) : IRequest<GenerateInvitationCodeResult>;
+    Guid NutritionistUserId) : IRequest<GenerateInvitationCodeResult>, IAuditableCommand
+{
+    /// <inheritdoc />
+    public string AuditEntityType => nameof(InvitationCode);
+
+    /// <inheritdoc />
+    public AuditActionType AuditActionType => AuditActionType.Register;
+
+    /// <inheritdoc />
+    public string? AuditAdditionalContext => null;
+}
