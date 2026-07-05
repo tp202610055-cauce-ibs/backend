@@ -1,8 +1,11 @@
 using Cauce.Domain.Auditing;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Notifications;
+using Cauce.Domain.Outbox;
 using Cauce.Domain.Patients;
 using Cauce.Domain.Recommendations;
+using Cauce.Domain.Reports;
 using Cauce.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -134,6 +137,21 @@ public sealed class CauceDbContext : DbContext
     /// Retroalimentación de las recomendaciones.
     /// </summary>
     public DbSet<RecommendationFeedback> RecommendationFeedback => Set<RecommendationFeedback>();
+
+    /// <summary>
+    /// Notificaciones dirigidas a los usuarios (push y email).
+    /// </summary>
+    public DbSet<Notification> Notifications => Set<Notification>();
+
+    /// <summary>
+    /// Mensajes del patrón outbox transaccional pendientes de publicar.
+    /// </summary>
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
+
+    /// <summary>
+    /// Metadatos de los reportes clínicos emitidos.
+    /// </summary>
+    public DbSet<ClinicalReportMetadata> ClinicalReportsMetadata => Set<ClinicalReportMetadata>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
