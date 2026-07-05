@@ -1,6 +1,5 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
-using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -20,7 +19,6 @@ public sealed class RequestPasswordResetCommandHandler : IRequestHandler<Request
     private readonly IClientUrlProvider _clientUrlProvider;
     private readonly IEmailSender _emailSender;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAuditLogger _auditLogger;
     private readonly ILogger<RequestPasswordResetCommandHandler> _logger;
 
     /// <summary>
@@ -33,7 +31,6 @@ public sealed class RequestPasswordResetCommandHandler : IRequestHandler<Request
         IClientUrlProvider clientUrlProvider,
         IEmailSender emailSender,
         IUnitOfWork unitOfWork,
-        IAuditLogger auditLogger,
         ILogger<RequestPasswordResetCommandHandler> logger)
     {
         _userRepository = userRepository;
@@ -42,7 +39,6 @@ public sealed class RequestPasswordResetCommandHandler : IRequestHandler<Request
         _clientUrlProvider = clientUrlProvider;
         _emailSender = emailSender;
         _unitOfWork = unitOfWork;
-        _auditLogger = auditLogger;
         _logger = logger;
     }
 
@@ -60,21 +56,15 @@ public sealed class RequestPasswordResetCommandHandler : IRequestHandler<Request
 
         var token = PasswordResetToken.Issue(Guid.NewGuid(), user.Id, tokenHash, utcNow, PasswordResetToken.Validity);
         await _tokenRepository.AddAsync(token, cancellationToken).ConfigureAwait(false);
+
+        // La auditoría (PasswordResetRequest / users, sin trigger) la enrola el AuditingBehavior antes
+        // de este handler; solo se persiste cuando la cuenta existe y se llama a SaveChanges (acta A8).
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         var resetLink = _clientUrlProvider.BuildPasswordResetLink(plainToken);
         await _emailSender
             .SendPasswordResetLinkAsync(user.Email, user.FullName, resetLink, cancellationToken)
             .ConfigureAwait(false);
-
-        await _auditLogger.LogAsync(
-            AuditActionType.PasswordResetRequest,
-            nameof(User),
-            user.Id,
-            oldValuesHash: null,
-            newValuesHash: null,
-            additionalContext: null,
-            cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Password reset requested for user {UserId}.", user.Id);
     }
