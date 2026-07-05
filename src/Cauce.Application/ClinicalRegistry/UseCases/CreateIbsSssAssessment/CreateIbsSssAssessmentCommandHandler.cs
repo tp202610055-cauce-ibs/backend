@@ -2,7 +2,6 @@ using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Patients.UseCases.CompletePatientOnboarding;
-using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.ClinicalRegistry.Exceptions;
@@ -13,9 +12,10 @@ using Microsoft.Extensions.Logging;
 namespace Cauce.Application.ClinicalRegistry.UseCases.CreateIbsSssAssessment;
 
 /// <summary>
-/// Handler del registro de una evaluación IBS-SSS. Asigna el número de ciclo, persiste,
-/// audita el evento y, cuando es de línea base, cierra el onboarding del paciente. No
-/// registra puntajes ni dimensiones en ningún log (PII clínica).
+/// Handler del registro de una evaluación IBS-SSS. Asigna el número de ciclo, persiste
+/// y, cuando es de línea base, cierra el onboarding del paciente. La auditoría de
+/// ibs_sss_assessments la realiza el trigger de PostgreSQL (DEC-B5-03). No registra
+/// puntajes ni dimensiones en ningún log (PII clínica).
 /// </summary>
 public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<CreateIbsSssAssessmentCommand, CreateIbsSssAssessmentResult>
 {
@@ -23,7 +23,6 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
     private readonly IUserRepository _userRepository;
     private readonly IIbsSssAssessmentRepository _assessmentRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAuditLogger _auditLogger;
     private readonly ISender _mediator;
     private readonly ILogger<CreateIbsSssAssessmentCommandHandler> _logger;
 
@@ -35,7 +34,6 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
         IUserRepository userRepository,
         IIbsSssAssessmentRepository assessmentRepository,
         IUnitOfWork unitOfWork,
-        IAuditLogger auditLogger,
         ISender mediator,
         ILogger<CreateIbsSssAssessmentCommandHandler> logger)
     {
@@ -43,7 +41,6 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
         _userRepository = userRepository;
         _assessmentRepository = assessmentRepository;
         _unitOfWork = unitOfWork;
-        _auditLogger = auditLogger;
         _mediator = mediator;
         _logger = logger;
     }
@@ -85,9 +82,7 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
         await _assessmentRepository.AddAsync(assessment, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await _auditLogger.LogAsync(
-            AuditActionType.Create, nameof(IbsSssAssessment), assessment.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+        // La auditoría de ibs_sss_assessments la realiza el trigger de PostgreSQL (DEC-B5-03).
 
         var triggeredOnboardingCompletion = false;
         if (request.AssessmentType == AssessmentType.Baseline)
