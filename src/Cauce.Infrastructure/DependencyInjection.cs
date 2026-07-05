@@ -1,8 +1,12 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Common.Interfaces.Notifications;
+using Cauce.Application.Common.Interfaces.Outbox;
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Common.Interfaces.Recommendations;
+using Cauce.Application.Common.Interfaces.Reports;
+using Cauce.Application.Common.Interfaces.Storage;
 using Cauce.Application.Recommendations.Configuration;
 using Cauce.Domain.Recommendations.Services;
 using Cauce.Infrastructure.Auditing;
@@ -10,6 +14,9 @@ using Cauce.Infrastructure.Caching;
 using Cauce.Infrastructure.ClinicalRegistry;
 using Cauce.Infrastructure.Email;
 using Cauce.Infrastructure.Identity;
+using Cauce.Infrastructure.Notifications;
+using Cauce.Infrastructure.Notifications.Senders;
+using Cauce.Infrastructure.Outbox;
 using Cauce.Infrastructure.Patients;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Repositories;
@@ -17,10 +24,17 @@ using Cauce.Infrastructure.Persistence.Seeders;
 using Cauce.Infrastructure.Recommendations.Engines;
 using Cauce.Infrastructure.Recommendations.Llm;
 using Cauce.Infrastructure.Recommendations.Readers;
+using Cauce.Infrastructure.Reports;
+using Cauce.Infrastructure.Storage;
+using FirebaseAdmin;
+using FirebaseAdmin.Messaging;
+using Google.Apis.Auth.OAuth2;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using Minio;
 using StackExchange.Redis;
 
 namespace Cauce.Infrastructure;
@@ -42,11 +56,15 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.AddDbContext<CauceDbContext>(options =>
+        // El interceptor propaga el actor autenticado a la variable de sesión de PostgreSQL para los
+        // triggers de auditoría (capa 4). Es scoped y se resuelve por contexto (acta A6).
+        services.AddScoped<AuditActorContextInterceptor>();
+        services.AddDbContext<CauceDbContext>((serviceProvider, options) =>
         {
             options
                 .UseNpgsql(configuration.GetConnectionString("Cauce"))
-                .UseSnakeCaseNamingConvention();
+                .UseSnakeCaseNamingConvention()
+                .AddInterceptors(serviceProvider.GetRequiredService<AuditActorContextInterceptor>());
         });
 
         // Opciones.
@@ -55,11 +73,15 @@ public static class DependencyInjection
         services.Configure<ConsentDocumentOptions>(configuration.GetSection(ConsentDocumentOptions.SectionName));
         services.Configure<DevAdminOptions>(configuration.GetSection(DevAdminOptions.SectionName));
         services.Configure<KeyDbOptions>(configuration.GetSection(KeyDbOptions.SectionName));
+        services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
+        services.Configure<MinioOptions>(configuration.GetSection(MinioOptions.SectionName));
+        services.Configure<ReportOptions>(configuration.GetSection(ReportOptions.SectionName));
 
         // Servicios transversales.
         services.AddHttpContextAccessor();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<IAuditLogger, AuditLogger>();
+        services.AddScoped<AuditActorResolver>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
 
         // Servicios de identidad y correo.
@@ -67,7 +89,9 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordResetTokenGenerator, PasswordResetTokenGenerator>();
         services.AddSingleton<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
         services.AddSingleton<IClientUrlProvider, ClientUrlProvider>();
+        services.AddSingleton<SmtpMessageDispatcher>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
+        services.AddHttpClient<IKeycloakTokenClient, KeycloakTokenClient>();
 
         // Servicios del módulo de pacientes.
         services.AddSingleton<IBmiCalculator, BmiCalculator>();
@@ -142,16 +166,79 @@ public static class DependencyInjection
         services.AddScoped<IPatientProfileReader, PatientProfileReader>();
         services.AddScoped<IFoodCatalogReader, FoodCatalogReader>();
 
+        // Módulo de auditoría, outbox y notificaciones (Prompt 5).
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<IOutboxWriter, OutboxWriter>();
+        services.AddScoped<IOutboxRepository, OutboxRepository>();
+        services.AddSingleton<OutboxEventTypeRegistry>();
+        services.AddScoped<OutboxBatchProcessor>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
+        services.AddScoped<INotificationScheduler, NotificationScheduler>();
+        services.AddScoped<NotificationBatchProcessor>();
+        services.AddScoped<INotificationSender, SmtpEmailNotificationSender>();
+        RegisterFcmSender(services, configuration);
+
+        // Almacenamiento de objetos (MinIO) y reportes clínicos.
+        services.AddSingleton<IMinioClient>(serviceProvider =>
+        {
+            var minioOptions = serviceProvider.GetRequiredService<IOptions<MinioOptions>>().Value;
+            return new MinioClient()
+                .WithEndpoint(minioOptions.Endpoint)
+                .WithCredentials(minioOptions.AccessKey, minioOptions.SecretKey)
+                .WithSSL(minioOptions.UseSsl)
+                .Build();
+        });
+        services.AddScoped<IObjectStorage, MinioObjectStorage>();
+        services.AddScoped<IClinicalReportDataReader, ClinicalReportDataReader>();
+        services.AddScoped<IClinicalReportMetadataRepository, ClinicalReportMetadataRepository>();
+        services.AddScoped<IPdfReportGenerator, PdfReportGenerator>();
+
         // Seeders.
         services.AddScoped<UserRolesSeeder>();
         services.AddScoped<AllergiesSeeder>();
         services.AddScoped<FoodItemsSeeder>();
         services.AddScoped<DevAdminSeeder>();
         services.AddScoped<RecommendationsModelVersionsSeeder>();
+        services.AddScoped<MinioBucketSeeder>();
 
         // Cliente de administración de Keycloak (cliente HTTP tipado).
         services.AddHttpClient<IKeycloakAdminClient, KeycloakAdminClient>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Registra el remitente de notificaciones push: el falso en desarrollo y pruebas, o el real de
+    /// Firebase Cloud Messaging cuando <c>Notifications:Fcm:UseFake</c> es <see langword="false"/>.
+    /// </summary>
+    /// <param name="services">Colección de servicios.</param>
+    /// <param name="configuration">Configuración de la aplicación.</param>
+    private static void RegisterFcmSender(IServiceCollection services, IConfiguration configuration)
+    {
+        var fcmOptions = configuration
+            .GetSection(NotificationOptions.SectionName)
+            .Get<NotificationOptions>()?.Fcm ?? new Cauce.Infrastructure.Notifications.FcmOptions();
+
+        if (fcmOptions.UseFake)
+        {
+            // Singleton para que las pruebas observen la misma instancia (SentMessages); el fake no
+            // tiene estado por-petición.
+            services.AddSingleton<FakeFcmSender>();
+            services.AddSingleton<INotificationSender>(sp => sp.GetRequiredService<FakeFcmSender>());
+            return;
+        }
+
+        services.AddSingleton(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<IOptions<NotificationOptions>>().Value.Fcm;
+            var app = FirebaseApp.DefaultInstance ?? FirebaseApp.Create(new AppOptions
+            {
+                Credential = string.IsNullOrWhiteSpace(options.CredentialsPath)
+                    ? GoogleCredential.GetApplicationDefault()
+                    : GoogleCredential.FromFile(options.CredentialsPath)
+            });
+            return FirebaseMessaging.GetMessaging(app);
+        });
+        services.AddScoped<INotificationSender, FirebaseCloudMessagingSender>();
     }
 }
