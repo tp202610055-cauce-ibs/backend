@@ -1,7 +1,7 @@
 using Cauce.Api.Contracts.Identity;
 using Cauce.Application.Identity.UseCases.ConfirmPasswordReset;
-using Cauce.Application.Identity.UseCases.RegisterLogoutEvent;
-using Cauce.Application.Identity.UseCases.RegisterLoginEvent;
+using Cauce.Application.Identity.UseCases.Login;
+using Cauce.Application.Identity.UseCases.Logout;
 using Cauce.Application.Identity.UseCases.RegisterPatient;
 using Cauce.Application.Identity.UseCases.RequestPasswordReset;
 using MediatR;
@@ -12,9 +12,9 @@ using Microsoft.AspNetCore.RateLimiting;
 namespace Cauce.Api.Controllers;
 
 /// <summary>
-/// Endpoints de autenticación e identidad: registro de pacientes, registro de
-/// eventos de sesión y restablecimiento de contraseña. El inicio de sesión en sí
-/// se realiza mediante OIDC entre el cliente y Keycloak, no por este controlador.
+/// Endpoints de autenticación e identidad: registro de pacientes, inicio y cierre de sesión
+/// (passthrough a Keycloak) y restablecimiento de contraseña. El backend es la única puerta de
+/// entrada, lo que permite auditar LOGIN/LOGOUT/FAILED_LOGIN en el middleware (acta A3).
 /// </summary>
 [Route("api/v{version:apiVersion}/auth")]
 public sealed class AuthController : BaseApiController
@@ -68,28 +68,32 @@ public sealed class AuthController : BaseApiController
     }
 
     /// <summary>
-    /// Registra el inicio de sesión del usuario autenticado.
+    /// Inicia sesión haciendo passthrough a Keycloak y devuelve los tokens emitidos. Ante
+    /// credenciales inválidas responde 401 con un mensaje genérico (no revela si la cuenta existe).
     /// </summary>
+    /// <param name="request">Credenciales y cliente OIDC.</param>
     /// <param name="ct">Token de cancelación.</param>
-    /// <returns>204 si se registró correctamente.</returns>
-    [Authorize]
-    [HttpPost("sessions")]
-    public async Task<IActionResult> RegisterSessionStart(CancellationToken ct)
+    /// <returns>200 con los tokens.</returns>
+    [AllowAnonymous]
+    [HttpPost("login")]
+    [EnableRateLimiting("auth-login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
-        await _mediator.Send(new RegisterLoginEventCommand(), ct);
-        return NoContent();
+        var result = await _mediator.Send(new LoginCommand(request.Email, request.Password, request.ClientId), ct);
+        return Ok(result);
     }
 
     /// <summary>
-    /// Registra el cierre de sesión del usuario autenticado.
+    /// Cierra sesión revocando el refresh token en Keycloak.
     /// </summary>
+    /// <param name="request">Refresh token y cliente OIDC.</param>
     /// <param name="ct">Token de cancelación.</param>
-    /// <returns>204 si se registró correctamente.</returns>
+    /// <returns>204 si se procesó la revocación.</returns>
     [Authorize]
-    [HttpDelete("sessions")]
-    public async Task<IActionResult> RegisterSessionEnd(CancellationToken ct)
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout([FromBody] LogoutRequest request, CancellationToken ct)
     {
-        await _mediator.Send(new RegisterLogoutEventCommand(), ct);
+        await _mediator.Send(new LogoutCommand(request.RefreshToken, request.ClientId), ct);
         return NoContent();
     }
 
