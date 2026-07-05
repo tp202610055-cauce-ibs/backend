@@ -1,9 +1,7 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
-using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
-using Cauce.Domain.Patients;
 using Cauce.Domain.Patients.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -20,7 +18,6 @@ public sealed class CompletePatientOnboardingCommandHandler : IRequestHandler<Co
     private readonly IUserRepository _userRepository;
     private readonly IPatientProfileRepository _patientProfileRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAuditLogger _auditLogger;
     private readonly ILogger<CompletePatientOnboardingCommandHandler> _logger;
 
     /// <summary>
@@ -31,14 +28,12 @@ public sealed class CompletePatientOnboardingCommandHandler : IRequestHandler<Co
         IUserRepository userRepository,
         IPatientProfileRepository patientProfileRepository,
         IUnitOfWork unitOfWork,
-        IAuditLogger auditLogger,
         ILogger<CompletePatientOnboardingCommandHandler> logger)
     {
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _patientProfileRepository = patientProfileRepository;
         _unitOfWork = unitOfWork;
-        _auditLogger = auditLogger;
         _logger = logger;
     }
 
@@ -64,9 +59,7 @@ public sealed class CompletePatientOnboardingCommandHandler : IRequestHandler<Co
         profile.CompleteOnboarding(utcNow);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await _auditLogger.LogAsync(
-            AuditActionType.Update, nameof(PatientProfile), profile.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+        // La auditoría de patient_profiles la realiza el trigger de PostgreSQL (DEC-B5-03).
 
         _logger.LogInformation("Patient onboarding completed for profile {ProfileId}.", profile.Id);
     }
