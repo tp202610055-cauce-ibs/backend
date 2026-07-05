@@ -33,6 +33,9 @@ public static class DependencyInjection
             configuration.AddOpenBehavior(typeof(IdempotencyBehavior<,>));
             configuration.AddOpenBehavior(typeof(LoggingBehavior<,>));
             configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            // La auditoría corre tras la validación (no audita peticiones inválidas) y antes del
+            // handler, para las tablas sin trigger marcadas con IAuditableCommand (DEC-B5-01, acta A8).
+            configuration.AddOpenBehavior(typeof(AuditingBehavior<,>));
         });
 
         services.AddValidatorsFromAssembly(applicationAssembly);
