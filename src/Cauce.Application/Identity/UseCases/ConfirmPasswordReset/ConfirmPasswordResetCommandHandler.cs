@@ -2,8 +2,6 @@ using System.Security.Cryptography;
 using System.Text;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
-using Cauce.Domain.Auditing.Enums;
-using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -20,7 +18,6 @@ public sealed class ConfirmPasswordResetCommandHandler : IRequestHandler<Confirm
     private readonly IUserRepository _userRepository;
     private readonly IKeycloakAdminClient _keycloakAdminClient;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAuditLogger _auditLogger;
     private readonly ILogger<ConfirmPasswordResetCommandHandler> _logger;
 
     /// <summary>
@@ -31,14 +28,12 @@ public sealed class ConfirmPasswordResetCommandHandler : IRequestHandler<Confirm
         IUserRepository userRepository,
         IKeycloakAdminClient keycloakAdminClient,
         IUnitOfWork unitOfWork,
-        IAuditLogger auditLogger,
         ILogger<ConfirmPasswordResetCommandHandler> logger)
     {
         _tokenRepository = tokenRepository;
         _userRepository = userRepository;
         _keycloakAdminClient = keycloakAdminClient;
         _unitOfWork = unitOfWork;
-        _auditLogger = auditLogger;
         _logger = logger;
     }
 
@@ -69,16 +64,10 @@ public sealed class ConfirmPasswordResetCommandHandler : IRequestHandler<Confirm
             .ConfigureAwait(false);
 
         token.Consume(utcNow);
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await _auditLogger.LogAsync(
-            AuditActionType.PasswordResetConfirm,
-            nameof(User),
-            user.Id,
-            oldValuesHash: null,
-            newValuesHash: null,
-            additionalContext: null,
-            cancellationToken).ConfigureAwait(false);
+        // La auditoría (PasswordResetConfirm / users, sin trigger) la enrola el AuditingBehavior antes
+        // de este handler; este SaveChanges la persiste de forma atómica (DEC-B5-01, acta A8).
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Password reset confirmed for user {UserId}.", user.Id);
     }
