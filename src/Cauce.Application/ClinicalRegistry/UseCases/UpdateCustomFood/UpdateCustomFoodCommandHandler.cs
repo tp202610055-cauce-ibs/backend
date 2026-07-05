@@ -88,11 +88,13 @@ public sealed class UpdateCustomFoodCommandHandler : IRequestHandler<UpdateCusto
             customFood.AddIngredient(ingredient.FoodId, ingredient.ProportionGrams);
         }
 
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
+        // Auditoría explícita ANTES del SaveChanges: custom_foods no tiene trigger; una sola
+        // transacción persiste los cambios y la bitácora de forma atómica (DEC-B5-01 capa 3, acta A8).
         await _auditLogger.LogAsync(
             AuditActionType.Update, nameof(CustomFood), customFood.Id,
             oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Custom food {CustomFoodId} updated.", customFood.Id);
         return new UpdateCustomFoodResult(customFood.Id);

@@ -73,11 +73,14 @@ public sealed class CreateCustomFoodCommandHandler : IRequestHandler<CreateCusto
         }
 
         await _customFoodRepository.AddAsync(customFood, cancellationToken).ConfigureAwait(false);
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        // Auditoría explícita ANTES del SaveChanges: custom_foods no tiene trigger; una sola
+        // transacción persiste el alimento y la bitácora de forma atómica (DEC-B5-01 capa 3, acta A8).
         await _auditLogger.LogAsync(
             AuditActionType.Create, nameof(CustomFood), customFood.Id,
             oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Custom food {CustomFoodId} created with {IngredientCount} ingredients.",
             customFood.Id, request.Ingredients.Count);
