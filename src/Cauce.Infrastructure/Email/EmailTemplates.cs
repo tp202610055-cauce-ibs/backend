@@ -17,6 +17,16 @@ public static class EmailTemplates
     public const string PasswordResetSubject = "Cauce — Restablecimiento de contraseña";
 
     /// <summary>
+    /// Asunto del correo que notifica que el reporte clínico está disponible.
+    /// </summary>
+    public const string ReportReadySubject = "Cauce — Reporte clínico disponible";
+
+    /// <summary>
+    /// Asunto del correo que envía la contraseña del reporte clínico.
+    /// </summary>
+    public const string ReportPasswordSubject = "Cauce — Contraseña de su reporte clínico";
+
+    /// <summary>
     /// Construye el cuerpo en texto plano del correo de credenciales del nutricionista.
     /// </summary>
     /// <param name="fullName">Nombre completo del destinatario.</param>
@@ -112,6 +122,84 @@ public static class EmailTemplates
             <p>Para crear una nueva contraseña, ingrese al siguiente enlace dentro de los próximos 30 minutos:</p>
             <p><a href="{resetLink}">{resetLink}</a></p>
             <p>Si usted no solicitó este restablecimiento, puede ignorar este correo. Su contraseña actual seguirá siendo válida.</p>
+            <p>Equipo Cauce</p>
+            """;
+    }
+
+    /// <summary>
+    /// Construye el cuerpo en texto plano del correo que notifica el reporte disponible.
+    /// </summary>
+    /// <param name="fullName">Nombre del nutricionista.</param>
+    /// <param name="presignedUrl">URL prefirmada de descarga.</param>
+    /// <param name="expiresAtUtc">Momento de expiración de la URL, en UTC.</param>
+    /// <returns>Cuerpo en texto plano.</returns>
+    public static string BuildReportReadyText(string fullName, string presignedUrl, DateTime expiresAtUtc)
+    {
+        return $"""
+            Hola {fullName},
+
+            El reporte clínico que solicitó ya está disponible. Puede descargarlo desde el siguiente enlace, válido hasta el {expiresAtUtc:yyyy-MM-dd HH:mm} UTC:
+
+            {presignedUrl}
+
+            El archivo está protegido con una contraseña que le enviaremos en un correo separado, por su seguridad.
+
+            Equipo Cauce
+            """;
+    }
+
+    /// <summary>
+    /// Construye el cuerpo HTML del correo que notifica el reporte disponible.
+    /// </summary>
+    /// <param name="fullName">Nombre del nutricionista.</param>
+    /// <param name="presignedUrl">URL prefirmada de descarga.</param>
+    /// <param name="expiresAtUtc">Momento de expiración de la URL, en UTC.</param>
+    /// <returns>Cuerpo HTML.</returns>
+    public static string BuildReportReadyHtml(string fullName, string presignedUrl, DateTime expiresAtUtc)
+    {
+        return $"""
+            <p>Hola {fullName},</p>
+            <p>El reporte clínico que solicitó ya está disponible. Puede descargarlo desde el siguiente enlace, válido hasta el {expiresAtUtc:yyyy-MM-dd HH:mm} UTC:</p>
+            <p><a href="{presignedUrl}">Descargar reporte</a></p>
+            <p>El archivo está protegido con una contraseña que le enviaremos en un correo separado, por su seguridad.</p>
+            <p>Equipo Cauce</p>
+            """;
+    }
+
+    /// <summary>
+    /// Construye el cuerpo en texto plano del correo con la contraseña del reporte.
+    /// </summary>
+    /// <param name="fullName">Nombre del nutricionista.</param>
+    /// <param name="password">Contraseña del PDF cifrado.</param>
+    /// <returns>Cuerpo en texto plano.</returns>
+    public static string BuildReportPasswordText(string fullName, string password)
+    {
+        return $"""
+            Hola {fullName},
+
+            La contraseña para abrir el reporte clínico que le enviamos es:
+
+            {password}
+
+            No comparta esta contraseña. El reporte contiene datos clínicos sensibles protegidos por la Ley N.° 29733.
+
+            Equipo Cauce
+            """;
+    }
+
+    /// <summary>
+    /// Construye el cuerpo HTML del correo con la contraseña del reporte.
+    /// </summary>
+    /// <param name="fullName">Nombre del nutricionista.</param>
+    /// <param name="password">Contraseña del PDF cifrado.</param>
+    /// <returns>Cuerpo HTML.</returns>
+    public static string BuildReportPasswordHtml(string fullName, string password)
+    {
+        return $"""
+            <p>Hola {fullName},</p>
+            <p>La contraseña para abrir el reporte clínico que le enviamos es:</p>
+            <p style="font-size:1.2em;"><strong>{password}</strong></p>
+            <p>No comparta esta contraseña. El reporte contiene datos clínicos sensibles protegidos por la Ley N.° 29733.</p>
             <p>Equipo Cauce</p>
             """;
     }
