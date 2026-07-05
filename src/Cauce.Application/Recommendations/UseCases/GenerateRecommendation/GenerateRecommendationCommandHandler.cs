@@ -6,6 +6,7 @@ using Cauce.Application.Recommendations.Contracts;
 using Cauce.Domain.Patients.Exceptions;
 using Cauce.Domain.Recommendations;
 using Cauce.Domain.Recommendations.Enums;
+using Cauce.Domain.Recommendations.Events;
 using Cauce.Domain.Recommendations.Exceptions;
 using Cauce.Domain.Recommendations.Services;
 using MediatR;
@@ -36,6 +37,7 @@ public sealed class GenerateRecommendationCommandHandler
     private readonly IExplanationOrchestrator _explanationOrchestrator;
     private readonly AutoApprovalGuard _autoApprovalGuard;
     private readonly IRecommendationRepository _recommendationRepository;
+    private readonly IOutboxWriter _outboxWriter;
     private readonly IUnitOfWork _unitOfWork;
     private readonly RecommendationsOptions _options;
     private readonly ILogger<GenerateRecommendationCommandHandler> _logger;
@@ -54,6 +56,7 @@ public sealed class GenerateRecommendationCommandHandler
         IExplanationOrchestrator explanationOrchestrator,
         AutoApprovalGuard autoApprovalGuard,
         IRecommendationRepository recommendationRepository,
+        IOutboxWriter outboxWriter,
         IUnitOfWork unitOfWork,
         IOptions<RecommendationsOptions> options,
         ILogger<GenerateRecommendationCommandHandler> logger)
@@ -68,6 +71,7 @@ public sealed class GenerateRecommendationCommandHandler
         _explanationOrchestrator = explanationOrchestrator;
         _autoApprovalGuard = autoApprovalGuard;
         _recommendationRepository = recommendationRepository;
+        _outboxWriter = outboxWriter;
         _unitOfWork = unitOfWork;
         _options = options.Value;
         _logger = logger;
@@ -133,6 +137,24 @@ public sealed class GenerateRecommendationCommandHandler
         }
 
         await _recommendationRepository.AddAsync(recommendation, cancellationToken).ConfigureAwait(false);
+
+        var requiresReview = recommendation.Status == RecommendationStatus.PendingReview;
+
+        // Publicación del evento vía outbox ANTES del SaveChanges: la recomendación y el mensaje de
+        // outbox se persisten en la misma transacción (patrón outbox, DEC-B5-04). El dispatcher lo
+        // publica luego para, si requiere revisión, notificar al nutricionista asignado.
+        await _outboxWriter.PublishAsync(
+            recommendation.Id,
+            nameof(Recommendation),
+            new RecommendationGeneratedEvent(
+                recommendation.Id,
+                patientId,
+                modelVersion.Id,
+                engineResult.AggregateConfidence.Value,
+                requiresReview,
+                now),
+            cancellationToken).ConfigureAwait(false);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
@@ -145,7 +167,7 @@ public sealed class GenerateRecommendationCommandHandler
         return new GenerateRecommendationResult(
             recommendation.Id,
             recommendation.Status,
-            recommendation.Status == RecommendationStatus.PendingReview,
+            requiresReview,
             recommendation.GeneratedAt,
             recommendation.ExpiresAt);
     }
