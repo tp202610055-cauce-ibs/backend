@@ -3,6 +3,7 @@ using System;
 using Cauce.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cauce.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(CauceDbContext))]
-    partial class CauceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260702054134_AddAuditingNotificationsWorkersReports")]
+    partial class AddAuditingNotificationsWorkersReports
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -983,10 +986,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)")
                         .HasColumnName("last_error");
-
-                    b.Property<DateTime?>("NextAttemptAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("next_attempt_at");
 
                     b.Property<DateTime>("OccurredAt")
                         .HasColumnType("timestamp with time zone")
