@@ -32,4 +32,36 @@ public interface IEmailSender
         string fullName,
         string resetLink,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Notifica al nutricionista que su reporte clínico está disponible, con la URL prefirmada de
+    /// descarga. No contiene la contraseña (se envía por separado).
+    /// </summary>
+    /// <param name="recipientEmail">Correo del nutricionista.</param>
+    /// <param name="fullName">Nombre completo del nutricionista.</param>
+    /// <param name="presignedUrl">URL prefirmada de descarga.</param>
+    /// <param name="expiresAtUtc">Momento de expiración de la URL, en UTC.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Tarea que representa la operación asíncrona.</returns>
+    Task SendReportReadyAsync(
+        string recipientEmail,
+        string fullName,
+        string presignedUrl,
+        DateTime expiresAtUtc,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Envía al nutricionista la contraseña del reporte clínico en un correo separado. La
+    /// contraseña nunca se persiste ni se registra en logs (DEC-B5-11).
+    /// </summary>
+    /// <param name="recipientEmail">Correo del nutricionista.</param>
+    /// <param name="fullName">Nombre completo del nutricionista.</param>
+    /// <param name="password">Contraseña del PDF cifrado.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Tarea que representa la operación asíncrona.</returns>
+    Task SendReportPasswordAsync(
+        string recipientEmail,
+        string fullName,
+        string password,
+        CancellationToken ct = default);
 }
