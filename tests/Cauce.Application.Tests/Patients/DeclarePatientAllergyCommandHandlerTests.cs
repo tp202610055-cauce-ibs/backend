@@ -24,7 +24,6 @@ public sealed class DeclarePatientAllergyCommandHandlerTests
     private readonly IAllergyRepository _allergyRepository = Substitute.For<IAllergyRepository>();
     private readonly IPatientAllergyRepository _patientAllergyRepository = Substitute.For<IPatientAllergyRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ILogger<DeclarePatientAllergyCommandHandler> _logger = Substitute.For<ILogger<DeclarePatientAllergyCommandHandler>>();
 
     private DeclarePatientAllergyCommandHandler CreateHandler() => new(
@@ -33,7 +32,6 @@ public sealed class DeclarePatientAllergyCommandHandlerTests
         _allergyRepository,
         _patientAllergyRepository,
         _unitOfWork,
-        _auditLogger,
         _logger);
 
     private void ArrangePatient()

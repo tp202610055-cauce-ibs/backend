@@ -27,7 +27,6 @@ public sealed class CreatePatientProfileCommandHandlerTests
     private readonly INutritionistPatientRepository _nutritionistPatientRepository = Substitute.For<INutritionistPatientRepository>();
     private readonly IBmiCalculator _bmiCalculator = Substitute.For<IBmiCalculator>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ILogger<CreatePatientProfileCommandHandler> _logger = Substitute.For<ILogger<CreatePatientProfileCommandHandler>>();
 
     private CreatePatientProfileCommandHandler CreateHandler() => new(
@@ -38,7 +37,6 @@ public sealed class CreatePatientProfileCommandHandlerTests
         _nutritionistPatientRepository,
         _bmiCalculator,
         _unitOfWork,
-        _auditLogger,
         _logger);
 
     private static CreatePatientProfileCommand ValidCommand() => new(
