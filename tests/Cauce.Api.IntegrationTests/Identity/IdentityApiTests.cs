@@ -237,35 +237,8 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
-    // ----- Sesiones -----
-
-    [SkippableFact]
-    public async Task Sessions_Post_AsAuthenticatedUser_Returns204AndUpdatesLastLogin()
-    {
-        SkipIfNoDocker();
-        var (userId, keycloakId) = await SeedPatientAsync(UniqueEmail());
-        var client = AuthenticatedClient(keycloakId, await EmailOf(userId), UserRoles.Patient);
-
-        var response = await client.PostAsync("/api/v1/auth/sessions", content: null);
-
-        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
-        var user = await db.Users.AsNoTracking().FirstAsync(u => u.Id == userId);
-        user.LastLoginAt.Should().NotBeNull();
-    }
-
-    [SkippableFact]
-    public async Task Sessions_Delete_AsAuthenticatedUser_Returns204()
-    {
-        SkipIfNoDocker();
-        var (userId, keycloakId) = await SeedPatientAsync(UniqueEmail());
-        var client = AuthenticatedClient(keycloakId, await EmailOf(userId), UserRoles.Patient);
-
-        var response = await client.DeleteAsync("/api/v1/auth/sessions");
-
-        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
-    }
+    // Los antiguos endpoints /auth/sessions (RegisterLoginEvent/RegisterLogoutEvent) se eliminaron en
+    // el Prompt 5 (acta A3). El login/logout passthrough y su auditoría se cubren en AuditMiddlewareTests.
 
     // ----- Invitaciones -----
 
