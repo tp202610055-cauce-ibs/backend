@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using Asp.Versioning;
 using Cauce.Api.Configuration;
 using Cauce.Api.Middleware;
+using Cauce.Api.Workers;
 using Cauce.Application;
 using Cauce.Infrastructure;
 using Cauce.Infrastructure.Identity;
@@ -11,9 +12,13 @@ using Cauce.Infrastructure.Persistence.Seeders;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using QuestPDF.Infrastructure;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Licencia comunitaria de QuestPDF (uso académico / sin fines de lucro), fijada antes de generar PDFs.
+QuestPDF.Settings.License = LicenseType.Community;
 
 // 2. Serilog como logger desde el inicio, configurado a partir de la configuración.
 builder.Host.UseSerilog((context, loggerConfiguration) =>
@@ -31,6 +36,14 @@ if (builder.Environment.IsDevelopment())
 // 4. Inyección de dependencias por capa.
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
+
+// 4.b Workers en segundo plano (DEC-B5-04/06). Cada uno puede deshabilitarse por configuración
+// (Workers:{Name}:Enabled) para las pruebas de integración.
+builder.Services.AddHostedService<OutboxDispatcherWorker>();
+builder.Services.AddHostedService<NotificationDispatcherWorker>();
+builder.Services.AddHostedService<RecommendationExpirationWorker>();
+builder.Services.AddHostedService<OutboxRetentionWorker>();
+builder.Services.AddHostedService<WeeklyRecommendationReminderWorker>();
 
 // Clave de API administrativa (propia de la capa API).
 builder.Services.Configure<AdminApiKeyOptions>(
@@ -196,6 +209,11 @@ app.UseCors("CaucePortalPolicy");
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Auditoría de la capa HTTP (LOGIN/LOGOUT/FAILED_LOGIN): tras la autorización, para que el logout
+// disponga del principal y pueda resolver el actor (DEC-B5-01 capa 1).
+app.UseAuditingMiddleware();
+
 app.MapControllers();
 app.MapHealthChecks("/api/v1/health/live");
 
