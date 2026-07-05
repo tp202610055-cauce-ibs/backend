@@ -67,6 +67,10 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(x => x.LockedUntil)
             .HasColumnName("locked_until");
 
+        builder.Property(x => x.FcmToken)
+            .HasColumnName("fcm_token")
+            .HasMaxLength(500);
+
         builder.HasIndex(x => x.KeycloakId)
             .IsUnique()
             .HasDatabaseName("ux_users_keycloak_id");
