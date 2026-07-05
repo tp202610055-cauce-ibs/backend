@@ -1,7 +1,6 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
-using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients;
 using Cauce.Domain.Patients.Exceptions;
@@ -24,7 +23,6 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
     private readonly INutritionistPatientRepository _nutritionistPatientRepository;
     private readonly IBmiCalculator _bmiCalculator;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAuditLogger _auditLogger;
     private readonly ILogger<CreatePatientProfileCommandHandler> _logger;
 
     /// <summary>
@@ -38,7 +36,6 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
         INutritionistPatientRepository nutritionistPatientRepository,
         IBmiCalculator bmiCalculator,
         IUnitOfWork unitOfWork,
-        IAuditLogger auditLogger,
         ILogger<CreatePatientProfileCommandHandler> logger)
     {
         _currentUserService = currentUserService;
@@ -48,7 +45,6 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
         _nutritionistPatientRepository = nutritionistPatientRepository;
         _bmiCalculator = bmiCalculator;
         _unitOfWork = unitOfWork;
-        _auditLogger = auditLogger;
         _logger = logger;
     }
 
@@ -81,16 +77,8 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await _auditLogger.LogAsync(
-            AuditActionType.Create, nameof(PatientProfile), profile.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
-
-        if (assigned && assignmentId is not null)
-        {
-            await _auditLogger.LogAsync(
-                AuditActionType.Create, nameof(NutritionistPatient), assignmentId,
-                oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
-        }
+        // La auditoría de patient_profiles y nutritionist_patient la realizan los triggers de
+        // PostgreSQL (DEC-B5-03).
 
         var bmi = _bmiCalculator.Calculate(profile.WeightKg, profile.HeightCm);
         var category = _bmiCalculator.Categorize(bmi);
