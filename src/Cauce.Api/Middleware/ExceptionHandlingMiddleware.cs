@@ -3,8 +3,10 @@ using Cauce.Application.Common.Exceptions;
 using Cauce.Domain.ClinicalRegistry.Exceptions;
 using Cauce.Domain.Common.Exceptions;
 using Cauce.Domain.Identity.Exceptions;
+using Cauce.Domain.Notifications.Exceptions;
 using Cauce.Domain.Patients.Exceptions;
 using Cauce.Domain.Recommendations.Exceptions;
+using Cauce.Domain.Reports.Exceptions;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
 
@@ -166,6 +168,20 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict, "Recomendación expirada", "recommendation_expired", exception.Message),
             InvalidRecommendationStateTransitionException => (
                 StatusCodes.Status409Conflict, "Transición de estado inválida", "conflict_state", exception.Message),
+            InvalidCredentialsException => (
+                StatusCodes.Status401Unauthorized, "Credenciales inválidas", "invalid_credentials", exception.Message),
+            ReportAccessDeniedException => (
+                StatusCodes.Status403Forbidden, "Acceso al reporte no autorizado", "report_access_denied", exception.Message),
+            PatientHasNoDataInPeriodException => (
+                StatusCodes.Status422UnprocessableEntity, "Sin datos en el período", "patient_has_no_data_in_period", exception.Message),
+            ReportPeriodInvalidException => (
+                StatusCodes.Status422UnprocessableEntity, "Período de reporte inválido", "report_period_invalid", exception.Message),
+            InvalidNotificationStateTransitionException => (
+                StatusCodes.Status500InternalServerError, "Transición de notificación inválida", "invalid_notification_state_transition",
+                "Ocurrió un error al procesar una notificación."),
+            NotificationDeliveryFailedException => (
+                StatusCodes.Status500InternalServerError, "Fallo de entrega de notificación", "notification_delivery_failed",
+                "Ocurrió un error al entregar una notificación."),
             DomainException => (
                 StatusCodes.Status400BadRequest, "Regla de dominio violada", "domain_rule_violation", exception.Message),
             KeycloakIntegrationException => (
