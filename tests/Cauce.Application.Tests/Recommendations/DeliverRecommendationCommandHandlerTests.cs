@@ -23,6 +23,7 @@ public sealed class DeliverRecommendationCommandHandlerTests
     private readonly ICurrentUserService _currentUser = Substitute.For<ICurrentUserService>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IRecommendationRepository _recommendationRepository = Substitute.For<IRecommendationRepository>();
+    private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<DeliverRecommendationCommandHandler> _logger =
         Substitute.For<ILogger<DeliverRecommendationCommandHandler>>();
@@ -39,7 +40,7 @@ public sealed class DeliverRecommendationCommandHandlerTests
     }
 
     private DeliverRecommendationCommandHandler CreateHandler() =>
-        new(_currentUser, _userRepository, _recommendationRepository, _unitOfWork, _logger);
+        new(_currentUser, _userRepository, _recommendationRepository, _outboxWriter, _unitOfWork, _logger);
 
     [Fact]
     public async Task Handle_FromApproved_Delivers()

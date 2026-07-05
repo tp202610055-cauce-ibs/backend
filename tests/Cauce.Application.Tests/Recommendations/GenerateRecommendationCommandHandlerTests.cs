@@ -37,6 +37,7 @@ public sealed class GenerateRecommendationCommandHandlerTests
     private readonly IRecommendationEngine _engine = Substitute.For<IRecommendationEngine>();
     private readonly IExplanationOrchestrator _orchestrator = Substitute.For<IExplanationOrchestrator>();
     private readonly IRecommendationRepository _recommendationRepository = Substitute.For<IRecommendationRepository>();
+    private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<GenerateRecommendationCommandHandler> _logger =
         Substitute.For<ILogger<GenerateRecommendationCommandHandler>>();
@@ -90,7 +91,7 @@ public sealed class GenerateRecommendationCommandHandlerTests
 
     private GenerateRecommendationCommandHandler CreateHandler(RecommendationsOptions? options = null) => new(
         _currentUser, _userRepository, _profileReader, _historyReader, _allergyReader, _modelVersionRepository,
-        _engine, _orchestrator, new AutoApprovalGuard(), _recommendationRepository, _unitOfWork,
+        _engine, _orchestrator, new AutoApprovalGuard(), _recommendationRepository, _outboxWriter, _unitOfWork,
         Options.Create(options ?? new RecommendationsOptions()), _logger);
 
     private static IReadOnlyList<Guid> NewIds(int count) =>

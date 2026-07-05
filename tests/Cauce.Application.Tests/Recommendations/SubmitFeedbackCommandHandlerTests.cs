@@ -23,6 +23,7 @@ public sealed class SubmitFeedbackCommandHandlerTests
     private readonly ICurrentUserService _currentUser = Substitute.For<ICurrentUserService>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IRecommendationRepository _recommendationRepository = Substitute.For<IRecommendationRepository>();
+    private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<SubmitFeedbackCommandHandler> _logger =
         Substitute.For<ILogger<SubmitFeedbackCommandHandler>>();
@@ -39,7 +40,7 @@ public sealed class SubmitFeedbackCommandHandlerTests
     }
 
     private SubmitFeedbackCommandHandler CreateHandler() =>
-        new(_currentUser, _userRepository, _recommendationRepository, _unitOfWork, _logger);
+        new(_currentUser, _userRepository, _recommendationRepository, _outboxWriter, _unitOfWork, _logger);
 
     private static SubmitFeedbackCommand Command(Guid id) =>
         new(id, WasApplied: true, FeedbackOutcome.Improvement, "todo bien", Guid.NewGuid());

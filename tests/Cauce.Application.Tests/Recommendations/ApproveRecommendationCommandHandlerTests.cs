@@ -25,6 +25,8 @@ public sealed class ApproveRecommendationCommandHandlerTests
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IRecommendationRepository _recommendationRepository = Substitute.For<IRecommendationRepository>();
     private readonly INutritionistPatientRepository _assignments = Substitute.For<INutritionistPatientRepository>();
+    private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
+    private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<ApproveRecommendationCommandHandler> _logger =
         Substitute.For<ILogger<ApproveRecommendationCommandHandler>>();
@@ -42,7 +44,7 @@ public sealed class ApproveRecommendationCommandHandlerTests
     }
 
     private ApproveRecommendationCommandHandler CreateHandler() =>
-        new(_currentUser, _userRepository, _recommendationRepository, _assignments, _unitOfWork, _logger);
+        new(_currentUser, _userRepository, _recommendationRepository, _assignments, _auditLogger, _outboxWriter, _unitOfWork, _logger);
 
     private static ApproveRecommendationCommand Command(Guid id) => new(id, "nota clínica válida y suficiente", Guid.NewGuid());
 
