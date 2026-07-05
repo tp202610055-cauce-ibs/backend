@@ -90,8 +90,9 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
 
             invitation?.MarkAsUsed(user.Id, utcNow);
 
-            await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
+            // Auditoría explícita ANTES del SaveChanges: users no tiene trigger, así que una sola
+            // transacción persiste usuario, consentimiento y bitácora de forma atómica (DEC-B5-01
+            // capa 3, acta A8).
             await _auditLogger.LogAsync(
                 AuditActionType.Register,
                 nameof(User),
@@ -100,6 +101,8 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
                 newValuesHash: null,
                 additionalContext: JsonSerializer.Serialize(new { role = UserRoles.Patient }),
                 cancellationToken).ConfigureAwait(false);
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception)
         {

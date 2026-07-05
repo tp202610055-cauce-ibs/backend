@@ -1,3 +1,8 @@
+using System.Text.Json;
+using Cauce.Application.Common.Auditing;
+using Cauce.Application.Common.Interfaces;
+using Cauce.Domain.Auditing.Enums;
+using Cauce.Domain.Identity;
 using MediatR;
 
 namespace Cauce.Application.Identity.UseCases.RequestPasswordReset;
@@ -11,4 +16,14 @@ namespace Cauce.Application.Identity.UseCases.RequestPasswordReset;
 /// <param name="IpAddress">Dirección IP de origen, o <see langword="null"/>.</param>
 public sealed record RequestPasswordResetCommand(
     string Email,
-    string? IpAddress) : IRequest;
+    string? IpAddress) : IRequest, IAuditableCommand
+{
+    /// <inheritdoc />
+    public string AuditEntityType => nameof(User);
+
+    /// <inheritdoc />
+    public AuditActionType AuditActionType => AuditActionType.PasswordResetRequest;
+
+    /// <inheritdoc />
+    public string? AuditAdditionalContext => JsonSerializer.Serialize(new { email = AuditMask.Email(Email) });
+}
