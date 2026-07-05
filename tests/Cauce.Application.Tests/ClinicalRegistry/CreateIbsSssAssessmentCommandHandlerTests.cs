@@ -25,12 +25,11 @@ public sealed class CreateIbsSssAssessmentCommandHandlerTests
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IIbsSssAssessmentRepository _assessmentRepository = Substitute.For<IIbsSssAssessmentRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ISender _mediator = Substitute.For<ISender>();
     private readonly ILogger<CreateIbsSssAssessmentCommandHandler> _logger = Substitute.For<ILogger<CreateIbsSssAssessmentCommandHandler>>();
 
     private CreateIbsSssAssessmentCommandHandler CreateHandler() => new(
-        _currentUserService, _userRepository, _assessmentRepository, _unitOfWork, _auditLogger, _mediator, _logger);
+        _currentUserService, _userRepository, _assessmentRepository, _unitOfWork, _mediator, _logger);
 
     private void ArrangePatient()
     {
@@ -43,7 +42,7 @@ public sealed class CreateIbsSssAssessmentCommandHandlerTests
     private static CreateIbsSssAssessmentCommand Command(AssessmentType type) => new(type, 50, 50, 50, 50, 50);
 
     [Fact]
-    public async Task Handle_Baseline_TriggersOnboardingAndAudits()
+    public async Task Handle_Baseline_TriggersOnboarding()
     {
         ArrangePatient();
         _assessmentRepository.FindBaselineByPatientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((IbsSssAssessment?)null);
@@ -53,9 +52,8 @@ public sealed class CreateIbsSssAssessmentCommandHandlerTests
         result.TriggeredOnboardingCompletion.Should().BeTrue();
         result.TotalScore.Should().Be(250);
         await _mediator.Received(1).Send(Arg.Any<CompletePatientOnboardingCommand>(), Arg.Any<CancellationToken>());
-        await _auditLogger.Received(1).LogAsync(
-            Cauce.Domain.Auditing.Enums.AuditActionType.Create, nameof(IbsSssAssessment), Arg.Any<Guid?>(),
-            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+        // La auditoría de ibs_sss_assessments la realiza el trigger de PostgreSQL (DEC-B5-03),
+        // no el handler; por eso ya no se verifica una llamada explícita a IAuditLogger.
     }
 
     [Fact]
