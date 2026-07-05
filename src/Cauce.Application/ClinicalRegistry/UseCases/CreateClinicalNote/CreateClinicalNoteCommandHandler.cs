@@ -60,11 +60,14 @@ public sealed class CreateClinicalNoteCommandHandler : IRequestHandler<CreateCli
         var note = ClinicalNote.Attach(Guid.NewGuid(), patientId, request.MealId, request.SymptomId, request.Content, utcNow);
 
         await _clinicalNoteRepository.AddAsync(note, cancellationToken).ConfigureAwait(false);
-        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
+        // Auditoría explícita ANTES del SaveChanges: clinical_notes no tiene trigger; una sola
+        // transacción persiste la nota y la bitácora de forma atómica (DEC-B5-01 capa 3, acta A8).
         await _auditLogger.LogAsync(
             AuditActionType.Create, nameof(ClinicalNote), note.Id,
             oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Clinical note {NoteId} created.", note.Id);
         return new CreateClinicalNoteResult(note.Id);
