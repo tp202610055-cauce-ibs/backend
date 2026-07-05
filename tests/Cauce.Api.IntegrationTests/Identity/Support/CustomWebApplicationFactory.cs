@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Time.Testing;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 using Microsoft.IdentityModel.Tokens;
 
@@ -37,29 +38,63 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string _connectionString;
     private readonly string _redisConnectionString;
     private readonly string? _ollamaEndpoint;
+    private readonly string? _minioEndpoint;
+    private readonly string? _minioAccessKey;
+    private readonly string? _minioSecretKey;
+    private readonly string? _smtpHost;
+    private readonly int? _smtpPort;
 
     /// <summary>
     /// Inicializa la fábrica con las cadenas de conexión de los contenedores.
     /// </summary>
     /// <param name="connectionString">Cadena de conexión a PostgreSQL.</param>
     /// <param name="redisConnectionString">Cadena de conexión a Redis/KeyDB, opcional.</param>
-    /// <param name="ollamaEndpoint">Endpoint de Ollama, opcional; se usa para apuntar a un WireMock en pruebas.</param>
-    public CustomWebApplicationFactory(string connectionString, string? redisConnectionString = null, string? ollamaEndpoint = null)
+    /// <param name="ollamaEndpoint">Endpoint de Ollama, opcional; apunta a un WireMock en pruebas.</param>
+    /// <param name="minioEndpoint">Endpoint de MinIO (host:puerto), opcional.</param>
+    /// <param name="minioAccessKey">Clave de acceso de MinIO, opcional.</param>
+    /// <param name="minioSecretKey">Clave secreta de MinIO, opcional.</param>
+    /// <param name="smtpHost">Host SMTP (Mailpit), opcional; si se provee, el correo de notificación va allí.</param>
+    /// <param name="smtpPort">Puerto SMTP (Mailpit), opcional.</param>
+    public CustomWebApplicationFactory(
+        string connectionString,
+        string? redisConnectionString = null,
+        string? ollamaEndpoint = null,
+        string? minioEndpoint = null,
+        string? minioAccessKey = null,
+        string? minioSecretKey = null,
+        string? smtpHost = null,
+        int? smtpPort = null)
     {
         _connectionString = connectionString;
         _redisConnectionString = redisConnectionString ?? "localhost:6379";
         _ollamaEndpoint = ollamaEndpoint;
+        _minioEndpoint = minioEndpoint;
+        _minioAccessKey = minioAccessKey;
+        _minioSecretKey = minioSecretKey;
+        _smtpHost = smtpHost;
+        _smtpPort = smtpPort;
     }
 
     /// <summary>
-    /// Doble en memoria del cliente de Keycloak.
+    /// Doble en memoria del cliente de administración de Keycloak.
     /// </summary>
     public FakeKeycloakAdminClient KeycloakClient { get; } = new();
+
+    /// <summary>
+    /// Doble en memoria del cliente de tokens de Keycloak (login/logout passthrough).
+    /// </summary>
+    public FakeKeycloakTokenClient TokenClient { get; } = new();
 
     /// <summary>
     /// Doble en memoria del remitente de correo.
     /// </summary>
     public FakeEmailSender EmailSender { get; } = new();
+
+    /// <summary>
+    /// Reloj controlable inyectado como <see cref="TimeProvider"/>, para simular el paso del tiempo en
+    /// pruebas (por ejemplo, la ventana de backoff del outbox).
+    /// </summary>
+    public FakeTimeProvider Clock { get; } = new(DateTimeOffset.UtcNow);
 
     /// <inheritdoc />
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -88,13 +123,37 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Email:AppBaseUrl"] = "http://localhost:5074",
                 ["AdminApi:Value"] = AdminApiKey,
                 ["DevAdmin:Enabled"] = "false",
-                ["Cors:AllowedOrigins"] = "http://localhost:5173"
+                ["Cors:AllowedOrigins"] = "http://localhost:5173",
+                // Los workers se deshabilitan: las pruebas invocan los processors directamente para ser
+                // deterministas (acta A12).
+                ["Workers:OutboxDispatcher:Enabled"] = "false",
+                ["Workers:NotificationDispatcher:Enabled"] = "false",
+                ["Workers:RecommendationExpiration:Enabled"] = "false",
+                ["Workers:OutboxRetention:Enabled"] = "false",
+                ["Workers:WeeklyReminder:Enabled"] = "false",
+                ["Notifications:Fcm:UseFake"] = "true"
             };
 
             if (_ollamaEndpoint is not null)
             {
                 settings["Recommendations:Ollama:Endpoint"] = _ollamaEndpoint;
                 settings["Recommendations:Ollama:TimeoutSeconds"] = "2";
+            }
+
+            if (_minioEndpoint is not null)
+            {
+                settings["Storage:Minio:Endpoint"] = _minioEndpoint;
+                settings["Storage:Minio:AccessKey"] = _minioAccessKey;
+                settings["Storage:Minio:SecretKey"] = _minioSecretKey;
+                settings["Storage:Minio:UseSsl"] = "false";
+                settings["Storage:Minio:ReportsBucket"] = "clinical-reports";
+            }
+
+            if (_smtpHost is not null)
+            {
+                // Correo de notificación (SmtpEmailNotificationSender) hacia Mailpit real.
+                settings["Email:SmtpHost"] = _smtpHost;
+                settings["Email:SmtpPort"] = _smtpPort?.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
 
             configuration.AddInMemoryCollection(settings);
@@ -105,8 +164,15 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             services.RemoveAll<IKeycloakAdminClient>();
             services.AddSingleton<IKeycloakAdminClient>(KeycloakClient);
 
+            services.RemoveAll<IKeycloakTokenClient>();
+            services.AddSingleton<IKeycloakTokenClient>(TokenClient);
+
             services.RemoveAll<IEmailSender>();
             services.AddSingleton<IEmailSender>(EmailSender);
+
+            // Reloj controlable para las pruebas del backoff del outbox.
+            services.RemoveAll<TimeProvider>();
+            services.AddSingleton<TimeProvider>(Clock);
 
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
             {

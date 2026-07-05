@@ -35,4 +35,18 @@ public sealed class FakeEmailSender : IEmailSender
         SentEmails.Add(new SentEmail("password-reset", recipientEmail, resetLink));
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc />
+    public Task SendReportReadyAsync(string recipientEmail, string fullName, string presignedUrl, DateTime expiresAtUtc, CancellationToken ct = default)
+    {
+        SentEmails.Add(new SentEmail("report-ready", recipientEmail, presignedUrl));
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task SendReportPasswordAsync(string recipientEmail, string fullName, string password, CancellationToken ct = default)
+    {
+        SentEmails.Add(new SentEmail("report-password", recipientEmail, password));
+        return Task.CompletedTask;
+    }
 }
