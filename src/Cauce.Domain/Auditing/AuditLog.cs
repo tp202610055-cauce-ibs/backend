@@ -71,21 +71,7 @@ public sealed class AuditLog : Entity
     {
     }
 
-    /// <summary>
-    /// Crea un nuevo registro de auditoría.
-    /// </summary>
-    /// <param name="id">Identificador único del registro.</param>
-    /// <param name="actorUserId">Usuario que ejecutó la acción, o <see langword="null"/> si fue el sistema.</param>
-    /// <param name="actionType">Tipo de acción auditada.</param>
-    /// <param name="entityType">Nombre del tipo de entidad afectada.</param>
-    /// <param name="entityId">Identificador del registro afectado, o <see langword="null"/> si no aplica.</param>
-    /// <param name="oldValuesHash">Hash SHA-256 del estado previo, o <see langword="null"/> en creaciones.</param>
-    /// <param name="newValuesHash">Hash SHA-256 del estado nuevo, o <see langword="null"/> en eliminaciones.</param>
-    /// <param name="ipAddress">Dirección IP del actor, o <see langword="null"/> en eventos internos.</param>
-    /// <param name="userAgent">User agent del actor, o <see langword="null"/> en eventos internos.</param>
-    /// <param name="additionalContext">Contexto adicional en JSON, o <see langword="null"/> si no aplica.</param>
-    /// <param name="occurredAt">Momento UTC en que ocurrió el evento.</param>
-    public AuditLog(
+    private AuditLog(
         Guid id,
         Guid? actorUserId,
         AuditActionType actionType,
@@ -109,5 +95,54 @@ public sealed class AuditLog : Entity
         UserAgent = userAgent;
         AdditionalContext = additionalContext;
         OccurredAt = occurredAt;
+    }
+
+    /// <summary>
+    /// Crea un nuevo registro de auditoría, validando sus invariantes. Es la única forma de
+    /// construir un <see cref="AuditLog"/> desde el código de aplicación e infraestructura.
+    /// </summary>
+    /// <param name="actorUserId">Usuario que ejecutó la acción, o <see langword="null"/> si fue el sistema.</param>
+    /// <param name="actionType">Tipo de acción auditada.</param>
+    /// <param name="entityType">Nombre del tipo de entidad afectada.</param>
+    /// <param name="entityId">Identificador del registro afectado, o <see langword="null"/> si no aplica.</param>
+    /// <param name="oldValuesHash">Hash SHA-256 del estado previo, o <see langword="null"/> en creaciones.</param>
+    /// <param name="newValuesHash">Hash SHA-256 del estado nuevo, o <see langword="null"/> en eliminaciones.</param>
+    /// <param name="ipAddress">Dirección IP del actor, o <see langword="null"/> en eventos internos.</param>
+    /// <param name="userAgent">User agent del actor, o <see langword="null"/> en eventos internos.</param>
+    /// <param name="additionalContext">Contexto adicional en JSON, o <see langword="null"/> si no aplica.</param>
+    /// <param name="occurredAtUtc">Momento UTC en que ocurrió el evento.</param>
+    /// <returns>El nuevo registro de auditoría.</returns>
+    /// <exception cref="ArgumentException">Si el tipo de entidad es vacío.</exception>
+    public static AuditLog Record(
+        Guid? actorUserId,
+        AuditActionType actionType,
+        string entityType,
+        Guid? entityId,
+        string? oldValuesHash,
+        string? newValuesHash,
+        string? ipAddress,
+        string? userAgent,
+        string? additionalContext,
+        DateTime occurredAtUtc)
+    {
+        if (string.IsNullOrWhiteSpace(entityType))
+        {
+            throw new ArgumentException("El tipo de entidad es obligatorio.", nameof(entityType));
+        }
+
+        return new AuditLog(
+            Guid.NewGuid(), actorUserId, actionType, entityType, entityId,
+            oldValuesHash, newValuesHash, ipAddress, userAgent, additionalContext, occurredAtUtc);
+    }
+
+    /// <summary>
+    /// Verifica la integridad forense del registro comparando su hash de valores nuevos con el
+    /// esperado.
+    /// </summary>
+    /// <param name="expectedHash">Hash esperado.</param>
+    /// <returns><see langword="true"/> si coinciden.</returns>
+    public bool VerifyIntegrity(string expectedHash)
+    {
+        return string.Equals(NewValuesHash, expectedHash, StringComparison.Ordinal);
     }
 }

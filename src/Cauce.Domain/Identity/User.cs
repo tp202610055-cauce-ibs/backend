@@ -71,6 +71,13 @@ public sealed class User : Entity, IAggregateRoot
     /// </summary>
     public DateTime? LockedUntil { get; private set; }
 
+    /// <summary>
+    /// Token de registro del dispositivo para notificaciones push (Firebase Cloud Messaging), o
+    /// <see langword="null"/> si no se ha registrado. Lo provee la app móvil; el endpoint de
+    /// registro es deuda técnica pendiente pre-piloto (DEC-B5-08, acta A2).
+    /// </summary>
+    public string? FcmToken { get; private set; }
+
     private User()
     {
     }
@@ -245,6 +252,16 @@ public sealed class User : Entity, IAggregateRoot
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(newFullName);
         FullName = newFullName;
+        Touch();
+    }
+
+    /// <summary>
+    /// Registra o actualiza el token de notificaciones push del dispositivo del usuario.
+    /// </summary>
+    /// <param name="fcmToken">Token de FCM, o <see langword="null"/> para desvincularlo.</param>
+    public void RegisterFcmToken(string? fcmToken)
+    {
+        FcmToken = string.IsNullOrWhiteSpace(fcmToken) ? null : fcmToken;
         Touch();
     }
 
