@@ -1,9 +1,7 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
-using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
-using Cauce.Domain.Patients;
 using Cauce.Domain.Patients.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -20,7 +18,6 @@ public sealed class RemovePatientAllergyCommandHandler : IRequestHandler<RemoveP
     private readonly IUserRepository _userRepository;
     private readonly IPatientAllergyRepository _patientAllergyRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAuditLogger _auditLogger;
     private readonly ILogger<RemovePatientAllergyCommandHandler> _logger;
 
     /// <summary>
@@ -31,14 +28,12 @@ public sealed class RemovePatientAllergyCommandHandler : IRequestHandler<RemoveP
         IUserRepository userRepository,
         IPatientAllergyRepository patientAllergyRepository,
         IUnitOfWork unitOfWork,
-        IAuditLogger auditLogger,
         ILogger<RemovePatientAllergyCommandHandler> logger)
     {
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _patientAllergyRepository = patientAllergyRepository;
         _unitOfWork = unitOfWork;
-        _auditLogger = auditLogger;
         _logger = logger;
     }
 
@@ -58,9 +53,7 @@ public sealed class RemovePatientAllergyCommandHandler : IRequestHandler<RemoveP
         _patientAllergyRepository.Remove(declaration);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await _auditLogger.LogAsync(
-            AuditActionType.Delete, nameof(PatientAllergy), declaration.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+        // La auditoría de patient_allergies la realiza el trigger de PostgreSQL (DEC-B5-03).
 
         _logger.LogInformation("Patient allergy {PatientAllergyId} removed.", declaration.Id);
     }

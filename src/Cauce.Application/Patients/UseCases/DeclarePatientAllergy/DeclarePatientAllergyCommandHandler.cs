@@ -1,7 +1,6 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
-using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients;
 using Cauce.Domain.Patients.Exceptions;
@@ -21,7 +20,6 @@ public sealed class DeclarePatientAllergyCommandHandler : IRequestHandler<Declar
     private readonly IAllergyRepository _allergyRepository;
     private readonly IPatientAllergyRepository _patientAllergyRepository;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAuditLogger _auditLogger;
     private readonly ILogger<DeclarePatientAllergyCommandHandler> _logger;
 
     /// <summary>
@@ -33,7 +31,6 @@ public sealed class DeclarePatientAllergyCommandHandler : IRequestHandler<Declar
         IAllergyRepository allergyRepository,
         IPatientAllergyRepository patientAllergyRepository,
         IUnitOfWork unitOfWork,
-        IAuditLogger auditLogger,
         ILogger<DeclarePatientAllergyCommandHandler> logger)
     {
         _currentUserService = currentUserService;
@@ -41,7 +38,6 @@ public sealed class DeclarePatientAllergyCommandHandler : IRequestHandler<Declar
         _allergyRepository = allergyRepository;
         _patientAllergyRepository = patientAllergyRepository;
         _unitOfWork = unitOfWork;
-        _auditLogger = auditLogger;
         _logger = logger;
     }
 
@@ -66,9 +62,7 @@ public sealed class DeclarePatientAllergyCommandHandler : IRequestHandler<Declar
         await _patientAllergyRepository.AddAsync(declaration, cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await _auditLogger.LogAsync(
-            AuditActionType.Create, nameof(PatientAllergy), declaration.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+        // La auditoría de patient_allergies la realiza el trigger de PostgreSQL (DEC-B5-03).
 
         _logger.LogInformation("Patient allergy {PatientAllergyId} declared.", declaration.Id);
 
