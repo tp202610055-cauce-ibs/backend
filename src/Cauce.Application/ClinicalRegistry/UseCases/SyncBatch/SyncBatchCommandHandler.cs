@@ -91,9 +91,14 @@ public sealed class SyncBatchCommandHandler : IRequestHandler<SyncBatchCommand, 
         }
 
         var additionalContext = JsonSerializer.Serialize(new { mealsAccepted, symptomsAccepted });
+
+        // Auditoría del resumen del lote: cada comida y síntoma ya persistió en su subcomando; este
+        // SaveChanges persiste solo la fila resumen de la bitácora, que el AuditLogger enrola sin
+        // persistir por su cuenta (DEC-B5-01 capa 3, acta A8).
         await _auditLogger.LogAsync(
             AuditActionType.Create, "SyncBatch", entityId: null,
             oldValuesHash: null, newValuesHash: null, additionalContext, cancellationToken).ConfigureAwait(false);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(
             "Sync batch processed: {Accepted} accepted, {Duplicates} duplicates, {Errors} errors.",
