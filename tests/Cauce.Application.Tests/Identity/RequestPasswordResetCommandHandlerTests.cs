@@ -19,7 +19,6 @@ public sealed class RequestPasswordResetCommandHandlerTests
     private readonly IClientUrlProvider _clientUrlProvider = Substitute.For<IClientUrlProvider>();
     private readonly IEmailSender _emailSender = Substitute.For<IEmailSender>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ILogger<RequestPasswordResetCommandHandler> _logger =
         Substitute.For<ILogger<RequestPasswordResetCommandHandler>>();
 
@@ -30,7 +29,6 @@ public sealed class RequestPasswordResetCommandHandlerTests
         _clientUrlProvider,
         _emailSender,
         _unitOfWork,
-        _auditLogger,
         _logger);
 
     [Fact]

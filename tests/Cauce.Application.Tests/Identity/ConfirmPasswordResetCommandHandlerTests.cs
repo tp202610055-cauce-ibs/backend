@@ -20,7 +20,6 @@ public sealed class ConfirmPasswordResetCommandHandlerTests
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IKeycloakAdminClient _keycloakAdminClient = Substitute.For<IKeycloakAdminClient>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ILogger<ConfirmPasswordResetCommandHandler> _logger =
         Substitute.For<ILogger<ConfirmPasswordResetCommandHandler>>();
 
@@ -31,7 +30,6 @@ public sealed class ConfirmPasswordResetCommandHandlerTests
         _userRepository,
         _keycloakAdminClient,
         _unitOfWork,
-        _auditLogger,
         _logger);
 
     [Fact]

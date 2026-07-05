@@ -16,7 +16,6 @@ public sealed class GenerateInvitationCodeCommandHandlerTests
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IInvitationCodeRepository _invitationCodeRepository = Substitute.For<IInvitationCodeRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
-    private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ILogger<GenerateInvitationCodeCommandHandler> _logger =
         Substitute.For<ILogger<GenerateInvitationCodeCommandHandler>>();
 
@@ -24,7 +23,6 @@ public sealed class GenerateInvitationCodeCommandHandlerTests
         _userRepository,
         _invitationCodeRepository,
         _unitOfWork,
-        _auditLogger,
         _logger);
 
     [Fact]
