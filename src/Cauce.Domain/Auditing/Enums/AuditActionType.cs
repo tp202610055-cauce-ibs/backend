@@ -80,5 +80,18 @@ public enum AuditActionType
     /// <summary>
     /// Confirmación de restablecimiento de contraseña.
     /// </summary>
-    PasswordResetConfirm
+    PasswordResetConfirm,
+
+    /// <summary>
+    /// Exportación de la portabilidad de datos del paciente (US25, Ley N° 29733): archivo ZIP con los
+    /// CSVs de todos sus datos personales y clínicos. Distinto de <see cref="ExportPdf"/>, que es el
+    /// reporte clínico en PDF del nutricionista.
+    /// </summary>
+    Export,
+
+    /// <summary>
+    /// Registro de fallback del orquestador del modelo de lenguaje: la explicación de una recomendación
+    /// se generó con el proveedor de respaldo tras un fallo o timeout de Ollama (TS08 CA02).
+    /// </summary>
+    LlmFallback
 }
