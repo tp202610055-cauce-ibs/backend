@@ -4,7 +4,7 @@ namespace Cauce.Application.Recommendations.UseCases.ApproveRecommendation;
 
 /// <summary>
 /// Validador estructural del comando <see cref="ApproveRecommendationCommand"/>. La nota clínica
-/// es obligatoria y debe tener entre 10 y 2000 caracteres no vacíos.
+/// es obligatoria y debe tener entre 20 y 2000 caracteres no vacíos (US17 CA01).
 /// </summary>
 public sealed class ApproveRecommendationCommandValidator : AbstractValidator<ApproveRecommendationCommand>
 {
@@ -19,7 +19,8 @@ public sealed class ApproveRecommendationCommandValidator : AbstractValidator<Ap
             .NotEmpty()
             .Must(note => !string.IsNullOrWhiteSpace(note))
             .WithMessage("La nota clínica no puede estar vacía.")
-            .MinimumLength(10)
+            .MinimumLength(20)
+            .WithMessage("La nota clínica de aprobación debe tener al menos 20 caracteres.")
             .MaximumLength(2000);
     }
 }
