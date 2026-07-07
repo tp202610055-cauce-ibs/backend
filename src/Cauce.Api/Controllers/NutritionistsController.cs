@@ -1,4 +1,5 @@
 using Cauce.Application.Patients.UseCases.GetAssignedPatientDetail;
+using Cauce.Application.Patients.UseCases.GetPatientEvolutionForNutritionist;
 using Cauce.Application.Patients.UseCases.ListAssignedPatients;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -47,6 +48,21 @@ public sealed class NutritionistsController : BaseApiController
     public async Task<IActionResult> GetAssignedPatientDetail(Guid patientUserId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetAssignedPatientDetailQuery(patientUserId), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Devuelve las métricas de evolución clínica de un paciente asignado (US21): serie
+    /// IBS-SSS, variación respecto de la línea base, respuesta clínica significativa y
+    /// frecuencia de registro reciente. Requiere una asignación activa; de lo contrario 403.
+    /// </summary>
+    /// <param name="patientId">Identificador de la cuenta del paciente.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Las métricas de evolución del paciente.</returns>
+    [HttpGet("me/patients/{patientId:guid}/evolution")]
+    public async Task<IActionResult> GetPatientEvolution(Guid patientId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetPatientEvolutionForNutritionistQuery(patientId), ct);
         return Ok(result);
     }
 }

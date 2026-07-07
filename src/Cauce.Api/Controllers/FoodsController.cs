@@ -1,5 +1,6 @@
 using Cauce.Api.Configuration;
 using Cauce.Application.ClinicalRegistry.UseCases.GetFoodItemDetail;
+using Cauce.Application.ClinicalRegistry.UseCases.GetFoodSuggestions;
 using Cauce.Application.ClinicalRegistry.UseCases.ListFoodItemsCatalog;
 using Cauce.Application.ClinicalRegistry.UseCases.SearchFoodItems;
 using Cauce.Domain.ClinicalRegistry.Enums;
@@ -61,6 +62,20 @@ public sealed class FoodsController : BaseApiController
     public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct)
     {
         var result = await _mediator.Send(new SearchFoodItemsQuery(q), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Devuelve sugerencias de alimentos para el paciente autenticado (US09 CA03): frecuentes en los
+    /// últimos 30 días, registrados en las últimas 24 horas y una selección rotativa del catálogo.
+    /// </summary>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Las tres listas de sugerencias.</returns>
+    [HttpGet("suggestions")]
+    [Authorize(Policy = "Patient")]
+    public async Task<IActionResult> Suggestions(CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetFoodSuggestionsQuery(), ct);
         return Ok(result);
     }
 
