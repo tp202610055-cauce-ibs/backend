@@ -8,7 +8,12 @@ namespace Cauce.Api.Contracts.ClinicalRegistry;
 /// <param name="Name">Nombre del alimento personalizado.</param>
 /// <param name="PortionSizeGrams">Tamaño de porción en gramos.</param>
 /// <param name="Ingredients">Ingredientes del alimento personalizado.</param>
+/// <param name="ConfirmedAllergens">
+/// Confirma la creación pese a coincidencias con alergias declaradas (US10 CA03). Por defecto
+/// <see langword="false"/>: si hay coincidencias sin confirmar, la respuesta es 409 con el detalle.
+/// </param>
 public sealed record CreateCustomFoodRequest(
     string Name,
     decimal PortionSizeGrams,
-    IReadOnlyList<CustomFoodIngredientRequest> Ingredients);
+    IReadOnlyList<CustomFoodIngredientRequest> Ingredients,
+    bool ConfirmedAllergens = false);

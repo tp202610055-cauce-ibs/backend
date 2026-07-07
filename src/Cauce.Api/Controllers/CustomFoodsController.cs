@@ -39,7 +39,8 @@ public sealed class CustomFoodsController : BaseApiController
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCustomFoodRequest request, CancellationToken ct)
     {
-        var command = new CreateCustomFoodCommand(request.Name, request.PortionSizeGrams, request.Ingredients);
+        var command = new CreateCustomFoodCommand(
+            request.Name, request.PortionSizeGrams, request.Ingredients, request.ConfirmedAllergens);
         var result = await _mediator.Send(command, ct);
         return StatusCode(StatusCodes.Status201Created, result);
     }
