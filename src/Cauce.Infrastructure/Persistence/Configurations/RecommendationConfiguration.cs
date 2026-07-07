@@ -1,10 +1,13 @@
+using System.Text.Json;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Recommendations;
 using Cauce.Domain.Recommendations.Enums;
 using Cauce.Domain.Recommendations.ValueObjects;
 using Cauce.Infrastructure.Persistence.Converters;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Cauce.Infrastructure.Persistence.Configurations;
 
@@ -24,8 +27,41 @@ public sealed class RecommendationConfiguration : IEntityTypeConfiguration<Recom
         builder.Property(x => x.Id).HasColumnName("recommendation_id");
 
         builder.Property(x => x.PatientId).HasColumnName("patient_id").IsRequired();
-        builder.Property(x => x.ModelVersionId).HasColumnName("model_version_id").IsRequired();
+        builder.Property(x => x.ModelVersionId).HasColumnName("model_version_id");
         builder.Property(x => x.ReviewedByNutritionistId).HasColumnName("reviewed_by_nutritionist_id");
+
+        builder.Property(x => x.Source)
+            .HasColumnName("source")
+            .HasMaxLength(20)
+            .HasConversion(new SnakeCaseEnumConverter<RecommendationSource>())
+            .IsRequired();
+
+        builder.Property(x => x.Title).HasColumnName("title").HasMaxLength(200);
+        builder.Property(x => x.Description).HasColumnName("description").HasColumnType("text");
+
+        var stepsConverter = new ValueConverter<IReadOnlyList<string>?, string?>(
+            steps => steps == null ? null : JsonSerializer.Serialize(steps, (JsonSerializerOptions?)null),
+            value => value == null ? null : JsonSerializer.Deserialize<List<string>>(value, (JsonSerializerOptions?)null));
+
+        var stepsComparer = new ValueComparer<IReadOnlyList<string>?>(
+            (left, right) => (left == null && right == null)
+                || (left != null && right != null && left.SequenceEqual(right)),
+            steps => steps == null ? 0 : steps.Aggregate(0, (hash, step) => HashCode.Combine(hash, step.GetHashCode(StringComparison.Ordinal))),
+            steps => steps == null ? null : steps.ToList());
+
+        builder.Property(x => x.Steps)
+            .HasColumnName("steps")
+            .HasColumnType("jsonb")
+            .HasConversion(stepsConverter, stepsComparer);
+
+        builder.Property(x => x.IsActive).HasColumnName("is_active").HasDefaultValue(true).IsRequired();
+        builder.Property(x => x.ArchivedAt).HasColumnName("archived_at");
+        builder.Property(x => x.ValidUntil).HasColumnName("valid_until");
+
+        builder.Property(x => x.ArchiveReason)
+            .HasColumnName("archive_reason")
+            .HasMaxLength(30)
+            .HasConversion(new SnakeCaseEnumConverter<ArchiveReason>());
 
         builder.Property(x => x.Status)
             .HasColumnName("status")

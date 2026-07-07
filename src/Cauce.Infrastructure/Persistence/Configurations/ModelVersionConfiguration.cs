@@ -25,6 +25,7 @@ public sealed class ModelVersionConfiguration : IEntityTypeConfiguration<ModelVe
         builder.Property(x => x.DeployedAt).HasColumnName("deployed_at").IsRequired();
         builder.Property(x => x.DeployedBy).HasColumnName("deployed_by").HasMaxLength(100).IsRequired();
         builder.Property(x => x.IsActive).HasColumnName("is_active").IsRequired();
+        builder.Property(x => x.IsDummy).HasColumnName("is_dummy").HasDefaultValue(false).IsRequired();
 
         builder.HasIndex(x => x.VersionName).IsUnique().HasDatabaseName("ux_model_versions_version_name");
         builder.HasIndex(x => x.ModelHash).IsUnique().HasDatabaseName("ux_model_versions_model_hash");
