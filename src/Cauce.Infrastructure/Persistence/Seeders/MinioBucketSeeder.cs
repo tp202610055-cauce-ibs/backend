@@ -38,14 +38,20 @@ public sealed class MinioBucketSeeder
     /// <returns>Tarea que representa la operación asíncrona.</returns>
     public async Task SeedAsync(CancellationToken ct = default)
     {
+        await EnsureBucketAsync(_options.ReportsBucket, ct).ConfigureAwait(false);
+        await EnsureBucketAsync(_options.ExportsBucket, ct).ConfigureAwait(false);
+    }
+
+    private async Task EnsureBucketAsync(string bucket, CancellationToken ct)
+    {
         try
         {
-            await _objectStorage.EnsureBucketExistsAsync(_options.ReportsBucket, ct).ConfigureAwait(false);
-            _logger.LogInformation("Ensured MinIO bucket {Bucket} exists.", _options.ReportsBucket);
+            await _objectStorage.EnsureBucketExistsAsync(bucket, ct).ConfigureAwait(false);
+            _logger.LogInformation("Ensured MinIO bucket {Bucket} exists.", bucket);
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Could not ensure MinIO bucket {Bucket}; object storage may be unavailable.", _options.ReportsBucket);
+            _logger.LogWarning(exception, "Could not ensure MinIO bucket {Bucket}; object storage may be unavailable.", bucket);
         }
     }
 }
