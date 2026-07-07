@@ -18,12 +18,16 @@ namespace Cauce.Application.Recommendations.UseCases.GetRecommendationById;
 /// </summary>
 public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecommendationByIdQuery, RecommendationDetailDto>
 {
+    private const int AnalysisWindowDays = 14;
+    private const int CorrelationWindowHours = 4;
+
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
     private readonly IRecommendationRepository _recommendationRepository;
     private readonly INutritionistPatientRepository _nutritionistPatientRepository;
     private readonly IModelVersionRepository _modelVersionRepository;
     private readonly IFoodCatalogReader _foodCatalogReader;
+    private readonly IRecommendationSupportingDataReader _supportingDataReader;
     private readonly IUnitOfWork _unitOfWork;
 
     /// <summary>
@@ -36,6 +40,7 @@ public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecom
         INutritionistPatientRepository nutritionistPatientRepository,
         IModelVersionRepository modelVersionRepository,
         IFoodCatalogReader foodCatalogReader,
+        IRecommendationSupportingDataReader supportingDataReader,
         IUnitOfWork unitOfWork)
     {
         _currentUserService = currentUserService;
@@ -44,6 +49,7 @@ public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecom
         _nutritionistPatientRepository = nutritionistPatientRepository;
         _modelVersionRepository = modelVersionRepository;
         _foodCatalogReader = foodCatalogReader;
+        _supportingDataReader = supportingDataReader;
         _unitOfWork = unitOfWork;
     }
 
@@ -57,7 +63,7 @@ public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecom
             .ConfigureAwait(false)
             ?? throw new RecommendationNotFoundException(request.RecommendationId);
 
-        await EnsureAuthorizedAsync(recommendation, cancellationToken).ConfigureAwait(false);
+        var isPatient = await EnsureAuthorizedAsync(recommendation, cancellationToken).ConfigureAwait(false);
 
         if (recommendation.IsExpired(now))
         {
@@ -65,9 +71,16 @@ public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecom
             await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        var modelVersion = await _modelVersionRepository
-            .GetByIdAsync(recommendation.ModelVersionId, cancellationToken)
-            .ConfigureAwait(false);
+        // US14 CA03: el paciente no puede ver recomendaciones archivadas ni en estados no visibles;
+        // se responde 404 para no revelar su existencia (acta A24). El nutricionista sí las ve.
+        if (isPatient && !recommendation.IsVisibleToPatient())
+        {
+            throw new RecommendationNotFoundException(request.RecommendationId);
+        }
+
+        var modelVersion = recommendation.ModelVersionId is { } modelVersionId
+            ? await _modelVersionRepository.GetByIdAsync(modelVersionId, cancellationToken).ConfigureAwait(false)
+            : null;
 
         var foodIds = recommendation.Items
             .SelectMany(item => item.SubstituteFoodId.HasValue
@@ -78,10 +91,33 @@ public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecom
 
         var foodNames = await _foodCatalogReader.GetFoodNamesAsync(foodIds, cancellationToken).ConfigureAwait(false);
 
-        return RecommendationsMappings.ToDetail(recommendation, modelVersion?.VersionName ?? string.Empty, foodNames);
+        // Bloque 2 (US15 CA02): nombre completo del nutricionista revisor.
+        string? reviewedByNutritionistName = null;
+        if (recommendation.ReviewedByNutritionistId is { } reviewerId)
+        {
+            var reviewer = await _userRepository.FindByIdAsync(reviewerId, cancellationToken).ConfigureAwait(false);
+            reviewedByNutritionistName = reviewer?.FullName;
+        }
+
+        // Bloque 4 (US15 CA03): cifras de respaldo sobre la ventana de análisis de 14 días.
+        var windowTo = now;
+        var windowFrom = windowTo.AddDays(-AnalysisWindowDays);
+        var supporting = await _supportingDataReader
+            .GetAsync(recommendation.PatientId, windowFrom, windowTo, cancellationToken)
+            .ConfigureAwait(false);
+        var supportingData = new RecommendationSupportingDataDto(
+            supporting.SymptomCount,
+            supporting.MealCount,
+            supporting.TopHighFodmapFoods,
+            CorrelationWindowHours,
+            windowFrom,
+            windowTo);
+
+        return RecommendationsMappings.ToDetail(
+            recommendation, modelVersion?.VersionName ?? string.Empty, foodNames, reviewedByNutritionistName, supportingData);
     }
 
-    private async Task EnsureAuthorizedAsync(Recommendation recommendation, CancellationToken ct)
+    private async Task<bool> EnsureAuthorizedAsync(Recommendation recommendation, CancellationToken ct)
     {
         var keycloakId = _currentUserService.UserId
             ?? throw new UnauthorizedAccessException("No hay un usuario autenticado en la petición.");
@@ -97,7 +133,7 @@ public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecom
                 throw new RecommendationAccessDeniedException();
             }
 
-            return;
+            return true;
         }
 
         var nutritionistRoleId = await _userRepository.GetRoleIdAsync(UserRoles.Nutritionist, ct).ConfigureAwait(false);
@@ -111,7 +147,7 @@ public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecom
                 throw new RecommendationAccessDeniedException();
             }
 
-            return;
+            return false;
         }
 
         throw new RecommendationAccessDeniedException();
