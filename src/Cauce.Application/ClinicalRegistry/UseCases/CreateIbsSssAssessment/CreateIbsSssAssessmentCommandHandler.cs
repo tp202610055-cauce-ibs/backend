@@ -4,6 +4,7 @@ using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Patients.UseCases.CompletePatientOnboarding;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.ClinicalRegistry.Enums;
+using Cauce.Domain.ClinicalRegistry.Events;
 using Cauce.Domain.ClinicalRegistry.Exceptions;
 using Cauce.Domain.Identity;
 using MediatR;
@@ -22,6 +23,8 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
     private readonly IIbsSssAssessmentRepository _assessmentRepository;
+    private readonly IIbsSssAssessmentScheduleRepository _scheduleRepository;
+    private readonly IOutboxWriter _outboxWriter;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISender _mediator;
     private readonly ILogger<CreateIbsSssAssessmentCommandHandler> _logger;
@@ -33,6 +36,8 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
         ICurrentUserService currentUserService,
         IUserRepository userRepository,
         IIbsSssAssessmentRepository assessmentRepository,
+        IIbsSssAssessmentScheduleRepository scheduleRepository,
+        IOutboxWriter outboxWriter,
         IUnitOfWork unitOfWork,
         ISender mediator,
         ILogger<CreateIbsSssAssessmentCommandHandler> logger)
@@ -40,6 +45,8 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _assessmentRepository = assessmentRepository;
+        _scheduleRepository = scheduleRepository;
+        _outboxWriter = outboxWriter;
         _unitOfWork = unitOfWork;
         _mediator = mediator;
         _logger = logger;
@@ -80,6 +87,29 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
             utcNow);
 
         await _assessmentRepository.AddAsync(assessment, cancellationToken).ConfigureAwait(false);
+
+        // US12 CA02: cerrar la agenda vigente (si el paciente tenía una pendiente) y agendar la próxima
+        // evaluación con vencimiento a los 14 días. Todo en la misma transacción que la evaluación.
+        var openSchedule = await _scheduleRepository.FindOpenByPatientAsync(patientId, cancellationToken).ConfigureAwait(false);
+        openSchedule?.MarkCompleted(utcNow);
+
+        if (assessment.NextAssessmentDate is { } nextDate)
+        {
+            var nextDueDate = DateTime.SpecifyKind(nextDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
+            await _scheduleRepository
+                .AddAsync(IbsSssAssessmentSchedule.Create(Guid.NewGuid(), patientId, nextDueDate, utcNow), cancellationToken)
+                .ConfigureAwait(false);
+        }
+
+        // US04/US12: notificar al nutricionista asignado del nuevo IBS-SSS de forma asíncrona vía
+        // outbox (patrón DEC-B5-04). Se publica antes del SaveChanges para persistirlo atómicamente.
+        await _outboxWriter.PublishAsync(
+            assessment.Id,
+            nameof(IbsSssAssessment),
+            new IbsSssAssessmentSubmittedEvent(
+                assessment.Id, patientId, assessment.AssessmentType, assessment.TotalScore, utcNow),
+            cancellationToken).ConfigureAwait(false);
+
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         // La auditoría de ibs_sss_assessments la realiza el trigger de PostgreSQL (DEC-B5-03).
