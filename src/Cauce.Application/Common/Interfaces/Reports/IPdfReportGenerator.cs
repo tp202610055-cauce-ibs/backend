@@ -12,14 +12,14 @@ public interface IPdfReportGenerator
     /// <param name="patientId">Identificador del paciente.</param>
     /// <param name="periodStart">Inicio del período.</param>
     /// <param name="periodEnd">Fin del período.</param>
-    /// <param name="nutritionistId">Identificador del nutricionista.</param>
+    /// <param name="nutritionistId">Identificador del nutricionista, o <see langword="null"/> en el autoreporte del paciente (US24).</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El resultado con la ruta, el tamaño, la contraseña y la URL prefirmada.</returns>
     Task<PdfReportResult> GenerateAsync(
         Guid patientId,
         DateOnly periodStart,
         DateOnly periodEnd,
-        Guid nutritionistId,
+        Guid? nutritionistId,
         CancellationToken ct = default);
 }
 
