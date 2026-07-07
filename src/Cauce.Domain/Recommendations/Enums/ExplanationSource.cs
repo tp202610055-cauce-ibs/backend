@@ -15,5 +15,10 @@ public enum ExplanationSource
     /// Generada por la plantilla estática de respaldo cuando el LLM falla o no pasa los
     /// guardrails.
     /// </summary>
-    Fallback
+    Fallback,
+
+    /// <summary>
+    /// Recomendación creada manualmente por el nutricionista; el texto es de su autoría, no de la IA.
+    /// </summary>
+    Manual
 }
