@@ -35,5 +35,20 @@ public enum SymptomType
     /// <summary>
     /// Otro síntoma no clasificado en las categorías anteriores.
     /// </summary>
-    Other = 5
+    Other = 5,
+
+    /// <summary>
+    /// Náuseas.
+    /// </summary>
+    Nausea = 6,
+
+    /// <summary>
+    /// Reflujo gastroesofágico.
+    /// </summary>
+    Reflux = 7,
+
+    /// <summary>
+    /// Urgencia defecatoria.
+    /// </summary>
+    Urgency = 8
 }
