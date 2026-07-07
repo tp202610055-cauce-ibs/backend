@@ -29,6 +29,7 @@ public sealed class PdfReportGenerator : IPdfReportGenerator
 
     private readonly IClinicalReportDataReader _dataReader;
     private readonly IObjectStorage _objectStorage;
+    private readonly IbsSssChartRenderer _chartRenderer;
     private readonly MinioOptions _minioOptions;
     private readonly ReportOptions _reportOptions;
 
@@ -37,16 +38,19 @@ public sealed class PdfReportGenerator : IPdfReportGenerator
     /// </summary>
     /// <param name="dataReader">Lector de datos clínicos del reporte.</param>
     /// <param name="objectStorage">Almacenamiento de objetos.</param>
+    /// <param name="chartRenderer">Renderer del gráfico de evolución IBS-SSS.</param>
     /// <param name="minioOptions">Opciones de MinIO (bucket de reportes).</param>
     /// <param name="reportOptions">Opciones de reporte.</param>
     public PdfReportGenerator(
         IClinicalReportDataReader dataReader,
         IObjectStorage objectStorage,
+        IbsSssChartRenderer chartRenderer,
         IOptions<MinioOptions> minioOptions,
         IOptions<ReportOptions> reportOptions)
     {
         _dataReader = dataReader;
         _objectStorage = objectStorage;
+        _chartRenderer = chartRenderer;
         _minioOptions = minioOptions.Value;
         _reportOptions = reportOptions.Value;
     }
@@ -56,7 +60,7 @@ public sealed class PdfReportGenerator : IPdfReportGenerator
         Guid patientId,
         DateOnly periodStart,
         DateOnly periodEnd,
-        Guid nutritionistId,
+        Guid? nutritionistId,
         CancellationToken ct = default)
     {
         var reportId = Guid.NewGuid();
@@ -64,7 +68,8 @@ public sealed class PdfReportGenerator : IPdfReportGenerator
             .GetReportDataAsync(patientId, periodStart, periodEnd, nutritionistId, ct)
             .ConfigureAwait(false);
 
-        var pdfBytes = new ClinicalReportDocument(data).GeneratePdf();
+        var chartPng = _chartRenderer.Render(data.Assessments);
+        var pdfBytes = new ClinicalReportDocument(data, chartPng).GeneratePdf();
         var password = GeneratePassword(_reportOptions.PasswordLength);
         var encryptedBytes = Encrypt(pdfBytes, password);
 
