@@ -25,13 +25,19 @@ public interface INutritionistPatientRepository
     Task<IReadOnlyList<NutritionistPatient>> ListActiveByNutritionistAsync(Guid nutritionistId, CancellationToken ct = default);
 
     /// <summary>
-    /// Lista, en una sola consulta con joins, el resumen de los pacientes activos
-    /// asignados a un nutricionista, ordenados por fecha de asignación descendente.
+    /// Lista, en una sola consulta con joins y subconsultas, las filas de triaje de los
+    /// pacientes activos asignados a un nutricionista (US18): puntaje IBS-SSS más reciente,
+    /// última actividad y recomendaciones pendientes vencidas. El cálculo del nivel de
+    /// prioridad y el orden final se realizan en la capa de aplicación.
     /// </summary>
     /// <param name="nutritionistId">Identificador del nutricionista.</param>
+    /// <param name="utcNow">Marca de tiempo UTC para el corte de recomendaciones vencidas (24 h).</param>
     /// <param name="ct">Token de cancelación.</param>
-    /// <returns>Resúmenes de pacientes asignados.</returns>
-    Task<IReadOnlyList<AssignedPatientSummary>> ListAssignedPatientSummariesAsync(Guid nutritionistId, CancellationToken ct = default);
+    /// <returns>Filas de triaje de los pacientes asignados.</returns>
+    Task<IReadOnlyList<AssignedPatientTriageRow>> ListAssignedPatientTriageRowsAsync(
+        Guid nutritionistId,
+        DateTime utcNow,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Indica si existe una asignación activa entre un nutricionista y un paciente.
