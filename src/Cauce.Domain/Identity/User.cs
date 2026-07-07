@@ -73,10 +73,19 @@ public sealed class User : Entity, IAggregateRoot
 
     /// <summary>
     /// Token de registro del dispositivo para notificaciones push (Firebase Cloud Messaging), o
-    /// <see langword="null"/> si no se ha registrado. Lo provee la app móvil; el endpoint de
-    /// registro es deuda técnica pendiente pre-piloto (DEC-B5-08, acta A2).
+    /// <see langword="null"/> si no se ha registrado. Lo provee la app móvil vía el endpoint
+    /// <c>PUT /users/me/fcm-token</c>.
     /// </summary>
     public string? FcmToken { get; private set; }
+
+    /// <summary>
+    /// Indica si la cuenta pertenece a un paciente inscrito en el piloto clínico activo. Es un dato
+    /// de estado de la cuenta (no clínico). En este release solo se activa manualmente por el equipo
+    /// clínico Kaelín (DB directa o endpoint admin futuro); no hay mecanismo automático (acta A16).
+    /// Cuando es <see langword="true"/>, la eliminación de la cuenta exige acuse explícito de la
+    /// retención normativa (US26 CA02).
+    /// </summary>
+    public bool IsInActivePilot { get; private set; }
 
     private User()
     {
@@ -262,6 +271,39 @@ public sealed class User : Entity, IAggregateRoot
     public void RegisterFcmToken(string? fcmToken)
     {
         FcmToken = string.IsNullOrWhiteSpace(fcmToken) ? null : fcmToken;
+        Touch();
+    }
+
+    /// <summary>
+    /// Inscribe la cuenta en el piloto clínico activo. Está pensado para uso administrativo del equipo
+    /// clínico Kaelín al reclutar pacientes; no existe un flujo de aplicación automático (acta A16).
+    /// </summary>
+    public void EnrollInActivePilot()
+    {
+        IsInActivePilot = true;
+        Touch();
+    }
+
+    /// <summary>
+    /// Anonimiza la cuenta del paciente en ejercicio del derecho al olvido (US26, Ley N° 29733). No es
+    /// un borrado físico: reemplaza los datos personales por marcadores no reversibles, desvincula el
+    /// token de dispositivo y desactiva la cuenta, preservando la clave primaria para mantener la
+    /// trazabilidad de auditoría y la integridad referencial de las filas clínicas.
+    /// </summary>
+    /// <param name="patientRoleId">Identificador del rol paciente en el catálogo, para validar que la
+    /// operación solo se aplique a pacientes.</param>
+    /// <exception cref="OnlyPatientsCanBeAnonymizedException">Si la cuenta no es de un paciente.</exception>
+    public void Anonymize(int patientRoleId)
+    {
+        if (RoleId != patientRoleId)
+        {
+            throw new OnlyPatientsCanBeAnonymizedException(Id);
+        }
+
+        Email = $"deleted-{Id}@anonymized.local";
+        FullName = "Usuario anonimizado";
+        FcmToken = null;
+        Status = UserStatus.Inactive;
         Touch();
     }
 
