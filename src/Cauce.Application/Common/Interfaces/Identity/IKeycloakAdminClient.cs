@@ -74,6 +74,19 @@ public interface IKeycloakAdminClient
         CancellationToken ct = default);
 
     /// <summary>
+    /// Deshabilita un usuario en Keycloak (<c>enabled: false</c>) sin eliminarlo. Se prefiere sobre la
+    /// eliminación física para preservar la trazabilidad de auditoría exigida por la Ley N° 29733 al
+    /// anonimizar una cuenta de paciente (US26, acta A17). Un usuario deshabilitado no puede iniciar
+    /// sesión.
+    /// </summary>
+    /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Tarea que representa la operación asíncrona.</returns>
+    Task DisableUserAsync(
+        string keycloakUserId,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Busca un usuario por correo electrónico exacto.
     /// </summary>
     /// <param name="email">Correo electrónico a buscar.</param>
