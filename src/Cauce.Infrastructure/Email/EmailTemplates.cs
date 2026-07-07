@@ -27,6 +27,11 @@ public static class EmailTemplates
     public const string ReportPasswordSubject = "Cauce — Contraseña de su reporte clínico";
 
     /// <summary>
+    /// Asunto del correo que confirma la eliminación (anonimización) de la cuenta del paciente.
+    /// </summary>
+    public const string AccountDeletionSubject = "Cauce — Confirmación de eliminación de su cuenta";
+
+    /// <summary>
     /// Construye el cuerpo en texto plano del correo de credenciales del nutricionista.
     /// </summary>
     /// <param name="fullName">Nombre completo del destinatario.</param>
@@ -200,6 +205,42 @@ public static class EmailTemplates
             <p>La contraseña para abrir el reporte clínico que le enviamos es:</p>
             <p style="font-size:1.2em;"><strong>{password}</strong></p>
             <p>No comparta esta contraseña. El reporte contiene datos clínicos sensibles protegidos por la Ley N.° 29733.</p>
+            <p>Equipo Cauce</p>
+            """;
+    }
+
+    /// <summary>
+    /// Construye el cuerpo en texto plano del correo de confirmación de eliminación de cuenta.
+    /// </summary>
+    /// <param name="fullName">Nombre completo original del paciente.</param>
+    /// <returns>Cuerpo en texto plano.</returns>
+    public static string BuildAccountDeletionText(string fullName)
+    {
+        return $"""
+            Hola {fullName},
+
+            Confirmamos que su cuenta en Cauce fue eliminada a su solicitud. Sus datos personales fueron anonimizados y ya no podrá iniciar sesión.
+
+            Por requerimientos de trazabilidad clínica y de la Ley N.° 29733, algunos registros se conservan de forma anonimizada, sin posibilidad de vincularlos nuevamente con su identidad.
+
+            Si usted no solicitó esta eliminación, contacte de inmediato al equipo de soporte.
+
+            Equipo Cauce
+            """;
+    }
+
+    /// <summary>
+    /// Construye el cuerpo HTML del correo de confirmación de eliminación de cuenta.
+    /// </summary>
+    /// <param name="fullName">Nombre completo original del paciente.</param>
+    /// <returns>Cuerpo HTML.</returns>
+    public static string BuildAccountDeletionHtml(string fullName)
+    {
+        return $"""
+            <p>Hola {fullName},</p>
+            <p>Confirmamos que su cuenta en Cauce fue eliminada a su solicitud. Sus datos personales fueron anonimizados y ya no podrá iniciar sesión.</p>
+            <p>Por requerimientos de trazabilidad clínica y de la Ley N.° 29733, algunos registros se conservan de forma anonimizada, sin posibilidad de vincularlos nuevamente con su identidad.</p>
+            <p>Si usted no solicitó esta eliminación, contacte de inmediato al equipo de soporte.</p>
             <p>Equipo Cauce</p>
             """;
     }

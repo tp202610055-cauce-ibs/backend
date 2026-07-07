@@ -97,4 +97,19 @@ public sealed class SmtpEmailSender : IEmailSender
         // No se registra la contraseña (DEC-B5-11).
         _logger.LogInformation("Transactional email '{Subject}' sent.", EmailTemplates.ReportPasswordSubject);
     }
+
+    /// <inheritdoc />
+    public async Task SendAccountDeletionConfirmationAsync(
+        string recipientEmail,
+        string fullName,
+        CancellationToken ct = default)
+    {
+        var textBody = EmailTemplates.BuildAccountDeletionText(fullName);
+        var htmlBody = EmailTemplates.BuildAccountDeletionHtml(fullName);
+
+        await _dispatcher
+            .SendAsync(recipientEmail, fullName, EmailTemplates.AccountDeletionSubject, textBody, htmlBody, ct)
+            .ConfigureAwait(false);
+        _logger.LogInformation("Transactional email '{Subject}' sent.", EmailTemplates.AccountDeletionSubject);
+    }
 }
