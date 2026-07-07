@@ -65,7 +65,7 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
         Guid patientId,
         DateOnly periodStart,
         DateOnly periodEnd,
-        Guid nutritionistId,
+        Guid? nutritionistId,
         CancellationToken ct = default)
     {
         var (start, end) = ToUtcRange(periodStart, periodEnd);
@@ -83,12 +83,16 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false) ?? string.Empty;
 
-        var nutritionistName = await _context.Users
-            .AsNoTracking()
-            .Where(user => user.Id == nutritionistId)
-            .Select(user => user.FullName)
-            .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false) ?? string.Empty;
+        // En el autoreporte del paciente (US24) no hay nutricionista asignado: la sección se omite
+        // por completo del PDF, por eso el nombre queda en null.
+        var nutritionistName = nutritionistId is null
+            ? null
+            : await _context.Users
+                .AsNoTracking()
+                .Where(user => user.Id == nutritionistId)
+                .Select(user => user.FullName)
+                .FirstOrDefaultAsync(ct)
+                .ConfigureAwait(false);
 
         var allergies = await (from patientAllergy in _context.PatientAllergies.AsNoTracking()
                                where patientAllergy.PatientId == patientId

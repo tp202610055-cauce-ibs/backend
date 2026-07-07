@@ -13,14 +13,18 @@ namespace Cauce.Infrastructure.Reports;
 public sealed class ClinicalReportDocument : IDocument
 {
     private readonly ClinicalReportData _data;
+    private readonly byte[]? _ibsSssChartPng;
 
     /// <summary>
-    /// Inicializa el documento con los datos consolidados del reporte.
+    /// Inicializa el documento con los datos consolidados del reporte y, opcionalmente, el gráfico de
+    /// evolución IBS-SSS ya renderizado como PNG (TS11/US22 CA01).
     /// </summary>
     /// <param name="data">Datos del reporte.</param>
-    public ClinicalReportDocument(ClinicalReportData data)
+    /// <param name="ibsSssChartPng">PNG del gráfico de evolución IBS-SSS, o <see langword="null"/> si no aplica.</param>
+    public ClinicalReportDocument(ClinicalReportData data, byte[]? ibsSssChartPng = null)
     {
         _data = data;
+        _ibsSssChartPng = ibsSssChartPng;
     }
 
     /// <inheritdoc />
@@ -50,7 +54,11 @@ public sealed class ClinicalReportDocument : IDocument
             column.Item().Text(
                 $"Período: {_data.PeriodStart:yyyy-MM-dd} a {_data.PeriodEnd:yyyy-MM-dd}   ·   " +
                 $"Generado: {_data.GeneratedAt:yyyy-MM-dd HH:mm} UTC");
-            column.Item().Text($"Nutricionista: {_data.NutritionistName}");
+            if (!string.IsNullOrWhiteSpace(_data.NutritionistName))
+            {
+                column.Item().Text($"Nutricionista: {_data.NutritionistName}");
+            }
+
             column.Item().PaddingTop(6).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
         });
     }
@@ -121,6 +129,11 @@ public sealed class ClinicalReportDocument : IDocument
                 foreach (var assessment in _data.Assessments)
                 {
                     inner.Item().Text($"• {assessment.Date:yyyy-MM-dd}: {assessment.Score}/500 ({assessment.Category})");
+                }
+
+                if (_ibsSssChartPng is not null)
+                {
+                    inner.Item().PaddingTop(8).Image(_ibsSssChartPng).FitWidth();
                 }
             }));
 
