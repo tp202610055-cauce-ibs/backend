@@ -2,6 +2,8 @@ using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Patients;
+using Cauce.Domain.Patients.Events;
 using Cauce.Domain.Patients.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -18,6 +20,7 @@ public sealed class UpdatePatientProfileCommandHandler : IRequestHandler<UpdateP
     private readonly IUserRepository _userRepository;
     private readonly IPatientProfileRepository _patientProfileRepository;
     private readonly IBmiCalculator _bmiCalculator;
+    private readonly IOutboxWriter _outboxWriter;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<UpdatePatientProfileCommandHandler> _logger;
 
@@ -29,6 +32,7 @@ public sealed class UpdatePatientProfileCommandHandler : IRequestHandler<UpdateP
         IUserRepository userRepository,
         IPatientProfileRepository patientProfileRepository,
         IBmiCalculator bmiCalculator,
+        IOutboxWriter outboxWriter,
         IUnitOfWork unitOfWork,
         ILogger<UpdatePatientProfileCommandHandler> logger)
     {
@@ -36,6 +40,7 @@ public sealed class UpdatePatientProfileCommandHandler : IRequestHandler<UpdateP
         _userRepository = userRepository;
         _patientProfileRepository = patientProfileRepository;
         _bmiCalculator = bmiCalculator;
+        _outboxWriter = outboxWriter;
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -59,10 +64,19 @@ public sealed class UpdatePatientProfileCommandHandler : IRequestHandler<UpdateP
 
         if (request.IbsSubtype.HasValue)
         {
+            var oldSubtype = profile.IbsSubtype;
             profile.UpdateIbsSubtype(request.IbsSubtype.Value, utcNow);
 
-            // TODO: Prompt 5 - notificar internamente al nutricionista asignado del
-            // cambio de subtipo (US03 CA03).
+            // US03 CA03: notificar al nutricionista asignado solo si el subtipo efectivamente cambió.
+            // La notificación se agenda de forma asíncrona vía outbox (patrón DEC-B5-04).
+            if (oldSubtype != request.IbsSubtype.Value)
+            {
+                await _outboxWriter.PublishAsync(
+                    profile.Id,
+                    nameof(PatientProfile),
+                    new PatientSubtypeChangedEvent(user.Id, oldSubtype, request.IbsSubtype.Value, utcNow),
+                    cancellationToken).ConfigureAwait(false);
+            }
         }
 
         if (request.DiagnosisDate.HasValue)
