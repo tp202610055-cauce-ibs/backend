@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net.Http.Json;
 using System.Text.Json.Serialization;
 using Cauce.Application.Common.Interfaces.Recommendations;
@@ -46,6 +47,7 @@ public sealed class OllamaExplanationOrchestrator : IExplanationOrchestrator
         IReadOnlyList<ExplanationItem> items,
         CancellationToken cancellationToken)
     {
+        var stopwatch = Stopwatch.StartNew();
         try
         {
             using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -65,7 +67,7 @@ public sealed class OllamaExplanationOrchestrator : IExplanationOrchestrator
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("Ollama returned {StatusCode}; using fallback explanation.", response.StatusCode);
-                return _fallback.GenerateFor(items);
+                return Fallback(items, "error", $"http_{(int)response.StatusCode}", stopwatch.ElapsedMilliseconds);
             }
 
             var payload = await response.Content
@@ -77,7 +79,7 @@ public sealed class OllamaExplanationOrchestrator : IExplanationOrchestrator
             if (!validation.IsValid)
             {
                 _logger.LogWarning("Ollama output failed guardrails ({Reason}); using fallback explanation.", validation.FailureReason);
-                return _fallback.GenerateFor(items);
+                return Fallback(items, "error", $"guardrail_{validation.FailureReason}", stopwatch.ElapsedMilliseconds);
             }
 
             return new ExplanationResult(text, ExplanationSource.LlmGenerated);
@@ -89,13 +91,37 @@ public sealed class OllamaExplanationOrchestrator : IExplanationOrchestrator
         catch (OperationCanceledException)
         {
             _logger.LogWarning("Ollama call timed out; using fallback explanation.");
-            return _fallback.GenerateFor(items);
+            return Fallback(items, "timeout", "timeout", stopwatch.ElapsedMilliseconds);
         }
         catch (Exception exception)
         {
             _logger.LogWarning(exception, "Ollama call failed; using fallback explanation.");
-            return _fallback.GenerateFor(items);
+            return Fallback(items, "error", exception.GetType().Name, stopwatch.ElapsedMilliseconds);
         }
+    }
+
+    /// <summary>
+    /// Construye el resultado de respaldo adjuntando el diagnóstico del fallback (motivo, tipo de error
+    /// y duración) para su posterior auditoría (TS08 CA02).
+    /// </summary>
+    /// <param name="items">Ítems de la recomendación para la plantilla de respaldo.</param>
+    /// <param name="reason">Motivo del fallback (<c>timeout</c> o <c>error</c>).</param>
+    /// <param name="errorType">Detalle del error que causó el fallback.</param>
+    /// <param name="durationMs">Duración de la invocación al modelo antes del fallback, en milisegundos.</param>
+    /// <returns>El resultado de respaldo con su diagnóstico.</returns>
+    private ExplanationResult Fallback(
+        IReadOnlyList<ExplanationItem> items,
+        string reason,
+        string errorType,
+        long durationMs)
+    {
+        var result = _fallback.GenerateFor(items);
+        return result with
+        {
+            FallbackReason = reason,
+            FallbackErrorType = errorType,
+            FallbackDurationMs = durationMs
+        };
     }
 
     private sealed record OllamaRequest(
