@@ -22,6 +22,18 @@ public enum RecommendationStatus
     Approved,
 
     /// <summary>
+    /// Aprobada por un nutricionista tras modificar sus ítems o su contenido (US17 CA03). Es un
+    /// estado terminal aprobado, entregable como <see cref="Approved"/>.
+    /// </summary>
+    ModifiedApproved,
+
+    /// <summary>
+    /// Creada manualmente por un nutricionista y aprobada de inmediato, sin pasar por revisión
+    /// (US29). Es un estado terminal aprobado, entregable como <see cref="Approved"/>.
+    /// </summary>
+    ManualApproved,
+
+    /// <summary>
     /// Rechazada por un nutricionista. Estado final.
     /// </summary>
     Rejected,

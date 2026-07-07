@@ -45,6 +45,12 @@ public sealed class ModelVersion : Entity, IAggregateRoot
     /// </summary>
     public bool IsActive { get; private set; }
 
+    /// <summary>
+    /// Indica si la versión corresponde a un modelo dummy (placeholder sin validez clínica), para
+    /// distinguirlo del modelo real en la trazabilidad (TS07, acta A23).
+    /// </summary>
+    public bool IsDummy { get; private set; }
+
     private ModelVersion()
     {
     }
@@ -56,7 +62,8 @@ public sealed class ModelVersion : Entity, IAggregateRoot
         int? trainingDatasetSize,
         string performanceMetricsJson,
         string deployedBy,
-        DateTime deployedAt)
+        DateTime deployedAt,
+        bool isDummy)
         : base(id)
     {
         VersionName = versionName;
@@ -66,6 +73,7 @@ public sealed class ModelVersion : Entity, IAggregateRoot
         DeployedBy = deployedBy;
         DeployedAt = deployedAt;
         IsActive = false;
+        IsDummy = isDummy;
     }
 
     /// <summary>
@@ -77,6 +85,7 @@ public sealed class ModelVersion : Entity, IAggregateRoot
     /// <param name="performanceMetricsJson">Métricas de desempeño en JSON.</param>
     /// <param name="deployedBy">Identidad responsable del despliegue.</param>
     /// <param name="deployedAt">Momento de despliegue, en UTC.</param>
+    /// <param name="isDummy">Indica si es un modelo dummy (placeholder). Por defecto <see langword="false"/>.</param>
     /// <returns>La nueva versión de modelo.</returns>
     /// <exception cref="ArgumentException">Si el nombre, el hash o el responsable son vacíos.</exception>
     public static ModelVersion Register(
@@ -85,14 +94,15 @@ public sealed class ModelVersion : Entity, IAggregateRoot
         int? trainingDatasetSize,
         string performanceMetricsJson,
         string deployedBy,
-        DateTime deployedAt)
+        DateTime deployedAt,
+        bool isDummy = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(versionName);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelHash);
         ArgumentException.ThrowIfNullOrWhiteSpace(deployedBy);
 
         return new ModelVersion(
-            Guid.NewGuid(), versionName, modelHash, trainingDatasetSize, performanceMetricsJson, deployedBy, deployedAt);
+            Guid.NewGuid(), versionName, modelHash, trainingDatasetSize, performanceMetricsJson, deployedBy, deployedAt, isDummy);
     }
 
     /// <summary>

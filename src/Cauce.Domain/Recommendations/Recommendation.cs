@@ -13,6 +13,22 @@ namespace Cauce.Domain.Recommendations;
 /// </summary>
 public sealed class Recommendation : Entity, IAggregateRoot
 {
+    /// <summary>
+    /// Estados en los que una recomendación es visible para el paciente (US14 CA03): los tres estados
+    /// terminales aprobados más los de entrega y retroalimentación. Se excluyen los estados previos a la
+    /// aprobación (<c>Generated</c>, <c>PendingReview</c>), el rechazo y la expiración. El archivado se
+    /// filtra aparte por <see cref="IsActive"/>. Se incluyen <c>Delivered</c> y <c>FeedbackReceived</c>
+    /// para no ocultar recomendaciones que el paciente está aplicando o ya completó (acta A24).
+    /// </summary>
+    public static readonly IReadOnlyList<RecommendationStatus> PatientVisibleStatuses =
+    [
+        RecommendationStatus.Approved,
+        RecommendationStatus.ModifiedApproved,
+        RecommendationStatus.ManualApproved,
+        RecommendationStatus.Delivered,
+        RecommendationStatus.FeedbackReceived
+    ];
+
     private readonly List<RecommendationItem> _items = new();
 
     /// <summary>
@@ -21,9 +37,10 @@ public sealed class Recommendation : Entity, IAggregateRoot
     public Guid PatientId { get; private set; }
 
     /// <summary>
-    /// Identificador de la versión de modelo que produjo la recomendación.
+    /// Identificador de la versión de modelo que produjo la recomendación, o <see langword="null"/>
+    /// en las recomendaciones manuales (US29), que no provienen de un motor.
     /// </summary>
-    public Guid ModelVersionId { get; private set; }
+    public Guid? ModelVersionId { get; private set; }
 
     /// <summary>
     /// Identificador del nutricionista que la revisó, o <see langword="null"/> si aún no fue
@@ -91,6 +108,48 @@ public sealed class Recommendation : Entity, IAggregateRoot
     /// </summary>
     public RecommendationFeedback? Feedback { get; private set; }
 
+    /// <summary>
+    /// Origen de la recomendación (motor o creación manual del nutricionista).
+    /// </summary>
+    public RecommendationSource Source { get; private set; }
+
+    /// <summary>
+    /// Título de la recomendación; solo se completa en las recomendaciones manuales (US29).
+    /// </summary>
+    public string? Title { get; private set; }
+
+    /// <summary>
+    /// Descripción de la recomendación; solo se completa en las recomendaciones manuales.
+    /// </summary>
+    public string? Description { get; private set; }
+
+    /// <summary>
+    /// Pasos accionables de la recomendación, o <see langword="null"/>. Se persiste como JSONB.
+    /// </summary>
+    public IReadOnlyList<string>? Steps { get; private set; }
+
+    /// <summary>
+    /// Indica si la recomendación está activa (visible para el paciente). El archivado se modela como
+    /// <c>IsActive = false</c> en lugar de un estado adicional (acta A22).
+    /// </summary>
+    public bool IsActive { get; private set; }
+
+    /// <summary>
+    /// Momento de archivado, en UTC; <see langword="null"/> si está activa.
+    /// </summary>
+    public DateTime? ArchivedAt { get; private set; }
+
+    /// <summary>
+    /// Motivo del archivado, o <see langword="null"/> si está activa.
+    /// </summary>
+    public ArchiveReason? ArchiveReason { get; private set; }
+
+    /// <summary>
+    /// Fecha de vigencia de la recomendación, en UTC; <see langword="null"/> si no caduca. Al vencer,
+    /// el worker de archivado la marca inactiva (US30 CA02).
+    /// </summary>
+    public DateTime? ValidUntil { get; private set; }
+
     private Recommendation()
     {
     }
@@ -112,9 +171,42 @@ public sealed class Recommendation : Entity, IAggregateRoot
         ExplanationSource = explanationSource;
         AiExplanation = aiExplanation;
         Status = RecommendationStatus.Generated;
+        Source = RecommendationSource.EngineGenerated;
         AutoApproved = false;
+        IsActive = true;
         GeneratedAt = now;
         ExpiresAt = now + expirationWindow;
+    }
+
+    private Recommendation(
+        Guid id,
+        Guid patientId,
+        Guid nutritionistId,
+        string title,
+        string description,
+        IReadOnlyList<string>? steps,
+        string clinicalNote,
+        DateTime? validUntil,
+        DateTime now)
+        : base(id)
+    {
+        PatientId = patientId;
+        ModelVersionId = null;
+        ConfidenceScore = ConfidenceScore.Create(1.0m);
+        ExplanationSource = ExplanationSource.Manual;
+        AiExplanation = null;
+        Status = RecommendationStatus.ManualApproved;
+        Source = RecommendationSource.Manual;
+        AutoApproved = false;
+        IsActive = true;
+        Title = title;
+        Description = description;
+        Steps = steps;
+        NutritionistNote = clinicalNote;
+        ReviewedByNutritionistId = nutritionistId;
+        ReviewedAt = now;
+        GeneratedAt = now;
+        ValidUntil = validUntil;
     }
 
     /// <summary>
@@ -161,6 +253,41 @@ public sealed class Recommendation : Entity, IAggregateRoot
     }
 
     /// <summary>
+    /// Crea una recomendación manual del nutricionista, aprobada de inmediato (US29). No proviene de un
+    /// motor: <see cref="ModelVersionId"/> es <see langword="null"/>, la confianza es 1.0 y el origen de
+    /// la explicación es <see cref="ExplanationSource.Manual"/>. Puede no tener ítems de catálogo.
+    /// </summary>
+    /// <param name="patientId">Identificador del paciente destinatario.</param>
+    /// <param name="nutritionistId">Identificador del nutricionista autor.</param>
+    /// <param name="title">Título de la recomendación (obligatorio).</param>
+    /// <param name="description">Descripción de la recomendación (obligatoria).</param>
+    /// <param name="steps">Pasos accionables, opcional.</param>
+    /// <param name="clinicalNote">Nota clínica del nutricionista (obligatoria).</param>
+    /// <param name="validUntil">Fecha de vigencia, o <see langword="null"/> si no caduca.</param>
+    /// <param name="now">Marca de tiempo UTC de creación.</param>
+    /// <returns>La nueva recomendación manual.</returns>
+    /// <exception cref="ArgumentException">Si el título, la descripción o la nota clínica son vacíos.</exception>
+    public static Recommendation CreateManual(
+        Guid patientId,
+        Guid nutritionistId,
+        string title,
+        string description,
+        IReadOnlyList<string>? steps,
+        string clinicalNote,
+        DateTime? validUntil,
+        DateTime now)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+        ArgumentException.ThrowIfNullOrWhiteSpace(clinicalNote);
+
+        var normalizedSteps = steps is { Count: > 0 } ? steps : null;
+
+        return new Recommendation(
+            Guid.NewGuid(), patientId, nutritionistId, title, description, normalizedSteps, clinicalNote, validUntil, now);
+    }
+
+    /// <summary>
     /// Transita la recomendación a revisión pendiente.
     /// </summary>
     /// <param name="now">Marca de tiempo UTC de la operación.</param>
@@ -193,6 +320,88 @@ public sealed class Recommendation : Entity, IAggregateRoot
         NutritionistNote = note;
         ReviewedAt = now;
         AutoApproved = false;
+    }
+
+    /// <summary>
+    /// Aprueba la recomendación tras modificarla: reemplaza sus ítems y/o su contenido y transita a
+    /// <see cref="RecommendationStatus.ModifiedApproved"/> (US17 CA03). Solo válido desde
+    /// <see cref="RecommendationStatus.PendingReview"/>.
+    /// </summary>
+    /// <param name="nutritionistId">Identificador del nutricionista revisor.</param>
+    /// <param name="note">Nota clínica de la modificación (no vacía).</param>
+    /// <param name="now">Marca de tiempo UTC de la revisión.</param>
+    /// <param name="items">Nuevos ítems que reemplazan a los actuales, o <see langword="null"/> para conservarlos.</param>
+    /// <param name="title">Nuevo título, o <see langword="null"/> para conservarlo.</param>
+    /// <param name="description">Nueva descripción, o <see langword="null"/> para conservarla.</param>
+    /// <param name="steps">Nuevos pasos, o <see langword="null"/> para conservarlos.</param>
+    /// <exception cref="ArgumentException">Si la nota es vacía o solo espacios.</exception>
+    /// <exception cref="InvalidRecommendationStateTransitionException">Si el estado actual no lo permite.</exception>
+    public void ModifyByNutritionist(
+        Guid nutritionistId,
+        string note,
+        DateTime now,
+        IReadOnlyList<RecommendationItem>? items = null,
+        string? title = null,
+        string? description = null,
+        IReadOnlyList<string>? steps = null)
+    {
+        if (string.IsNullOrWhiteSpace(note))
+        {
+            throw new ArgumentException("La nota clínica de la modificación es obligatoria.", nameof(note));
+        }
+
+        RecommendationStateMachine.EnsureTransition(Status, RecommendationStatus.ModifiedApproved);
+
+        if (items is not null)
+        {
+            _items.Clear();
+            foreach (var item in items)
+            {
+                item.AttachTo(Id);
+                _items.Add(item);
+            }
+        }
+
+        if (title is not null)
+        {
+            Title = title;
+        }
+
+        if (description is not null)
+        {
+            Description = description;
+        }
+
+        if (steps is not null)
+        {
+            Steps = steps.Count > 0 ? steps : null;
+        }
+
+        Status = RecommendationStatus.ModifiedApproved;
+        ReviewedByNutritionistId = nutritionistId;
+        NutritionistNote = note;
+        ReviewedAt = now;
+    }
+
+    /// <summary>
+    /// Archiva la recomendación (la marca inactiva) con el motivo indicado (US30). Solo válido sobre
+    /// recomendaciones activas en un estado terminal aprobado (<see cref="RecommendationStatus.Approved"/>,
+    /// <see cref="RecommendationStatus.ModifiedApproved"/> o <see cref="RecommendationStatus.ManualApproved"/>).
+    /// No cambia el estado del flujo HITL: el archivado es un flag (acta A22).
+    /// </summary>
+    /// <param name="reason">Motivo del archivado.</param>
+    /// <param name="now">Marca de tiempo UTC de la operación.</param>
+    /// <exception cref="RecommendationNotArchivableException">Si no está activa o no está en un estado terminal aprobado.</exception>
+    public void Archive(ArchiveReason reason, DateTime now)
+    {
+        if (!IsActive || !IsApprovedTerminalState())
+        {
+            throw new RecommendationNotArchivableException(Id);
+        }
+
+        IsActive = false;
+        ArchivedAt = now;
+        ArchiveReason = reason;
     }
 
     /// <summary>
@@ -293,5 +502,22 @@ public sealed class Recommendation : Entity, IAggregateRoot
         return Status is RecommendationStatus.Generated
             or RecommendationStatus.PendingReview
             or RecommendationStatus.Approved;
+    }
+
+    private bool IsApprovedTerminalState()
+    {
+        return Status is RecommendationStatus.Approved
+            or RecommendationStatus.ModifiedApproved
+            or RecommendationStatus.ManualApproved;
+    }
+
+    /// <summary>
+    /// Indica si la recomendación es visible para el paciente: está activa y en un estado visible
+    /// (US14 CA03). El nutricionista, en cambio, ve todas las recomendaciones de sus pacientes.
+    /// </summary>
+    /// <returns><see langword="true"/> si el paciente puede verla.</returns>
+    public bool IsVisibleToPatient()
+    {
+        return IsActive && PatientVisibleStatuses.Contains(Status);
     }
 }
