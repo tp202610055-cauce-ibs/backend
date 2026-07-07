@@ -1,8 +1,12 @@
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Patients.Dtos;
+using Cauce.Domain.ClinicalRegistry;
+using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients;
 using Cauce.Domain.Patients.Enums;
+using Cauce.Domain.Recommendations;
+using Cauce.Domain.Recommendations.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cauce.Infrastructure.Persistence.Repositories;
@@ -43,22 +47,43 @@ public sealed class NutritionistPatientRepository : INutritionistPatientReposito
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyList<AssignedPatientSummary>> ListAssignedPatientSummariesAsync(Guid nutritionistId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<AssignedPatientTriageRow>> ListAssignedPatientTriageRowsAsync(
+        Guid nutritionistId,
+        DateTime utcNow,
+        CancellationToken ct = default)
     {
+        var pendingReviewCutoff = utcNow.AddHours(-24);
+
         var query =
             from assignment in _context.Set<NutritionistPatient>().AsNoTracking()
             where assignment.NutritionistId == nutritionistId && assignment.Status == AssignmentStatus.Active
             join user in _context.Set<User>().AsNoTracking() on assignment.PatientId equals user.Id
             join profile in _context.Set<PatientProfile>().AsNoTracking() on user.Id equals profile.UserId into profileGroup
             from profile in profileGroup.DefaultIfEmpty()
-            orderby assignment.AssignedAt descending
-            select new AssignedPatientSummary(
+            select new AssignedPatientTriageRow(
                 user.Id,
                 user.FullName,
                 assignment.Id,
                 assignment.AssignedAt,
                 profile != null && profile.OnboardingCompleted,
-                profile != null ? profile.IbsSubtype : (IbsSubtype?)null);
+                profile != null ? profile.IbsSubtype : (IbsSubtype?)null,
+                _context.Set<IbsSssAssessment>()
+                    .Where(a => a.PatientId == user.Id)
+                    .OrderByDescending(a => a.CompletedAt).ThenByDescending(a => a.Id)
+                    .Select(a => (int?)a.TotalScore)
+                    .FirstOrDefault(),
+                _context.Set<IbsSssAssessment>()
+                    .Where(a => a.PatientId == user.Id)
+                    .OrderByDescending(a => a.CompletedAt).ThenByDescending(a => a.Id)
+                    .Select(a => (SeverityCategory?)a.SeverityCategory)
+                    .FirstOrDefault(),
+                _context.Set<Meal>().Where(m => m.PatientId == user.Id).Max(m => (DateTime?)m.CreatedAt),
+                _context.Set<Symptom>().Where(s => s.PatientId == user.Id).Max(s => (DateTime?)s.CreatedAt),
+                _context.Set<IbsSssAssessment>().Where(a => a.PatientId == user.Id).Max(a => (DateTime?)a.CompletedAt),
+                _context.Set<Recommendation>().Count(r =>
+                    r.PatientId == user.Id
+                    && r.Status == RecommendationStatus.PendingReview
+                    && r.GeneratedAt < pendingReviewCutoff));
 
         return await query.ToListAsync(ct).ConfigureAwait(false);
     }

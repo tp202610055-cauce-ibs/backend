@@ -47,9 +47,12 @@ public sealed class RecommendationRepository : IRecommendationRepository
         int pageSize,
         CancellationToken ct = default)
     {
+        // US14 CA03: el paciente solo ve recomendaciones activas en estados visibles (acta A24).
         var query = _context.Set<Recommendation>()
             .Include(x => x.Items)
-            .Where(x => x.PatientId == patientId);
+            .Where(x => x.PatientId == patientId
+                && x.IsActive
+                && Recommendation.PatientVisibleStatuses.Contains(x.Status));
 
         if (status.HasValue)
         {
