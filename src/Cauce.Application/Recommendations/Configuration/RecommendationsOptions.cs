@@ -19,6 +19,12 @@ public sealed class RecommendationsOptions
     public string EngineKind { get; init; } = "Rule";
 
     /// <summary>
+    /// Ruta al archivo del modelo ONNX. Si es relativa, se resuelve buscando hacia arriba desde el
+    /// directorio de ejecución. Si el archivo no existe, el motor ONNX cae al motor de regla (TS07).
+    /// </summary>
+    public string OnnxModelPath { get; init; } = "infrastructure/models/dummy_v0.0.1.onnx";
+
+    /// <summary>
     /// Tamaño en días de la ventana inicial de consumo para los candidatos.
     /// </summary>
     [Range(1, 60)]

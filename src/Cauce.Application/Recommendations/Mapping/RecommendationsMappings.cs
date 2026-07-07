@@ -32,11 +32,15 @@ public static class RecommendationsMappings
     /// <param name="recommendation">Recomendación a proyectar.</param>
     /// <param name="modelVersionName">Nombre de la versión de modelo usada.</param>
     /// <param name="foodNames">Datos legibles de los alimentos involucrados, por identificador.</param>
+    /// <param name="reviewedByNutritionistName">Nombre completo del nutricionista revisor (bloque 2), o <see langword="null"/>.</param>
+    /// <param name="supportingData">Datos de respaldo clínico de la ventana de análisis (bloque 4).</param>
     /// <returns>El detalle de la recomendación.</returns>
     public static RecommendationDetailDto ToDetail(
         Recommendation recommendation,
         string modelVersionName,
-        IReadOnlyDictionary<Guid, FoodNameInfo> foodNames)
+        IReadOnlyDictionary<Guid, FoodNameInfo> foodNames,
+        string? reviewedByNutritionistName,
+        RecommendationSupportingDataDto supportingData)
     {
         var items = recommendation.Items
             .Select(item => ToItemDto(item, foodNames))
@@ -58,7 +62,10 @@ public static class RecommendationsMappings
             recommendation.DeliveredAt,
             recommendation.ExpiresAt,
             items,
-            recommendation.Feedback is null ? null : ToFeedbackDto(recommendation.Feedback));
+            recommendation.Feedback is null ? null : ToFeedbackDto(recommendation.Feedback),
+            reviewedByNutritionistName,
+            recommendation.Steps ?? [],
+            supportingData);
     }
 
     /// <summary>
