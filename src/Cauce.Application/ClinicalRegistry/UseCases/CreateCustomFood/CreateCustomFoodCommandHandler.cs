@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
@@ -21,6 +22,7 @@ public sealed class CreateCustomFoodCommandHandler : IRequestHandler<CreateCusto
     private readonly IUserRepository _userRepository;
     private readonly ICustomFoodRepository _customFoodRepository;
     private readonly IFoodItemRepository _foodItemRepository;
+    private readonly ICustomFoodAllergenChecker _allergenChecker;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditLogger _auditLogger;
     private readonly ILogger<CreateCustomFoodCommandHandler> _logger;
@@ -33,6 +35,7 @@ public sealed class CreateCustomFoodCommandHandler : IRequestHandler<CreateCusto
         IUserRepository userRepository,
         ICustomFoodRepository customFoodRepository,
         IFoodItemRepository foodItemRepository,
+        ICustomFoodAllergenChecker allergenChecker,
         IUnitOfWork unitOfWork,
         IAuditLogger auditLogger,
         ILogger<CreateCustomFoodCommandHandler> logger)
@@ -41,6 +44,7 @@ public sealed class CreateCustomFoodCommandHandler : IRequestHandler<CreateCusto
         _userRepository = userRepository;
         _customFoodRepository = customFoodRepository;
         _foodItemRepository = foodItemRepository;
+        _allergenChecker = allergenChecker;
         _unitOfWork = unitOfWork;
         _auditLogger = auditLogger;
         _logger = logger;
@@ -66,6 +70,18 @@ public sealed class CreateCustomFoodCommandHandler : IRequestHandler<CreateCusto
             }
         }
 
+        // US10 CA03: cruce de ingredientes contra las alergias declaradas. Si hay coincidencias y el
+        // paciente no confirmó, se rechaza con 409 y el detalle; si confirmó, se procede y el acuse
+        // queda en la auditoría.
+        var ingredientFoodIds = request.Ingredients.Select(ingredient => ingredient.FoodId).ToList();
+        var detectedAllergens = await _allergenChecker
+            .CheckAsync(patientId, ingredientFoodIds, cancellationToken)
+            .ConfigureAwait(false);
+        if (detectedAllergens.Count > 0 && !request.ConfirmedAllergens)
+        {
+            throw new UnconfirmedAllergensException(detectedAllergens);
+        }
+
         var customFood = CustomFood.Create(Guid.NewGuid(), patientId, request.Name, request.PortionSizeGrams, utcNow);
         foreach (var ingredient in request.Ingredients)
         {
@@ -76,9 +92,20 @@ public sealed class CreateCustomFoodCommandHandler : IRequestHandler<CreateCusto
 
         // Auditoría explícita ANTES del SaveChanges: custom_foods no tiene trigger; una sola
         // transacción persiste el alimento y la bitácora de forma atómica (DEC-B5-01 capa 3, acta A8).
+        var auditContext = detectedAllergens.Count > 0
+            ? JsonSerializer.Serialize(new
+            {
+                acknowledged_allergens = detectedAllergens.Select(allergen => new
+                {
+                    ingredient_name = allergen.IngredientName,
+                    allergen_name = allergen.AllergenName,
+                    severity = allergen.Severity
+                })
+            })
+            : null;
         await _auditLogger.LogAsync(
             AuditActionType.Create, nameof(CustomFood), customFood.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+            oldValuesHash: null, newValuesHash: null, additionalContext: auditContext, cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
