@@ -12,12 +12,14 @@ namespace Cauce.Application.Tests.Recommendations;
 public sealed class RecommendationValidatorsTests
 {
     [Fact]
-    public void ApproveValidator_ShortNote_Fails()
+    public void ApproveValidator_NoteShorterThan20Chars_FailsWithSpecificMessage()
     {
+        // 18 caracteres: pasa el umbral anterior (10) pero no el nuevo (20).
         var result = new ApproveRecommendationCommandValidator()
-            .Validate(new ApproveRecommendationCommand(Guid.NewGuid(), "corta", Guid.NewGuid()));
+            .Validate(new ApproveRecommendationCommand(Guid.NewGuid(), "Nota clínica corta", Guid.NewGuid()));
 
         result.IsValid.Should().BeFalse();
+        result.Errors.Should().Contain(e => e.ErrorMessage == "La nota clínica de aprobación debe tener al menos 20 caracteres.");
     }
 
     [Fact]

@@ -1,8 +1,11 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Common.Interfaces.Notifications;
 using Cauce.Application.Common.Interfaces.Recommendations;
 using Cauce.Application.Recommendations.UseCases.DeliverRecommendation;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Notifications;
+using Cauce.Domain.Notifications.Enums;
 using Cauce.Domain.Recommendations;
 using Cauce.Domain.Recommendations.Enums;
 using Cauce.Domain.Recommendations.Exceptions;
@@ -24,6 +27,7 @@ public sealed class DeliverRecommendationCommandHandlerTests
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IRecommendationRepository _recommendationRepository = Substitute.For<IRecommendationRepository>();
     private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
+    private readonly INotificationScheduler _notificationScheduler = Substitute.For<INotificationScheduler>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<DeliverRecommendationCommandHandler> _logger =
         Substitute.For<ILogger<DeliverRecommendationCommandHandler>>();
@@ -40,7 +44,7 @@ public sealed class DeliverRecommendationCommandHandlerTests
     }
 
     private DeliverRecommendationCommandHandler CreateHandler() =>
-        new(_currentUser, _userRepository, _recommendationRepository, _outboxWriter, _unitOfWork, _logger);
+        new(_currentUser, _userRepository, _recommendationRepository, _outboxWriter, _notificationScheduler, _unitOfWork, _logger);
 
     [Fact]
     public async Task Handle_FromApproved_Delivers()
@@ -52,6 +56,29 @@ public sealed class DeliverRecommendationCommandHandlerTests
 
         recommendation.Status.Should().Be(RecommendationStatus.Delivered);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FromApproved_SchedulesFeedbackReminderIn24h()
+    {
+        var recommendation = RecommendationTestData.Approved(_patientId, Now);
+        _recommendationRepository.GetByIdAsync(recommendation.Id, Arg.Any<CancellationToken>()).Returns(recommendation);
+
+        Notification? scheduled = null;
+        await _notificationScheduler.ScheduleAsync(
+            Arg.Do<Notification>(n => scheduled = n), Arg.Any<CancellationToken>());
+
+        var before = DateTime.UtcNow;
+        await CreateHandler().Handle(new DeliverRecommendationCommand(recommendation.Id, Guid.NewGuid()), CancellationToken.None);
+        var after = DateTime.UtcNow;
+
+        scheduled.Should().NotBeNull();
+        scheduled!.Type.Should().Be(NotificationType.Reminder);
+        scheduled.Channel.Should().Be(NotificationChannel.Push);
+        scheduled.RelatedEntityType.Should().Be("recommendation");
+        scheduled.RelatedEntityId.Should().Be(recommendation.Id);
+        scheduled.UserId.Should().Be(_patientId);
+        scheduled.ScheduledFor.Should().BeOnOrAfter(before.AddHours(24)).And.BeOnOrBefore(after.AddHours(24));
     }
 
     [Fact]

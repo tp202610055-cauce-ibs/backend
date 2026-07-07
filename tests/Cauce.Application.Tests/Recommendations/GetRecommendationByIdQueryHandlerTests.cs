@@ -28,6 +28,7 @@ public sealed class GetRecommendationByIdQueryHandlerTests
     private readonly INutritionistPatientRepository _assignments = Substitute.For<INutritionistPatientRepository>();
     private readonly IModelVersionRepository _modelVersionRepository = Substitute.For<IModelVersionRepository>();
     private readonly IFoodCatalogReader _foodCatalogReader = Substitute.For<IFoodCatalogReader>();
+    private readonly IRecommendationSupportingDataReader _supportingDataReader = Substitute.For<IRecommendationSupportingDataReader>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
 
     private readonly Guid _patientId;
@@ -44,16 +45,19 @@ public sealed class GetRecommendationByIdQueryHandlerTests
             .Returns(ModelVersion.Register("rule-v1.0.0", "HASH", 250_000, "{}", "seeder", Now));
         _foodCatalogReader.GetFoodNamesAsync(Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<CancellationToken>())
             .Returns(new Dictionary<Guid, FoodNameInfo>());
+        _supportingDataReader.GetAsync(Arg.Any<Guid>(), Arg.Any<DateTime>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns(new RecommendationSupportingDataSnapshot(0, 0, Array.Empty<string>()));
     }
 
     private GetRecommendationByIdQueryHandler CreateHandler() => new(
         _currentUser, _userRepository, _recommendationRepository, _assignments,
-        _modelVersionRepository, _foodCatalogReader, _unitOfWork);
+        _modelVersionRepository, _foodCatalogReader, _supportingDataReader, _unitOfWork);
 
     [Fact]
-    public async Task Handle_AsOwnerPatient_ReturnsDto()
+    public async Task Handle_AsOwnerPatient_VisibleStatus_ReturnsDto()
     {
-        var recommendation = RecommendationTestData.PendingReview(_patientId, Now);
+        // US14 CA03: el paciente ve una recomendación aprobada (estado visible).
+        var recommendation = RecommendationTestData.Approved(_patientId, Now);
         _recommendationRepository.GetByIdWithDetailsAsync(recommendation.Id, Arg.Any<CancellationToken>()).Returns(recommendation);
 
         var dto = await CreateHandler().Handle(new GetRecommendationByIdQuery(recommendation.Id), CancellationToken.None);
@@ -63,14 +67,28 @@ public sealed class GetRecommendationByIdQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_WhenExpiresAtPast_AndStatusEligible_TransitsToExpired()
+    public async Task Handle_AsOwnerPatient_PendingReview_Returns404()
     {
-        var recommendation = RecommendationTestData.PendingReview(_patientId, Now.AddHours(-100));
+        // US14 CA03: el paciente no puede ver una recomendación en revisión (estado no visible).
+        var recommendation = RecommendationTestData.PendingReview(_patientId, Now);
         _recommendationRepository.GetByIdWithDetailsAsync(recommendation.Id, Arg.Any<CancellationToken>()).Returns(recommendation);
 
-        var dto = await CreateHandler().Handle(new GetRecommendationByIdQuery(recommendation.Id), CancellationToken.None);
+        var act = () => CreateHandler().Handle(new GetRecommendationByIdQuery(recommendation.Id), CancellationToken.None);
 
-        dto.Status.Should().Be(RecommendationStatus.Expired);
+        await act.Should().ThrowAsync<RecommendationNotFoundException>();
+    }
+
+    [Fact]
+    public async Task Handle_WhenExpiresAtPast_ForPatient_ExpiresAndReturns404()
+    {
+        var recommendation = RecommendationTestData.Approved(_patientId, Now.AddHours(-100));
+        _recommendationRepository.GetByIdWithDetailsAsync(recommendation.Id, Arg.Any<CancellationToken>()).Returns(recommendation);
+
+        var act = () => CreateHandler().Handle(new GetRecommendationByIdQuery(recommendation.Id), CancellationToken.None);
+
+        // La expiración on-read se aplica (SaveChanges), pero luego el estado Expired no es visible → 404.
+        await act.Should().ThrowAsync<RecommendationNotFoundException>();
+        recommendation.Status.Should().Be(RecommendationStatus.Expired);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 

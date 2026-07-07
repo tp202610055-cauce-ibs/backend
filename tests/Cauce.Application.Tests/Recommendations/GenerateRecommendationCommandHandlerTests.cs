@@ -1,5 +1,6 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Common.Interfaces.Notifications;
 using Cauce.Application.Common.Interfaces.Recommendations;
 using Cauce.Application.Recommendations.Configuration;
 using Cauce.Application.Recommendations.Contracts;
@@ -38,6 +39,8 @@ public sealed class GenerateRecommendationCommandHandlerTests
     private readonly IExplanationOrchestrator _orchestrator = Substitute.For<IExplanationOrchestrator>();
     private readonly IRecommendationRepository _recommendationRepository = Substitute.For<IRecommendationRepository>();
     private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
+    private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
+    private readonly INotificationScheduler _notificationScheduler = Substitute.For<INotificationScheduler>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<GenerateRecommendationCommandHandler> _logger =
         Substitute.For<ILogger<GenerateRecommendationCommandHandler>>();
@@ -91,7 +94,8 @@ public sealed class GenerateRecommendationCommandHandlerTests
 
     private GenerateRecommendationCommandHandler CreateHandler(RecommendationsOptions? options = null) => new(
         _currentUser, _userRepository, _profileReader, _historyReader, _allergyReader, _modelVersionRepository,
-        _engine, _orchestrator, new AutoApprovalGuard(), _recommendationRepository, _outboxWriter, _unitOfWork,
+        _engine, _orchestrator, new AutoApprovalGuard(), _recommendationRepository, _outboxWriter, _auditLogger,
+        _notificationScheduler, _unitOfWork,
         Options.Create(options ?? new RecommendationsOptions()), _logger);
 
     private static IReadOnlyList<Guid> NewIds(int count) =>
