@@ -23,5 +23,10 @@ public enum NotificationType
     /// <summary>
     /// Notificación del sistema (por ejemplo, disponibilidad de un reporte).
     /// </summary>
-    System
+    System,
+
+    /// <summary>
+    /// Notificación informativa para el paciente (por ejemplo, que su recomendación está en revisión).
+    /// </summary>
+    Info
 }
