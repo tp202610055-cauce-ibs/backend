@@ -21,10 +21,21 @@ public static class RecommendationStateMachine
             [RecommendationStatus.PendingReview] = new[]
             {
                 RecommendationStatus.Approved,
+                RecommendationStatus.ModifiedApproved,
                 RecommendationStatus.Rejected,
                 RecommendationStatus.Expired
             },
             [RecommendationStatus.Approved] = new[]
+            {
+                RecommendationStatus.Delivered,
+                RecommendationStatus.Expired
+            },
+            [RecommendationStatus.ModifiedApproved] = new[]
+            {
+                RecommendationStatus.Delivered,
+                RecommendationStatus.Expired
+            },
+            [RecommendationStatus.ManualApproved] = new[]
             {
                 RecommendationStatus.Delivered,
                 RecommendationStatus.Expired
