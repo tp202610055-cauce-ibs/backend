@@ -64,4 +64,17 @@ public interface IEmailSender
         string fullName,
         string password,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Confirma al paciente que su cuenta fue eliminada (anonimizada) en ejercicio del derecho al
+    /// olvido (US26). Se envía a la dirección de correo original, capturada antes de la anonimización.
+    /// </summary>
+    /// <param name="recipientEmail">Correo original del paciente.</param>
+    /// <param name="fullName">Nombre completo original del paciente.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Tarea que representa la operación asíncrona.</returns>
+    Task SendAccountDeletionConfirmationAsync(
+        string recipientEmail,
+        string fullName,
+        CancellationToken ct = default);
 }
