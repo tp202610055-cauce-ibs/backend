@@ -72,10 +72,11 @@ public sealed class RecommendationsModelVersionsSeeder
         var modelVersion = ModelVersion.Register(
             descriptor.VersionName,
             descriptor.ModelHash,
-            trainingDatasetSize: 250_000,
+            trainingDatasetSize: descriptor.IsDummy ? null : 250_000,
             performanceMetricsJson: metricsJson,
             deployedBy: "system-seeder",
-            deployedAt: DateTime.UtcNow);
+            deployedAt: DateTime.UtcNow,
+            isDummy: descriptor.IsDummy);
 
         modelVersion.Activate();
 
