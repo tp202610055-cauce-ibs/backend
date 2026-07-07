@@ -71,6 +71,11 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("fcm_token")
             .HasMaxLength(500);
 
+        builder.Property(x => x.IsInActivePilot)
+            .HasColumnName("is_in_active_pilot")
+            .HasDefaultValue(false)
+            .IsRequired();
+
         builder.HasIndex(x => x.KeycloakId)
             .IsUnique()
             .HasDatabaseName("ux_users_keycloak_id");
