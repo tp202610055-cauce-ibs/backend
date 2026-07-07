@@ -4,11 +4,16 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Cauce.Api.IntegrationTests.Identity.Support;
 using Cauce.Api.IntegrationTests.Recommendations.Support;
+using Cauce.Api.Workers;
+using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Notifications.Enums;
 using Cauce.Domain.Patients;
 using Cauce.Domain.Patients.Enums;
+using Cauce.Domain.Recommendations;
+using Cauce.Domain.Recommendations.Enums;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Seeders;
 using FluentAssertions;
@@ -201,9 +206,9 @@ public sealed class RecommendationsApiTests
         var patient = await SeedPatientWithHistoryAsync();
 
         var recommendationId = await GenerateAsync(patient.KeycloakId);
-        var detail = await GetDetail(patient.KeycloakId, recommendationId);
+        var recommendation = await GetRecommendationFromDbAsync(recommendationId);
 
-        detail.GetProperty("explanationSource").GetString().Should().Be("Fallback");
+        recommendation.ExplanationSource.Should().Be(ExplanationSource.Fallback);
     }
 
     [SkippableFact]
@@ -237,9 +242,10 @@ public sealed class RecommendationsApiTests
         await AssignAsync(nutritionist.Id, patient.Id);
 
         var recommendationId = await GenerateAsync(patient.KeycloakId);
-        var initial = await GetDetail(patient.KeycloakId, recommendationId);
-        initial.GetProperty("status").GetString().Should().Be("PendingReview");
-        initial.GetProperty("explanationSource").GetString().Should().Be("LlmGenerated");
+        // El paciente no ve la recomendación en revisión (US14 CA03); se verifica el estado en la base.
+        var initial = await GetRecommendationFromDbAsync(recommendationId);
+        initial.Status.Should().Be(RecommendationStatus.PendingReview);
+        initial.ExplanationSource.Should().Be(ExplanationSource.LlmGenerated);
 
         var pending = await NutritionistClient(nutritionist.KeycloakId).GetAsync("/api/v1/recommendations/pending-review");
         pending.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -255,6 +261,51 @@ public sealed class RecommendationsApiTests
     }
 
     [SkippableFact]
+    public async Task Deliver_SchedulesFeedbackReminderNotificationIn24h()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        await Approve(nutritionist.KeycloakId, recommendationId);
+
+        var before = DateTime.UtcNow;
+        (await Deliver(patient.KeycloakId, recommendationId)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var after = DateTime.UtcNow;
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        var reminder = await db.Notifications.AsNoTracking()
+            .SingleAsync(n => n.RelatedEntityId == recommendationId && n.Type == NotificationType.Reminder);
+
+        reminder.Channel.Should().Be(NotificationChannel.Push);
+        reminder.UserId.Should().Be(patient.Id);
+        reminder.RelatedEntityType.Should().Be("recommendation");
+        reminder.ScheduledFor.Should().BeOnOrAfter(before.AddHours(24)).And.BeOnOrBefore(after.AddHours(24));
+    }
+
+    [SkippableFact]
+    public async Task Approve_WithNoteShorterThan20Chars_RejectsWithSpecificMessage()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+
+        var response = await PostWithKey(
+            NutritionistClient(nutritionist.KeycloakId),
+            $"/api/v1/recommendations/{recommendationId}/approve",
+            new { note = "Nota corta" });
+
+        // El pipeline de validación de FluentValidation se traduce a 400 (application/problem+json).
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        problem.ToString().Should().Contain("al menos 20 caracteres");
+    }
+
+    [SkippableFact]
     public async Task Generate_WithOllamaUnsafeOutput_FallsBack()
     {
         SkipIfUnavailable();
@@ -263,9 +314,27 @@ public sealed class RecommendationsApiTests
         var patient = await SeedPatientWithHistoryAsync();
 
         var recommendationId = await GenerateAsync(patient.KeycloakId);
-        var detail = await GetDetail(patient.KeycloakId, recommendationId);
+        var recommendation = await GetRecommendationFromDbAsync(recommendationId);
 
-        detail.GetProperty("explanationSource").GetString().Should().Be("Fallback");
+        recommendation.ExplanationSource.Should().Be(ExplanationSource.Fallback);
+    }
+
+    [SkippableFact]
+    public async Task Generate_WhenOllamaTimesOut_FallsBackAndAuditsLlmFallback()
+    {
+        SkipIfUnavailable();
+        _ollama.Reset();
+        _ollama.StubTimeout();
+        var patient = await SeedPatientWithHistoryAsync();
+
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        (await GetRecommendationFromDbAsync(recommendationId)).ExplanationSource.Should().Be(ExplanationSource.Fallback);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        var audit = await db.AuditLogs.AsNoTracking()
+            .SingleAsync(a => a.EntityId == recommendationId && a.ActionType == AuditActionType.LlmFallback);
+        (audit.AdditionalContext ?? string.Empty).Should().Contain("timeout");
     }
 
     [SkippableFact]
@@ -290,6 +359,231 @@ public sealed class RecommendationsApiTests
         conflicting.StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
+    // ----- Prompt 7a: creación manual, modificación, archivado, notif de espera, detalle 4 bloques -----
+
+    [SkippableFact]
+    public async Task CreateManual_HappyPath_Returns201AndVisibleToPatient()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+
+        var response = await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            "/api/v1/recommendations/manual",
+            new
+            {
+                patientId = patient.Id,
+                title = "Reducir lácteos",
+                description = "Recomendación de prueba creada manualmente.",
+                steps = new[] { "Evitar leche", "Preferir productos sin lactosa" },
+                clinicalNote = "Nota clínica suficiente para la creación manual.",
+                validUntil = (DateTime?)null
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        var recommendationId = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("recommendationId").GetGuid();
+
+        var detail = await GetDetail(patient.KeycloakId, recommendationId);
+        detail.GetProperty("status").GetString().Should().Be("ManualApproved");
+        detail.GetProperty("steps").GetArrayLength().Should().Be(2);
+        detail.GetProperty("reviewedByNutritionistName").GetString().Should().Be("Nutri");
+    }
+
+    [SkippableFact]
+    public async Task CreateManual_NutritionistNotAssigned_Returns403()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        var nutritionist = await SeedNutritionistAsync();
+
+        var response = await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            "/api/v1/recommendations/manual",
+            new
+            {
+                patientId = patient.Id,
+                title = "Título",
+                description = "Descripción",
+                steps = (string[]?)null,
+                clinicalNote = "Nota clínica suficiente.",
+                validUntil = (DateTime?)null
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [SkippableFact]
+    public async Task Modify_FromPendingReview_TransitionsToModifiedApproved()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+
+        var response = await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            $"/api/v1/recommendations/{recommendationId}/modify",
+            new
+            {
+                clinicalNote = "Modificada por el nutricionista tras revisar.",
+                items = (object[]?)null,
+                title = (string?)null,
+                description = (string?)null,
+                steps = new[] { "Paso ajustado" }
+            });
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await GetDetail(patient.KeycloakId, recommendationId)).GetProperty("status").GetString().Should().Be("ModifiedApproved");
+    }
+
+    [SkippableFact]
+    public async Task Archive_ApprovedRecommendation_ReturnsNotFoundForPatient()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        await Approve(nutritionist.KeycloakId, recommendationId);
+
+        var archive = await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            $"/api/v1/recommendations/{recommendationId}/archive", new { reason = "ObjectiveMet" });
+        archive.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var detail = await PatientClient(patient.KeycloakId).GetAsync($"/api/v1/recommendations/{recommendationId}");
+        detail.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [SkippableFact]
+    public async Task PatientList_IncludesApproved_ExcludesArchived()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+
+        var approvedId = await GenerateAsync(patient.KeycloakId);
+        await Approve(nutritionist.KeycloakId, approvedId);
+
+        var manualResponse = await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            "/api/v1/recommendations/manual",
+            new
+            {
+                patientId = patient.Id,
+                title = "Para archivar",
+                description = "Descripción",
+                steps = (string[]?)null,
+                clinicalNote = "Nota clínica suficiente.",
+                validUntil = (DateTime?)null
+            });
+        var manualId = (await manualResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("recommendationId").GetGuid();
+        await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            $"/api/v1/recommendations/{manualId}/archive", new { reason = "PlanChange" });
+
+        var list = await PatientClient(patient.KeycloakId).GetAsync("/api/v1/recommendations/me?page=1&pageSize=20");
+        list.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await list.Content.ReadFromJsonAsync<JsonElement>();
+        var ids = body.GetProperty("items").EnumerateArray()
+            .Select(item => item.GetProperty("recommendationId").GetGuid())
+            .ToList();
+
+        ids.Should().Contain(approvedId);
+        ids.Should().NotContain(manualId);
+    }
+
+    [SkippableFact]
+    public async Task ArchivalWorker_ArchivesRecommendationsPastValidUntil()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        var nutritionist = await SeedNutritionistAsync();
+
+        Guid manualId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+            var recommendation = Recommendation.CreateManual(
+                patient.Id, nutritionist.Id, "Vencida", "Descripción", null, "nota clínica",
+                DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(-2));
+            db.Recommendations.Add(recommendation);
+            await db.SaveChangesAsync();
+            manualId = recommendation.Id;
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+            var affected = await RecommendationArchivalWorker.ArchiveDueAsync(db, DateTime.UtcNow, CancellationToken.None);
+            affected.Should().BeGreaterThanOrEqualTo(1);
+        }
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+            var archived = await db.Recommendations.AsNoTracking().FirstAsync(r => r.Id == manualId);
+            archived.IsActive.Should().BeFalse();
+            archived.ArchiveReason.Should().Be(ArchiveReason.TemporalExpiration);
+        }
+    }
+
+    [SkippableFact]
+    public async Task Generate_WhenPendingReview_SchedulesWaitingNotification()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        var waiting = await db.Notifications.AsNoTracking()
+            .SingleAsync(n => n.RelatedEntityId == recommendationId && n.Type == NotificationType.Info);
+        waiting.Channel.Should().Be(NotificationChannel.Push);
+        waiting.UserId.Should().Be(patient.Id);
+    }
+
+    [SkippableFact]
+    public async Task Generate_ReplayWithSameKey_DoesNotDuplicateWaitingNotification()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var key = Guid.NewGuid();
+
+        var first = await PostWithKey(PatientClient(patient.KeycloakId), "/api/v1/recommendations", content: null, key);
+        var second = await PostWithKey(PatientClient(patient.KeycloakId), "/api/v1/recommendations", content: null, key);
+        first.StatusCode.Should().Be(HttpStatusCode.Created);
+        second.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        (await db.Notifications.AsNoTracking()
+            .CountAsync(n => n.UserId == patient.Id && n.Type == NotificationType.Info)).Should().Be(1);
+    }
+
+    [SkippableFact]
+    public async Task GetDetail_ReturnsFourBlocks()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        await Approve(nutritionist.KeycloakId, recommendationId);
+
+        var detail = await GetDetail(patient.KeycloakId, recommendationId);
+
+        // Bloque 1: explicación + origen.
+        detail.GetProperty("explanationSource").GetString().Should().NotBeNull();
+        // Bloque 2: nombre del nutricionista revisor.
+        detail.GetProperty("reviewedByNutritionistName").GetString().Should().Be("Nutri");
+        // Bloque 3: pasos (presente aunque vacío).
+        detail.TryGetProperty("steps", out _).Should().BeTrue();
+        // Bloque 4: datos de respaldo con conteos correctos (se sembraron 6 comidas).
+        var supporting = detail.GetProperty("supportingData");
+        supporting.GetProperty("mealCountsLast14d").GetInt32().Should().Be(6);
+        supporting.GetProperty("symptomCountsLast14d").GetInt32().Should().Be(0);
+        supporting.GetProperty("correlationWindowHours").GetInt32().Should().Be(4);
+    }
+
     // ----- Helpers -----
 
     private void SkipIfUnavailable()
@@ -309,6 +603,15 @@ public sealed class RecommendationsApiTests
         var response = await PatientClient(patientKeycloakId).GetAsync($"/api/v1/recommendations/{recommendationId}");
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    // El paciente ya no puede ver recomendaciones en revisión (US14 CA03); para verificar el estado
+    // interno de una recomendación recién generada se consulta la base de datos directamente.
+    private async Task<Recommendation> GetRecommendationFromDbAsync(Guid recommendationId)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        return await db.Recommendations.AsNoTracking().FirstAsync(r => r.Id == recommendationId);
     }
 
     private Task<HttpResponseMessage> Approve(string nutritionistKeycloakId, Guid recommendationId) =>
