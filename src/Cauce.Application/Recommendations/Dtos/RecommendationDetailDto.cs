@@ -22,6 +22,9 @@ namespace Cauce.Application.Recommendations.Dtos;
 /// <param name="ExpiresAt">Momento de expiración, en UTC, o <see langword="null"/>.</param>
 /// <param name="Items">Ítems de la recomendación.</param>
 /// <param name="Feedback">Retroalimentación del paciente, o <see langword="null"/>.</param>
+/// <param name="ReviewedByNutritionistName">Nombre completo del nutricionista revisor, o <see langword="null"/> (bloque 2, US15 CA02).</param>
+/// <param name="Steps">Pasos accionables de la recomendación; vacío si no tiene (bloque 3).</param>
+/// <param name="SupportingData">Datos de respaldo clínico de la ventana de análisis (bloque 4).</param>
 public sealed record RecommendationDetailDto(
     Guid RecommendationId,
     Guid PatientId,
@@ -38,4 +41,7 @@ public sealed record RecommendationDetailDto(
     DateTime? DeliveredAt,
     DateTime? ExpiresAt,
     IReadOnlyList<RecommendationItemDto> Items,
-    RecommendationFeedbackDto? Feedback);
+    RecommendationFeedbackDto? Feedback,
+    string? ReviewedByNutritionistName,
+    IReadOnlyList<string> Steps,
+    RecommendationSupportingDataDto SupportingData);
