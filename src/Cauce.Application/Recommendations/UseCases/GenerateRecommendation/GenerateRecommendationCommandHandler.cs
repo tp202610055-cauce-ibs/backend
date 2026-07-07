@@ -1,8 +1,13 @@
+using System.Text.Json;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Common.Interfaces.Notifications;
 using Cauce.Application.Common.Interfaces.Recommendations;
 using Cauce.Application.Recommendations.Configuration;
 using Cauce.Application.Recommendations.Contracts;
+using Cauce.Domain.Auditing.Enums;
+using Cauce.Domain.Notifications;
+using Cauce.Domain.Notifications.Enums;
 using Cauce.Domain.Patients.Exceptions;
 using Cauce.Domain.Recommendations;
 using Cauce.Domain.Recommendations.Enums;
@@ -38,6 +43,8 @@ public sealed class GenerateRecommendationCommandHandler
     private readonly AutoApprovalGuard _autoApprovalGuard;
     private readonly IRecommendationRepository _recommendationRepository;
     private readonly IOutboxWriter _outboxWriter;
+    private readonly IAuditLogger _auditLogger;
+    private readonly INotificationScheduler _notificationScheduler;
     private readonly IUnitOfWork _unitOfWork;
     private readonly RecommendationsOptions _options;
     private readonly ILogger<GenerateRecommendationCommandHandler> _logger;
@@ -57,6 +64,8 @@ public sealed class GenerateRecommendationCommandHandler
         AutoApprovalGuard autoApprovalGuard,
         IRecommendationRepository recommendationRepository,
         IOutboxWriter outboxWriter,
+        IAuditLogger auditLogger,
+        INotificationScheduler notificationScheduler,
         IUnitOfWork unitOfWork,
         IOptions<RecommendationsOptions> options,
         ILogger<GenerateRecommendationCommandHandler> logger)
@@ -72,6 +81,8 @@ public sealed class GenerateRecommendationCommandHandler
         _autoApprovalGuard = autoApprovalGuard;
         _recommendationRepository = recommendationRepository;
         _outboxWriter = outboxWriter;
+        _auditLogger = auditLogger;
+        _notificationScheduler = notificationScheduler;
         _unitOfWork = unitOfWork;
         _options = options.Value;
         _logger = logger;
@@ -138,7 +149,49 @@ public sealed class GenerateRecommendationCommandHandler
 
         await _recommendationRepository.AddAsync(recommendation, cancellationToken).ConfigureAwait(false);
 
+        // TS08 CA02: auditar cuando la explicación provino del respaldo por fallo/timeout del LLM. La
+        // entrada se persiste atómicamente con la recomendación en el SaveChanges de más abajo.
+        if (explanation.Source == ExplanationSource.Fallback)
+        {
+            var fallbackContext = JsonSerializer.Serialize(new
+            {
+                reason = explanation.FallbackReason,
+                error_type = explanation.FallbackErrorType,
+                duration_ms = explanation.FallbackDurationMs
+            });
+            await _auditLogger.LogAsync(
+                AuditActionType.LlmFallback,
+                nameof(Recommendation),
+                recommendation.Id,
+                oldValuesHash: null,
+                newValuesHash: null,
+                additionalContext: fallbackContext,
+                cancellationToken).ConfigureAwait(false);
+        }
+
         var requiresReview = recommendation.Status == RecommendationStatus.PendingReview;
+
+        // US14 CA02: si la recomendación queda en revisión (no auto-aprobada), avisar al paciente que
+        // su recomendación está siendo revisada. Idempotente por el identificador de la recomendación.
+        if (requiresReview)
+        {
+            var alreadyNotified = await _notificationScheduler
+                .ExistsForRelatedAsync(patientId, "recommendation", recommendation.Id, NotificationType.Info, cancellationToken)
+                .ConfigureAwait(false);
+            if (!alreadyNotified)
+            {
+                var waiting = Notification.Schedule(
+                    patientId,
+                    NotificationType.Info,
+                    NotificationChannel.Push,
+                    "Tu recomendación está en revisión",
+                    "Tu nutricionista está revisando tu recomendación semanal. Te avisaremos apenas esté lista.",
+                    now,
+                    "recommendation",
+                    recommendation.Id);
+                await _notificationScheduler.ScheduleAsync(waiting, cancellationToken).ConfigureAwait(false);
+            }
+        }
 
         // Publicación del evento vía outbox ANTES del SaveChanges: la recomendación y el mensaje de
         // outbox se persisten en la misma transacción (patrón outbox, DEC-B5-04). El dispatcher lo
