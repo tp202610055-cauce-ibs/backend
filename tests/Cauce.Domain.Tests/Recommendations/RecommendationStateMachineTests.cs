@@ -15,8 +15,10 @@ public sealed class RecommendationStateMachineTests
         new Dictionary<RecommendationStatus, RecommendationStatus[]>
         {
             [RecommendationStatus.Generated] = new[] { RecommendationStatus.PendingReview, RecommendationStatus.Approved, RecommendationStatus.Expired },
-            [RecommendationStatus.PendingReview] = new[] { RecommendationStatus.Approved, RecommendationStatus.Rejected, RecommendationStatus.Expired },
+            [RecommendationStatus.PendingReview] = new[] { RecommendationStatus.Approved, RecommendationStatus.ModifiedApproved, RecommendationStatus.Rejected, RecommendationStatus.Expired },
             [RecommendationStatus.Approved] = new[] { RecommendationStatus.Delivered, RecommendationStatus.Expired },
+            [RecommendationStatus.ModifiedApproved] = new[] { RecommendationStatus.Delivered, RecommendationStatus.Expired },
+            [RecommendationStatus.ManualApproved] = new[] { RecommendationStatus.Delivered, RecommendationStatus.Expired },
             [RecommendationStatus.Delivered] = new[] { RecommendationStatus.FeedbackReceived },
             [RecommendationStatus.Rejected] = Array.Empty<RecommendationStatus>(),
             [RecommendationStatus.FeedbackReceived] = Array.Empty<RecommendationStatus>(),

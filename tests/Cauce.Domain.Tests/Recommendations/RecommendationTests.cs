@@ -228,4 +228,93 @@ public sealed class RecommendationTests
 
         recommendation.IsExpired(Now.AddHours(73)).Should().BeFalse();
     }
+
+    // ----- Prompt 7a: creación manual, modificación y archivado -----
+
+    [Fact]
+    public void CreateManual_ValidData_CreatesManualApprovedRecommendation()
+    {
+        var recommendation = Recommendation.CreateManual(
+            Guid.NewGuid(), Guid.NewGuid(), "Título", "Descripción", new[] { "paso 1", "paso 2" },
+            "nota clínica suficiente", null, Now);
+
+        recommendation.Status.Should().Be(RecommendationStatus.ManualApproved);
+        recommendation.Source.Should().Be(RecommendationSource.Manual);
+        recommendation.ModelVersionId.Should().BeNull();
+        recommendation.ExplanationSource.Should().Be(ExplanationSource.Manual);
+        recommendation.ConfidenceScore.Value.Should().Be(1.0m);
+        recommendation.IsActive.Should().BeTrue();
+        recommendation.Steps.Should().BeEquivalentTo(new[] { "paso 1", "paso 2" });
+        recommendation.Items.Should().BeEmpty();
+        recommendation.IsVisibleToPatient().Should().BeTrue();
+    }
+
+    [Fact]
+    public void CreateManual_EmptyTitle_ThrowsArgumentException()
+    {
+        var act = () => Recommendation.CreateManual(
+            Guid.NewGuid(), Guid.NewGuid(), "  ", "Descripción", null, "nota clínica", null, Now);
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void ModifyByNutritionist_FromPendingReview_TransitionsToModifiedApproved()
+    {
+        var recommendation = Generate();
+        recommendation.MarkPendingReview(Now);
+        var newItems = new[] { RecommendationItem.Create(Guid.NewGuid(), ActionType.Reduce, "razón", null) };
+
+        recommendation.ModifyByNutritionist(Guid.NewGuid(), "nota de modificación", Now, newItems, "nuevo título", null, new[] { "paso" });
+
+        recommendation.Status.Should().Be(RecommendationStatus.ModifiedApproved);
+        recommendation.Title.Should().Be("nuevo título");
+        recommendation.Items.Should().ContainSingle();
+        recommendation.NutritionistNote.Should().Be("nota de modificación");
+    }
+
+    [Fact]
+    public void ModifyByNutritionist_FromApproved_ThrowsInvalidTransition()
+    {
+        var recommendation = Approved();
+
+        var act = () => recommendation.ModifyByNutritionist(Guid.NewGuid(), "nota de modificación", Now);
+
+        act.Should().Throw<InvalidRecommendationStateTransitionException>();
+    }
+
+    [Fact]
+    public void Archive_ApprovedActive_MarksInactiveAndInvisible()
+    {
+        var recommendation = Approved();
+
+        recommendation.Archive(ArchiveReason.ObjectiveMet, Now);
+
+        recommendation.IsActive.Should().BeFalse();
+        recommendation.ArchiveReason.Should().Be(ArchiveReason.ObjectiveMet);
+        recommendation.ArchivedAt.Should().Be(Now);
+        recommendation.IsVisibleToPatient().Should().BeFalse();
+    }
+
+    [Fact]
+    public void Archive_NonApprovedState_ThrowsNotArchivable()
+    {
+        var recommendation = Generate();
+        recommendation.MarkPendingReview(Now);
+
+        var act = () => recommendation.Archive(ArchiveReason.PlanChange, Now);
+
+        act.Should().Throw<RecommendationNotArchivableException>();
+    }
+
+    [Fact]
+    public void Archive_AlreadyArchived_ThrowsNotArchivable()
+    {
+        var recommendation = Approved();
+        recommendation.Archive(ArchiveReason.ObjectiveMet, Now);
+
+        var act = () => recommendation.Archive(ArchiveReason.PlanChange, Now);
+
+        act.Should().Throw<RecommendationNotArchivableException>();
+    }
 }
