@@ -35,4 +35,9 @@ public sealed class MinioOptions
     /// Nombre del bucket de los reportes clínicos.
     /// </summary>
     public string ReportsBucket { get; init; } = "clinical-reports";
+
+    /// <summary>
+    /// Nombre del bucket de las exportaciones de portabilidad de datos del paciente (US25).
+    /// </summary>
+    public string ExportsBucket { get; init; } = "patient-exports";
 }
