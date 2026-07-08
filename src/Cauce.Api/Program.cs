@@ -42,8 +42,10 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<OutboxDispatcherWorker>();
 builder.Services.AddHostedService<NotificationDispatcherWorker>();
 builder.Services.AddHostedService<RecommendationExpirationWorker>();
+builder.Services.AddHostedService<RecommendationArchivalWorker>();
 builder.Services.AddHostedService<OutboxRetentionWorker>();
 builder.Services.AddHostedService<WeeklyRecommendationReminderWorker>();
+builder.Services.AddHostedService<IbsSssReminderWorker>();
 
 // Clave de API administrativa (propia de la capa API).
 builder.Services.Configure<AdminApiKeyOptions>(
