@@ -10,6 +10,8 @@ namespace Cauce.Api.Controllers;
 /// </summary>
 [Route("api/v{version:apiVersion}/allergies")]
 [Authorize]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class AllergiesController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -29,6 +31,7 @@ public sealed class AllergiesController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El catálogo de alergias activas.</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<AllergyCatalogItem>), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(CancellationToken ct)
     {
         var result = await _mediator.Send(new ListAllergiesCatalogQuery(), ct);
