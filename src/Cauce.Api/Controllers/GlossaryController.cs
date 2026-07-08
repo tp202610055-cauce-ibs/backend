@@ -1,4 +1,5 @@
 using Cauce.Api.Configuration;
+using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Application.ClinicalRegistry.UseCases.GetGlossary;
 using Cauce.Application.ClinicalRegistry.UseCases.SearchGlossary;
 using MediatR;
@@ -15,6 +16,9 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/glossary")]
 [Authorize]
 [EnableRateLimiting(RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class GlossaryController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -34,6 +38,7 @@ public sealed class GlossaryController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El glosario completo.</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(GlossaryResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> List(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetGlossaryQuery(), ct);
@@ -47,6 +52,8 @@ public sealed class GlossaryController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los términos coincidentes.</returns>
     [HttpGet("search")]
+    [ProducesResponseType(typeof(GlossaryResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct)
     {
         var result = await _mediator.Send(new SearchGlossaryQuery(q), ct);
