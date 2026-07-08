@@ -7,6 +7,8 @@ namespace Cauce.Api.Controllers;
 /// Controlador de salud de la API. Expone un endpoint público para verificar que
 /// el servicio está operativo.
 /// </summary>
+[Route("api/v{version:apiVersion}/health")]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class HealthController : BaseApiController
 {
     /// <summary>
@@ -15,6 +17,7 @@ public sealed class HealthController : BaseApiController
     /// <returns>Objeto con el estado y la marca de tiempo en formato ISO 8601.</returns>
     [HttpGet]
     [AllowAnonymous]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult Get()
     {
         return Ok(new
