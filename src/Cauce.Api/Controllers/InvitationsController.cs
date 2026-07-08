@@ -11,6 +11,9 @@ namespace Cauce.Api.Controllers;
 /// </summary>
 [Route("api/v{version:apiVersion}/invitations")]
 [Authorize(Policy = "Nutritionist")]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class InvitationsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -33,6 +36,7 @@ public sealed class InvitationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El código generado y su fecha de expiración, con código 201.</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(GenerateInvitationCodeResult), StatusCodes.Status201Created)]
     public async Task<IActionResult> Generate(CancellationToken ct)
     {
         var nutritionistKeycloakId = _currentUserService.UserId;
