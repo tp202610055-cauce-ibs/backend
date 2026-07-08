@@ -12,6 +12,7 @@ using Cauce.Domain.Recommendations.Services;
 using Cauce.Infrastructure.Auditing;
 using Cauce.Infrastructure.Caching;
 using Cauce.Infrastructure.ClinicalRegistry;
+using Cauce.Infrastructure.ClinicalRegistry.Readers;
 using Cauce.Infrastructure.Email;
 using Cauce.Infrastructure.Identity;
 using Cauce.Infrastructure.Notifications;
@@ -89,6 +90,7 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordResetTokenGenerator, PasswordResetTokenGenerator>();
         services.AddSingleton<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
         services.AddSingleton<IClientUrlProvider, ClientUrlProvider>();
+        services.AddSingleton<IConsentPdfRenderer, QuestPdfConsentRenderer>();
         services.AddSingleton<SmtpMessageDispatcher>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();
         services.AddHttpClient<IKeycloakTokenClient, KeycloakTokenClient>();
@@ -130,6 +132,8 @@ public static class DependencyInjection
         services.AddScoped<ISymptomRepository, SymptomRepository>();
         services.AddScoped<IClinicalNoteRepository, ClinicalNoteRepository>();
         services.AddScoped<IIbsSssAssessmentRepository, IbsSssAssessmentRepository>();
+        services.AddScoped<IIbsSssAssessmentScheduleRepository, IbsSssAssessmentScheduleRepository>();
+        services.AddScoped<IGlossaryRepository, GlossaryRepository>();
 
         // Módulo de recomendaciones.
         services.AddOptions<RecommendationsOptions>()
@@ -138,13 +142,17 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IValidateOptions<RecommendationsOptions>, RecommendationsOptionsValidator>();
 
+        // El motor de regla se registra como tipo concreto para poder inyectarlo como respaldo del
+        // motor ONNX (fallback silencioso cuando el modelo no está disponible, TS07).
+        services.AddSingleton<FodmapRuleRecommendationEngine>();
+
         // Selección del motor por configuración (DEC-B4-01).
         services.AddSingleton<IRecommendationEngine>(serviceProvider =>
         {
             var recommendationsOptions = serviceProvider.GetRequiredService<IOptions<RecommendationsOptions>>().Value;
             return recommendationsOptions.EngineKind switch
             {
-                "Rule" => ActivatorUtilities.CreateInstance<FodmapRuleRecommendationEngine>(serviceProvider),
+                "Rule" => serviceProvider.GetRequiredService<FodmapRuleRecommendationEngine>(),
                 "Onnx" => ActivatorUtilities.CreateInstance<OnnxRecommendationEngine>(serviceProvider),
                 _ => throw new InvalidOperationException(
                     $"EngineKind inválido '{recommendationsOptions.EngineKind}'. Se esperaba 'Rule' u 'Onnx'.")
@@ -165,6 +173,10 @@ public static class DependencyInjection
         services.AddScoped<IPatientAllergyReader, PatientAllergyReader>();
         services.AddScoped<IPatientProfileReader, PatientProfileReader>();
         services.AddScoped<IFoodCatalogReader, FoodCatalogReader>();
+        services.AddScoped<IRecommendationSupportingDataReader, RecommendationSupportingDataReader>();
+        services.AddScoped<IFoodSuggestionsReader, FoodSuggestionsReader>();
+        services.AddScoped<ICustomFoodAllergenChecker, CustomFoodAllergenChecker>();
+        services.AddScoped<IbsSssScheduleProcessor>();
 
         // Módulo de auditoría, outbox y notificaciones (Prompt 5).
         services.TryAddSingleton(TimeProvider.System);
@@ -191,12 +203,15 @@ public static class DependencyInjection
         services.AddScoped<IObjectStorage, MinioObjectStorage>();
         services.AddScoped<IClinicalReportDataReader, ClinicalReportDataReader>();
         services.AddScoped<IClinicalReportMetadataRepository, ClinicalReportMetadataRepository>();
+        services.AddSingleton<IbsSssChartRenderer>();
         services.AddScoped<IPdfReportGenerator, PdfReportGenerator>();
+        services.AddScoped<IClinicalDataExporter, ClinicalDataExporter>();
 
         // Seeders.
         services.AddScoped<UserRolesSeeder>();
         services.AddScoped<AllergiesSeeder>();
         services.AddScoped<FoodItemsSeeder>();
+        services.AddScoped<GlossaryTermsSeeder>();
         services.AddScoped<DevAdminSeeder>();
         services.AddScoped<RecommendationsModelVersionsSeeder>();
         services.AddScoped<MinioBucketSeeder>();
