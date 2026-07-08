@@ -1,8 +1,10 @@
 using Cauce.Api.Configuration;
 using Cauce.Api.Contracts.ClinicalRegistry;
+using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Application.ClinicalRegistry.UseCases.CreateMeal;
 using Cauce.Application.ClinicalRegistry.UseCases.GetMealHistory;
 using Cauce.Application.Common.Idempotency;
+using Cauce.Application.Common.Models;
 using FluentValidation;
 using FluentValidation.Results;
 using MediatR;
@@ -18,6 +20,10 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/meals")]
 [Authorize(Policy = "Patient")]
 [EnableRateLimiting(RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class MealsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -43,6 +49,11 @@ public sealed class MealsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El resultado del registro.</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateMealResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(CreateMealResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create([FromBody] CreateMealRequest request, CancellationToken ct)
     {
         var clientGuid = ResolveClientGuid(request.ClientGuid);
@@ -63,6 +74,8 @@ public sealed class MealsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El historial de comidas.</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(PagedResult<MealHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetHistory(
         [FromQuery] DateTime from,
         [FromQuery] DateTime to,
