@@ -14,6 +14,10 @@ namespace Cauce.Api.Controllers.Reports;
 [Route("api/v{version:apiVersion}/reports")]
 [Authorize(Policy = "Nutritionist")]
 [EnableRateLimiting(Configuration.RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class ReportsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -37,6 +41,10 @@ public sealed class ReportsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>202 con el identificador del reporte y la URL prefirmada de descarga.</returns>
     [HttpPost("patients/{id:guid}")]
+    [ProducesResponseType(typeof(GenerateClinicalReportResult), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> Generate(
         Guid id,
         [FromBody] GenerateClinicalReportRequest request,

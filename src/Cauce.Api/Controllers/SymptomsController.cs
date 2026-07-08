@@ -1,8 +1,10 @@
 using Cauce.Api.Configuration;
 using Cauce.Api.Contracts.ClinicalRegistry;
+using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Application.ClinicalRegistry.UseCases.CreateSymptom;
 using Cauce.Application.ClinicalRegistry.UseCases.GetSymptomHistory;
 using Cauce.Application.Common.Idempotency;
+using Cauce.Application.Common.Models;
 using FluentValidation;
 using FluentValidation.Results;
 using MediatR;
@@ -18,6 +20,10 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/symptoms")]
 [Authorize(Policy = "Patient")]
 [EnableRateLimiting(RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class SymptomsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -43,6 +49,10 @@ public sealed class SymptomsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El resultado del registro.</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateSymptomResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(CreateSymptomResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create([FromBody] CreateSymptomRequest request, CancellationToken ct)
     {
         var clientGuid = ResolveClientGuid(request.ClientGuid);
@@ -63,6 +73,8 @@ public sealed class SymptomsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El historial de síntomas.</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(PagedResult<SymptomHistoryItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetHistory(
         [FromQuery] DateTime from,
         [FromQuery] DateTime to,
