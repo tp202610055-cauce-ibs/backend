@@ -9,7 +9,11 @@ namespace Cauce.Api.Controllers;
 /// <summary>
 /// Endpoints de la cuenta del usuario autenticado, transversales a los roles paciente y nutricionista.
 /// </summary>
+[Route("api/v{version:apiVersion}/users")]
 [Authorize]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class UsersController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -31,6 +35,8 @@ public sealed class UsersController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>204 si se registró correctamente.</returns>
     [HttpPut("me/fcm-token")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> UpdateFcmToken([FromBody] UpdateFcmTokenRequest request, CancellationToken ct)
     {
         await _mediator.Send(new UpdateFcmTokenCommand(request.FcmToken), ct);
