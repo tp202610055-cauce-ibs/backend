@@ -1,8 +1,10 @@
 using Cauce.Api.Configuration;
+using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Application.ClinicalRegistry.UseCases.GetFoodItemDetail;
 using Cauce.Application.ClinicalRegistry.UseCases.GetFoodSuggestions;
 using Cauce.Application.ClinicalRegistry.UseCases.ListFoodItemsCatalog;
 using Cauce.Application.ClinicalRegistry.UseCases.SearchFoodItems;
+using Cauce.Application.Common.Models;
 using Cauce.Domain.ClinicalRegistry.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -18,6 +20,9 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/foods")]
 [Authorize]
 [EnableRateLimiting(RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class FoodsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -41,6 +46,8 @@ public sealed class FoodsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El catálogo paginado.</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(PagedResult<FoodItemSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> List(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
@@ -59,6 +66,8 @@ public sealed class FoodsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los alimentos coincidentes.</returns>
     [HttpGet("search")]
+    [ProducesResponseType(typeof(IReadOnlyList<FoodItemSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct)
     {
         var result = await _mediator.Send(new SearchFoodItemsQuery(q), ct);
@@ -73,6 +82,8 @@ public sealed class FoodsController : BaseApiController
     /// <returns>Las tres listas de sugerencias.</returns>
     [HttpGet("suggestions")]
     [Authorize(Policy = "Patient")]
+    [ProducesResponseType(typeof(FoodSuggestionsResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
     public async Task<IActionResult> Suggestions(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetFoodSuggestionsQuery(), ct);
@@ -86,6 +97,8 @@ public sealed class FoodsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El detalle del alimento.</returns>
     [HttpGet("{foodId:guid}")]
+    [ProducesResponseType(typeof(FoodItemDetail), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetDetail(Guid foodId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetFoodItemDetailQuery(foodId), ct);
