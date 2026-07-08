@@ -1,3 +1,4 @@
+using Cauce.Application.Recommendations.Dtos;
 using Cauce.Application.Recommendations.UseCases.GetRecommendationById;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -14,6 +15,9 @@ namespace Cauce.Api.Controllers.Recommendations;
 [Route("api/v{version:apiVersion}/recommendations")]
 [Authorize]
 [EnableRateLimiting(Configuration.RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class RecommendationsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -34,6 +38,9 @@ public sealed class RecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El detalle de la recomendación.</returns>
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(RecommendationDetailDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetRecommendationByIdQuery(id), ct);

@@ -1,5 +1,7 @@
 using Cauce.Api.Contracts.Recommendations;
 using Cauce.Application.Common.Idempotency;
+using Cauce.Application.Common.Models;
+using Cauce.Application.Recommendations.Dtos;
 using Cauce.Application.Recommendations.UseCases.DeliverRecommendation;
 using Cauce.Application.Recommendations.UseCases.GenerateRecommendation;
 using Cauce.Application.Recommendations.UseCases.ListPatientRecommendations;
@@ -18,6 +20,10 @@ namespace Cauce.Api.Controllers.Recommendations;
 [Route("api/v{version:apiVersion}/recommendations")]
 [Authorize(Policy = "Patient")]
 [EnableRateLimiting(Configuration.RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class PatientRecommendationsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -42,6 +48,12 @@ public sealed class PatientRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El resultado de la generación.</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(GenerateRecommendationResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(GenerateRecommendationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> Generate(
         [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
         CancellationToken ct)
@@ -60,6 +72,8 @@ public sealed class PatientRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>La página de recomendaciones del paciente.</returns>
     [HttpGet("me")]
+    [ProducesResponseType(typeof(PagedResult<RecommendationSummaryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ListMine(
         [FromQuery] RecommendationStatus? status,
         [FromQuery] int page = 1,
@@ -79,6 +93,10 @@ public sealed class PatientRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Sin contenido.</returns>
     [HttpPost("{id:guid}/deliver")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Deliver(
         Guid id,
         [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
@@ -98,6 +116,10 @@ public sealed class PatientRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Sin contenido.</returns>
     [HttpPost("{id:guid}/feedback")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> SubmitFeedback(
         Guid id,
         [FromBody] SubmitFeedbackRequest request,

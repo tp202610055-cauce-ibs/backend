@@ -1,4 +1,6 @@
 using Cauce.Api.Contracts.Recommendations;
+using Cauce.Application.Common.Models;
+using Cauce.Application.Recommendations.Dtos;
 using Cauce.Application.Recommendations.UseCases.ApproveRecommendation;
 using Cauce.Application.Recommendations.UseCases.ArchiveRecommendation;
 using Cauce.Application.Recommendations.UseCases.CreateManualRecommendation;
@@ -19,6 +21,10 @@ namespace Cauce.Api.Controllers.Recommendations;
 [Route("api/v{version:apiVersion}/recommendations")]
 [Authorize(Policy = "Nutritionist")]
 [EnableRateLimiting(Configuration.RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class NutritionistRecommendationsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -40,6 +46,8 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>La página de recomendaciones pendientes de revisión.</returns>
     [HttpGet("pending-review")]
+    [ProducesResponseType(typeof(PagedResult<RecommendationSummaryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ListPendingReview(
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
@@ -59,6 +67,10 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Sin contenido.</returns>
     [HttpPost("{id:guid}/approve")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Approve(
         Guid id,
         [FromBody] ApproveRecommendationRequest request,
@@ -79,6 +91,10 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Sin contenido.</returns>
     [HttpPost("{id:guid}/reject")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Reject(
         Guid id,
         [FromBody] RejectRecommendationRequest request,
@@ -96,6 +112,8 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El identificador de la recomendación creada, con código 201.</returns>
     [HttpPost("manual")]
+    [ProducesResponseType(typeof(CreateManualRecommendationResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> CreateManual([FromBody] CreateManualRecommendationRequest request, CancellationToken ct)
     {
         var result = await _mediator.Send(
@@ -118,6 +136,10 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Sin contenido.</returns>
     [HttpPost("{id:guid}/modify")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Modify(Guid id, [FromBody] ModifyRecommendationRequest request, CancellationToken ct)
     {
         await _mediator.Send(
@@ -135,6 +157,10 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Sin contenido.</returns>
     [HttpPost("{id:guid}/archive")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Archive(Guid id, [FromBody] ArchiveRecommendationRequest request, CancellationToken ct)
     {
         await _mediator.Send(new ArchiveRecommendationCommand(id, request.Reason), ct);
