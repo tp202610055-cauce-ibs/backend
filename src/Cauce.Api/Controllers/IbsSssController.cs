@@ -1,5 +1,6 @@
 using Cauce.Api.Configuration;
 using Cauce.Api.Contracts.ClinicalRegistry;
+using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Application.ClinicalRegistry.UseCases.CreateIbsSssAssessment;
 using Cauce.Application.ClinicalRegistry.UseCases.GetIbsSssEvolution;
 using Cauce.Application.ClinicalRegistry.UseCases.GetLatestIbsSssAssessment;
@@ -16,6 +17,10 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/ibs-sss")]
 [Authorize(Policy = "Patient")]
 [EnableRateLimiting(RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class IbsSssController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -37,6 +42,9 @@ public sealed class IbsSssController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El resultado con los valores calculados, con código 201.</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateIbsSssAssessmentResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Create([FromBody] CreateIbsSssAssessmentRequest request, CancellationToken ct)
     {
         var command = new CreateIbsSssAssessmentCommand(
@@ -57,6 +65,7 @@ public sealed class IbsSssController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Las evaluaciones con su diferencia respecto de la línea base.</returns>
     [HttpGet("evolution")]
+    [ProducesResponseType(typeof(IReadOnlyList<IbsSssEvolutionEntry>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetEvolution(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetIbsSssEvolutionQuery(), ct);
@@ -69,6 +78,7 @@ public sealed class IbsSssController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>La evaluación más reciente, o <see langword="null"/> si no existe.</returns>
     [HttpGet("latest")]
+    [ProducesResponseType(typeof(IbsSssAssessmentSummary), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetLatest(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetLatestIbsSssAssessmentQuery(), ct);
