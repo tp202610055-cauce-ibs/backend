@@ -1,6 +1,9 @@
 using Cauce.Api.Contracts.Recommendations;
 using Cauce.Application.Recommendations.UseCases.ApproveRecommendation;
+using Cauce.Application.Recommendations.UseCases.ArchiveRecommendation;
+using Cauce.Application.Recommendations.UseCases.CreateManualRecommendation;
 using Cauce.Application.Recommendations.UseCases.ListPendingReviewForNutritionist;
+using Cauce.Application.Recommendations.UseCases.ModifyRecommendation;
 using Cauce.Application.Recommendations.UseCases.RejectRecommendation;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -83,6 +86,58 @@ public sealed class NutritionistRecommendationsController : BaseApiController
         CancellationToken ct)
     {
         await _mediator.Send(new RejectRecommendationCommand(id, request.Reason, idempotencyKey), ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Crea manualmente una recomendación para un paciente asignado (US29). Queda aprobada de inmediato.
+    /// </summary>
+    /// <param name="request">Datos de la recomendación manual.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El identificador de la recomendación creada, con código 201.</returns>
+    [HttpPost("manual")]
+    public async Task<IActionResult> CreateManual([FromBody] CreateManualRecommendationRequest request, CancellationToken ct)
+    {
+        var result = await _mediator.Send(
+            new CreateManualRecommendationCommand(
+                request.PatientId,
+                request.Title,
+                request.Description,
+                request.Steps,
+                request.ClinicalNote,
+                request.ValidUntil),
+            ct);
+        return StatusCode(StatusCodes.Status201Created, result);
+    }
+
+    /// <summary>
+    /// Aprueba una recomendación en revisión tras modificar sus ítems y/o su contenido (US17 CA03).
+    /// </summary>
+    /// <param name="id">Identificador de la recomendación.</param>
+    /// <param name="request">Cambios y nota clínica de la modificación.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Sin contenido.</returns>
+    [HttpPost("{id:guid}/modify")]
+    public async Task<IActionResult> Modify(Guid id, [FromBody] ModifyRecommendationRequest request, CancellationToken ct)
+    {
+        await _mediator.Send(
+            new ModifyRecommendationCommand(
+                id, request.ClinicalNote, request.Items, request.Title, request.Description, request.Steps),
+            ct);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Archiva una recomendación en un estado terminal aprobado (US30 CA01).
+    /// </summary>
+    /// <param name="id">Identificador de la recomendación.</param>
+    /// <param name="request">Motivo del archivado.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Sin contenido.</returns>
+    [HttpPost("{id:guid}/archive")]
+    public async Task<IActionResult> Archive(Guid id, [FromBody] ArchiveRecommendationRequest request, CancellationToken ct)
+    {
+        await _mediator.Send(new ArchiveRecommendationCommand(id, request.Reason), ct);
         return NoContent();
     }
 }
