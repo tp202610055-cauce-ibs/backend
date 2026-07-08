@@ -3,6 +3,7 @@ using System;
 using Cauce.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,16 +12,17 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cauce.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(CauceDbContext))]
-    partial class CauceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260705212334_AddAuditTamperWarning")]
+    partial class AddAuditTamperWarning
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
                 .HasAnnotation("ProductVersion", "9.0.17")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "unaccent");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Cauce.Domain.Auditing.AuditLog", b =>
@@ -357,58 +359,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.GlossaryTerm", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("glossary_term_id");
-
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("category");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("NutritionistDefinition")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("nutritionist_definition");
-
-                    b.Property<string>("PatientDefinition")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("patient_definition");
-
-                    b.Property<string>("Term")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("term");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_glossary_terms");
-
-                    b.HasIndex("Category")
-                        .HasDatabaseName("ix_glossary_terms_category");
-
-                    b.HasIndex("Term")
-                        .IsUnique()
-                        .HasDatabaseName("ux_glossary_terms_term");
-
-                    b.ToTable("glossary_terms", (string)null);
-                });
-
             modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.IbsSssAssessment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -501,53 +451,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_ibs_sss_total_score", "total_score BETWEEN 0 AND 500");
                         });
-                });
-
-            modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.IbsSssAssessmentSchedule", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("schedule_id");
-
-                    b.Property<bool>("Completed")
-                        .HasColumnType("boolean")
-                        .HasColumnName("completed");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTime>("DueDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("due_date");
-
-                    b.Property<bool>("Missed")
-                        .HasColumnType("boolean")
-                        .HasColumnName("missed");
-
-                    b.Property<Guid>("PatientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("patient_id");
-
-                    b.Property<DateTime?>("ReminderSentAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reminder_sent_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_ibs_sss_schedules");
-
-                    b.HasIndex("DueDate")
-                        .HasDatabaseName("ix_ibs_sss_schedules_due_date");
-
-                    b.HasIndex("PatientId", "Completed", "Missed")
-                        .HasDatabaseName("ix_ibs_sss_schedules_patient_open");
-
-                    b.ToTable("ibs_sss_schedules", (string)null);
                 });
 
             modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.Meal", b =>
@@ -1352,12 +1255,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_active");
 
-                    b.Property<bool>("IsDummy")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_dummy");
-
                     b.Property<string>("ModelHash")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1409,15 +1306,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("ai_explanation");
 
-                    b.Property<string>("ArchiveReason")
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("archive_reason");
-
-                    b.Property<DateTime?>("ArchivedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("archived_at");
-
                     b.Property<bool>("AutoApproved")
                         .HasColumnType("boolean")
                         .HasColumnName("auto_approved");
@@ -1429,10 +1317,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeliveredAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("delivered_at");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text")
-                        .HasColumnName("description");
 
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone")
@@ -1448,13 +1332,7 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("generated_at");
 
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true)
-                        .HasColumnName("is_active");
-
-                    b.Property<Guid?>("ModelVersionId")
+                    b.Property<Guid>("ModelVersionId")
                         .HasColumnType("uuid")
                         .HasColumnName("model_version_id");
 
@@ -1474,30 +1352,11 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("reviewed_by_nutritionist_id");
 
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("source");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)")
                         .HasColumnName("status");
-
-                    b.Property<string>("Steps")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("steps");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("title");
-
-                    b.Property<DateTime?>("ValidUntil")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("valid_until");
 
                     b.HasKey("Id")
                         .HasName("pk_recommendations");
@@ -1749,16 +1608,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_ibs_sss_assessments_users_patient_id");
                 });
 
-            modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.IbsSssAssessmentSchedule", b =>
-                {
-                    b.HasOne("Cauce.Domain.Identity.User", null)
-                        .WithMany()
-                        .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_ibs_sss_schedules_users_patient_id");
-                });
-
             modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.Meal", b =>
                 {
                     b.HasOne("Cauce.Domain.Identity.User", null)
@@ -1919,6 +1768,7 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("ModelVersionId")
                         .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
                         .HasConstraintName("fk_recommendations_model_versions_model_version_id");
 
                     b.HasOne("Cauce.Domain.Identity.User", null)

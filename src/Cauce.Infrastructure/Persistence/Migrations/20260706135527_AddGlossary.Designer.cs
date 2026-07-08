@@ -3,6 +3,7 @@ using System;
 using Cauce.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Cauce.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(CauceDbContext))]
-    partial class CauceDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260706135527_AddGlossary")]
+    partial class AddGlossary
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -501,53 +504,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_ibs_sss_total_score", "total_score BETWEEN 0 AND 500");
                         });
-                });
-
-            modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.IbsSssAssessmentSchedule", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("schedule_id");
-
-                    b.Property<bool>("Completed")
-                        .HasColumnType("boolean")
-                        .HasColumnName("completed");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("completed_at");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTime>("DueDate")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("due_date");
-
-                    b.Property<bool>("Missed")
-                        .HasColumnType("boolean")
-                        .HasColumnName("missed");
-
-                    b.Property<Guid>("PatientId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("patient_id");
-
-                    b.Property<DateTime?>("ReminderSentAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reminder_sent_at");
-
-                    b.HasKey("Id")
-                        .HasName("pk_ibs_sss_schedules");
-
-                    b.HasIndex("DueDate")
-                        .HasDatabaseName("ix_ibs_sss_schedules_due_date");
-
-                    b.HasIndex("PatientId", "Completed", "Missed")
-                        .HasDatabaseName("ix_ibs_sss_schedules_patient_open");
-
-                    b.ToTable("ibs_sss_schedules", (string)null);
                 });
 
             modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.Meal", b =>
@@ -1747,16 +1703,6 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_ibs_sss_assessments_users_patient_id");
-                });
-
-            modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.IbsSssAssessmentSchedule", b =>
-                {
-                    b.HasOne("Cauce.Domain.Identity.User", null)
-                        .WithMany()
-                        .HasForeignKey("PatientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_ibs_sss_schedules_users_patient_id");
                 });
 
             modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.Meal", b =>
