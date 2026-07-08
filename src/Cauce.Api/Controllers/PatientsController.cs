@@ -1,7 +1,8 @@
 using Cauce.Api.Contracts.Patients;
+using Cauce.Application.Identity.UseCases.GetMyConsentPdf;
+using Cauce.Application.Patients.Dtos;
 using Cauce.Application.Patients.UseCases.CreatePatientProfile;
 using Cauce.Application.Patients.UseCases.DeclarePatientAllergy;
-using Cauce.Application.Identity.UseCases.GetMyConsentPdf;
 using Cauce.Application.Patients.UseCases.DeleteMyAccount;
 using Cauce.Application.Patients.UseCases.ExportMyData;
 using Cauce.Application.Patients.UseCases.GetMyProfileSummary;
@@ -21,6 +22,9 @@ namespace Cauce.Api.Controllers;
 /// </summary>
 [Route("api/v{version:apiVersion}/patients")]
 [Authorize(Policy = "Patient")]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class PatientsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -41,6 +45,9 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El resultado de la creación, con código 201.</returns>
     [HttpPost("profile")]
+    [ProducesResponseType(typeof(CreatePatientProfileResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateProfile([FromBody] CreatePatientProfileRequest request, CancellationToken ct)
     {
         var command = new CreatePatientProfileCommand(
@@ -63,6 +70,9 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El perfil con valores recalculados, con código 200.</returns>
     [HttpPut("profile")]
+    [ProducesResponseType(typeof(UpdatePatientProfileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdatePatientProfileRequest request, CancellationToken ct)
     {
         var command = new UpdatePatientProfileCommand(
@@ -82,6 +92,8 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El perfil clínico.</returns>
     [HttpGet("profile")]
+    [ProducesResponseType(typeof(GetPatientProfileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetProfile(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetPatientProfileQuery(), ct);
@@ -94,6 +106,7 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Las alergias declaradas.</returns>
     [HttpGet("allergies")]
+    [ProducesResponseType(typeof(IReadOnlyList<PatientAllergySummary>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListAllergies(CancellationToken ct)
     {
         var result = await _mediator.Send(new ListPatientAllergiesQuery(), ct);
@@ -107,6 +120,10 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El identificador de la declaración, con código 201.</returns>
     [HttpPost("allergies")]
+    [ProducesResponseType(typeof(DeclarePatientAllergyResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeclareAllergy([FromBody] DeclareAllergyRequest request, CancellationToken ct)
     {
         var command = new DeclarePatientAllergyCommand(request.AllergyId, request.Severity, request.Notes);
@@ -121,6 +138,8 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>204 si se eliminó correctamente.</returns>
     [HttpDelete("allergies/{patientAllergyId:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveAllergy(Guid patientAllergyId, CancellationToken ct)
     {
         await _mediator.Send(new RemovePatientAllergyCommand(patientAllergyId), ct);
@@ -134,6 +153,7 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>La URL de descarga prefirmada y su vencimiento, con código 200.</returns>
     [HttpGet("me/export-data")]
+    [ProducesResponseType(typeof(ExportMyDataResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> ExportMyData(CancellationToken ct)
     {
         var result = await _mediator.Send(new ExportMyDataCommand(), ct);
@@ -147,6 +167,9 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El PDF del consentimiento (<c>application/pdf</c>), o 404 si no hay consentimiento vigente.</returns>
     [HttpGet("me/consent/pdf")]
+    [Produces("application/pdf")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetConsentPdf(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetMyConsentPdfQuery(), ct);
@@ -165,6 +188,9 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>204 si la cuenta se anonimizó correctamente.</returns>
     [HttpDelete("me")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> DeleteMyAccount(
         [FromQuery] bool confirmedActivePilotAcknowledged,
         CancellationToken ct)
@@ -180,6 +206,8 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El perfil agregado.</returns>
     [HttpGet("me/summary")]
+    [ProducesResponseType(typeof(MyProfileSummaryResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetMySummary(CancellationToken ct)
     {
         var result = await _mediator.Send(new GetMyProfileSummaryQuery(), ct);
@@ -194,6 +222,8 @@ public sealed class PatientsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>La URL de descarga prefirmada y su vencimiento, con código 200.</returns>
     [HttpPost("me/report")]
+    [ProducesResponseType(typeof(GenerateMyClinicalReportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
     public async Task<IActionResult> GenerateMyReport(CancellationToken ct)
     {
         var result = await _mediator.Send(new GenerateMyClinicalReportCommand(), ct);
