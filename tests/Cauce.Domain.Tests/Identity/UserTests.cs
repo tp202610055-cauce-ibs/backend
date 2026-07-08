@@ -1,5 +1,6 @@
 using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Enums;
+using Cauce.Domain.Identity.Exceptions;
 using FluentAssertions;
 
 namespace Cauce.Domain.Tests.Identity;
@@ -112,5 +113,40 @@ public sealed class UserTests
 
         user.HasRole(UserRoles.Nutritionist, catalog).Should().BeTrue();
         user.HasRole(UserRoles.Patient, catalog).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Anonymize_PatientAccount_ReplacesPersonalDataAndDeactivates()
+    {
+        var id = Guid.NewGuid();
+        var user = User.CreatePatient(id, "kc-1", "real@cauce.local", "Nombre Real", PatientRoleId);
+
+        user.Anonymize(PatientRoleId);
+
+        user.Email.Should().Be($"deleted-{id}@anonymized.local");
+        user.FullName.Should().Be("Usuario anonimizado");
+        user.Status.Should().Be(UserStatus.Inactive);
+        user.FcmToken.Should().BeNull();
+    }
+
+    [Fact]
+    public void Anonymize_NutritionistAccount_ThrowsOnlyPatientsCanBeAnonymized()
+    {
+        var user = User.CreateNutritionist(Guid.NewGuid(), "kc-2", "n@cauce.local", "Nutri", NutritionistRoleId);
+
+        var act = () => user.Anonymize(PatientRoleId);
+
+        act.Should().Throw<OnlyPatientsCanBeAnonymizedException>();
+    }
+
+    [Fact]
+    public void EnrollInActivePilot_SetsFlagTrue()
+    {
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId);
+        user.IsInActivePilot.Should().BeFalse();
+
+        user.EnrollInActivePilot();
+
+        user.IsInActivePilot.Should().BeTrue();
     }
 }
