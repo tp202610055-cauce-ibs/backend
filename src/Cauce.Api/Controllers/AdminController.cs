@@ -14,6 +14,7 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/admin")]
 [AllowAnonymous]
 [AdminApiKey]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class AdminController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -34,6 +35,10 @@ public sealed class AdminController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El resultado de la provisión, con código 201.</returns>
     [HttpPost("nutritionists")]
+    [ProducesResponseType(typeof(CreateNutritionistResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateNutritionist(
         [FromBody] CreateNutritionistRequest request,
         CancellationToken ct)

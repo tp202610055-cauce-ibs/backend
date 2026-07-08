@@ -17,6 +17,7 @@ namespace Cauce.Api.Controllers;
 /// entrada, lo que permite auditar LOGIN/LOGOUT/FAILED_LOGIN en el middleware (acta A3).
 /// </summary>
 [Route("api/v{version:apiVersion}/auth")]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class AuthController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -41,6 +42,11 @@ public sealed class AuthController : BaseApiController
     [AllowAnonymous]
     [HttpPost("register")]
     [EnableRateLimiting("auth-register")]
+    [ProducesResponseType(typeof(RegisterPatientResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status502BadGateway)]
     public async Task<IActionResult> Register(
         [FromBody] RegisterPatientRequest request,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
@@ -77,6 +83,10 @@ public sealed class AuthController : BaseApiController
     [AllowAnonymous]
     [HttpPost("login")]
     [EnableRateLimiting("auth-login")]
+    [ProducesResponseType(typeof(LoginResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
         var result = await _mediator.Send(new LoginCommand(request.Email, request.Password, request.ClientId), ct);
@@ -91,6 +101,9 @@ public sealed class AuthController : BaseApiController
     /// <returns>204 si se procesó la revocación.</returns>
     [Authorize]
     [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request, CancellationToken ct)
     {
         await _mediator.Send(new LogoutCommand(request.RefreshToken, request.ClientId), ct);
@@ -106,6 +119,9 @@ public sealed class AuthController : BaseApiController
     [AllowAnonymous]
     [HttpPost("password-reset/request")]
     [EnableRateLimiting("auth-pwreset")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> RequestPasswordReset(
         [FromBody] RequestPasswordResetRequest request,
         CancellationToken ct)
@@ -127,6 +143,9 @@ public sealed class AuthController : BaseApiController
     [AllowAnonymous]
     [HttpPost("password-reset/confirm")]
     [EnableRateLimiting("auth-pwreset")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> ConfirmPasswordReset(
         [FromBody] ConfirmPasswordResetRequest request,
         CancellationToken ct)
