@@ -49,4 +49,11 @@ public sealed class FakeEmailSender : IEmailSender
         SentEmails.Add(new SentEmail("report-password", recipientEmail, password));
         return Task.CompletedTask;
     }
+
+    /// <inheritdoc />
+    public Task SendAccountDeletionConfirmationAsync(string recipientEmail, string fullName, CancellationToken ct = default)
+    {
+        SentEmails.Add(new SentEmail("account-deletion", recipientEmail, fullName));
+        return Task.CompletedTask;
+    }
 }

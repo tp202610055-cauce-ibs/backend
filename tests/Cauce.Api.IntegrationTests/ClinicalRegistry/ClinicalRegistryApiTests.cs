@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Cauce.Api.IntegrationTests.Identity.Support;
+using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients;
 using Cauce.Domain.Patients.Enums;
@@ -161,6 +162,37 @@ public sealed class ClinicalRegistryApiTests : IClassFixture<PostgresFixture>, I
 
         var json = await response.Content.ReadFromJsonAsync<JsonElement>();
         json.GetProperty("hasMealAssociation").GetBoolean().Should().BeFalse();
+    }
+
+    [SkippableFact]
+    public async Task CreateSymptom_WithNewCatalogTypes_Returns201AndPersists()
+    {
+        SkipIfUnavailable();
+        var (patientId, keycloakId) = await SeedPatientAsync();
+        var client = PatientClient(keycloakId);
+
+        foreach (var name in new[] { "Nausea", "Reflux", "Urgency" })
+        {
+            var reference = DateTime.UtcNow;
+            var response = await client.PostAsJsonAsync("/api/v1/symptoms", new
+            {
+                clientGuid = Guid.NewGuid(),
+                symptomType = name,
+                intensity = 50,
+                occurredAt = reference,
+                clientCreatedAt = reference
+            });
+            response.StatusCode.Should().Be(HttpStatusCode.Created);
+        }
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        var persisted = await db.Symptoms.AsNoTracking()
+            .Where(s => s.PatientId == patientId)
+            .Select(s => s.SymptomType)
+            .ToListAsync();
+
+        persisted.Should().Contain(new[] { SymptomType.Nausea, SymptomType.Reflux, SymptomType.Urgency });
     }
 
     // ----- Alimentos personalizados -----

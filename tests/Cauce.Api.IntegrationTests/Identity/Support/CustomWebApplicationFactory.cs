@@ -43,6 +43,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string? _minioSecretKey;
     private readonly string? _smtpHost;
     private readonly int? _smtpPort;
+    private readonly string? _engineKind;
+    private readonly string? _onnxModelPath;
 
     /// <summary>
     /// Inicializa la fábrica con las cadenas de conexión de los contenedores.
@@ -55,6 +57,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     /// <param name="minioSecretKey">Clave secreta de MinIO, opcional.</param>
     /// <param name="smtpHost">Host SMTP (Mailpit), opcional; si se provee, el correo de notificación va allí.</param>
     /// <param name="smtpPort">Puerto SMTP (Mailpit), opcional.</param>
+    /// <param name="engineKind">Tipo de motor de recomendaciones ("Rule" u "Onnx"), opcional.</param>
+    /// <param name="onnxModelPath">Ruta al modelo ONNX, opcional.</param>
     public CustomWebApplicationFactory(
         string connectionString,
         string? redisConnectionString = null,
@@ -63,7 +67,9 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         string? minioAccessKey = null,
         string? minioSecretKey = null,
         string? smtpHost = null,
-        int? smtpPort = null)
+        int? smtpPort = null,
+        string? engineKind = null,
+        string? onnxModelPath = null)
     {
         _connectionString = connectionString;
         _redisConnectionString = redisConnectionString ?? "localhost:6379";
@@ -73,6 +79,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         _minioSecretKey = minioSecretKey;
         _smtpHost = smtpHost;
         _smtpPort = smtpPort;
+        _engineKind = engineKind;
+        _onnxModelPath = onnxModelPath;
     }
 
     /// <summary>
@@ -131,6 +139,7 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Workers:RecommendationExpiration:Enabled"] = "false",
                 ["Workers:OutboxRetention:Enabled"] = "false",
                 ["Workers:WeeklyReminder:Enabled"] = "false",
+                ["Workers:IbsSssReminder:Enabled"] = "false",
                 ["Notifications:Fcm:UseFake"] = "true"
             };
 
@@ -138,6 +147,16 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
             {
                 settings["Recommendations:Ollama:Endpoint"] = _ollamaEndpoint;
                 settings["Recommendations:Ollama:TimeoutSeconds"] = "2";
+            }
+
+            if (_engineKind is not null)
+            {
+                settings["Recommendations:EngineKind"] = _engineKind;
+            }
+
+            if (_onnxModelPath is not null)
+            {
+                settings["Recommendations:OnnxModelPath"] = _onnxModelPath;
             }
 
             if (_minioEndpoint is not null)

@@ -22,6 +22,11 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
     /// </summary>
     public List<string> DeletedUsers { get; } = [];
 
+    /// <summary>
+    /// Identificadores de Keycloak deshabilitados (anonimización de cuentas, US26).
+    /// </summary>
+    public List<string> DisabledUsers { get; } = [];
+
     /// <inheritdoc />
     public Task<string> CreateUserAsync(string email, string fullName, string roleName, bool requireEmailVerification, CancellationToken ct = default)
     {
@@ -49,6 +54,13 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
     public Task DeleteUserAsync(string keycloakUserId, CancellationToken ct = default)
     {
         DeletedUsers.Add(keycloakUserId);
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task DisableUserAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        DisabledUsers.Add(keycloakUserId);
         return Task.CompletedTask;
     }
 
