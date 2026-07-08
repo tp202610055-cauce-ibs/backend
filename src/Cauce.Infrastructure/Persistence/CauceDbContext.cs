@@ -119,6 +119,16 @@ public sealed class CauceDbContext : DbContext
     public DbSet<IbsSssAssessment> IbsSssAssessments => Set<IbsSssAssessment>();
 
     /// <summary>
+    /// Términos del glosario clínico-nutricional (US27).
+    /// </summary>
+    public DbSet<GlossaryTerm> GlossaryTerms => Set<GlossaryTerm>();
+
+    /// <summary>
+    /// Agendas de las evaluaciones IBS-SSS periódicas de los pacientes (US12).
+    /// </summary>
+    public DbSet<IbsSssAssessmentSchedule> IbsSssSchedules => Set<IbsSssAssessmentSchedule>();
+
+    /// <summary>
     /// Versiones del motor de recomendaciones.
     /// </summary>
     public DbSet<ModelVersion> ModelVersions => Set<ModelVersion>();
@@ -156,6 +166,10 @@ public sealed class CauceDbContext : DbContext
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // Extensión unaccent para búsquedas del glosario insensibles a tildes (US27). Disponible en
+        // postgres:16-alpine; se crea en la migración. Si en algún entorno no estuviera, la búsqueda del
+        // glosario debería degradar a ILIKE simple (acta A27).
+        modelBuilder.HasPostgresExtension("unaccent");
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CauceDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
     }
