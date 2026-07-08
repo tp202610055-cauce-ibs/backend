@@ -11,7 +11,7 @@ namespace Cauce.Application.Reports.Contracts;
 /// <param name="WeightKg">Peso en kilogramos.</param>
 /// <param name="HeightCm">Estatura en centímetros.</param>
 /// <param name="Medications">Medicación declarada, o <see langword="null"/>.</param>
-/// <param name="NutritionistName">Nombre del nutricionista.</param>
+/// <param name="NutritionistName">Nombre del nutricionista, o <see langword="null"/> si el paciente no tiene uno asignado (autoreporte US24).</param>
 /// <param name="PeriodStart">Inicio del período.</param>
 /// <param name="PeriodEnd">Fin del período.</param>
 /// <param name="GeneratedAt">Momento de generación, en UTC.</param>
@@ -29,7 +29,7 @@ public sealed record ClinicalReportData(
     decimal WeightKg,
     decimal HeightCm,
     string? Medications,
-    string NutritionistName,
+    string? NutritionistName,
     DateOnly PeriodStart,
     DateOnly PeriodEnd,
     DateTime GeneratedAt,
