@@ -135,6 +135,24 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     }
 
     /// <inheritdoc />
+    public async Task DisableUserAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        var payload = new { enabled = false };
+
+        using var response = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Put, $"{AdminBaseUrl}/users/{keycloakUserId}")
+            {
+                Content = JsonContent.Create(payload)
+            },
+            ct).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
+        {
+            throw await BuildExceptionAsync(response, "deshabilitar el usuario", ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc />
     public async Task<KeycloakUserDto?> FindByEmailAsync(string email, CancellationToken ct = default)
     {
         var encodedEmail = Uri.EscapeDataString(email);
