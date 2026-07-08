@@ -21,6 +21,7 @@ public sealed class RegisterPatientCommandHandlerTests
     private readonly IInvitationCodeRepository _invitationCodeRepository = Substitute.For<IInvitationCodeRepository>();
     private readonly IConsentRecordRepository _consentRecordRepository = Substitute.For<IConsentRecordRepository>();
     private readonly IKeycloakAdminClient _keycloakAdminClient = Substitute.For<IKeycloakAdminClient>();
+    private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ILogger<RegisterPatientCommandHandler> _logger = Substitute.For<ILogger<RegisterPatientCommandHandler>>();
@@ -31,6 +32,7 @@ public sealed class RegisterPatientCommandHandlerTests
         _invitationCodeRepository,
         _consentRecordRepository,
         _keycloakAdminClient,
+        _outboxWriter,
         _unitOfWork,
         _auditLogger,
         _logger);

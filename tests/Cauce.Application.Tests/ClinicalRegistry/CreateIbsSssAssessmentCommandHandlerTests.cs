@@ -24,12 +24,14 @@ public sealed class CreateIbsSssAssessmentCommandHandlerTests
     private readonly ICurrentUserService _currentUserService = Substitute.For<ICurrentUserService>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IIbsSssAssessmentRepository _assessmentRepository = Substitute.For<IIbsSssAssessmentRepository>();
+    private readonly IIbsSssAssessmentScheduleRepository _scheduleRepository = Substitute.For<IIbsSssAssessmentScheduleRepository>();
+    private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ISender _mediator = Substitute.For<ISender>();
     private readonly ILogger<CreateIbsSssAssessmentCommandHandler> _logger = Substitute.For<ILogger<CreateIbsSssAssessmentCommandHandler>>();
 
     private CreateIbsSssAssessmentCommandHandler CreateHandler() => new(
-        _currentUserService, _userRepository, _assessmentRepository, _unitOfWork, _mediator, _logger);
+        _currentUserService, _userRepository, _assessmentRepository, _scheduleRepository, _outboxWriter, _unitOfWork, _mediator, _logger);
 
     private void ArrangePatient()
     {
@@ -78,5 +80,34 @@ public sealed class CreateIbsSssAssessmentCommandHandlerTests
 
         result.TriggeredOnboardingCompletion.Should().BeFalse();
         await _mediator.DidNotReceive().Send(Arg.Any<CompletePatientOnboardingCommand>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Baseline_SchedulesNextAssessment()
+    {
+        ArrangePatient();
+        _assessmentRepository.FindBaselineByPatientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((IbsSssAssessment?)null);
+        _scheduleRepository.FindOpenByPatientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((IbsSssAssessmentSchedule?)null);
+
+        await CreateHandler().Handle(Command(AssessmentType.Baseline), CancellationToken.None);
+
+        await _scheduleRepository.Received(1).AddAsync(
+            Arg.Is<IbsSssAssessmentSchedule>(schedule => !schedule.Completed && !schedule.Missed),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_Periodic_ClosesOpenScheduleAndCreatesNext()
+    {
+        ArrangePatient();
+        _assessmentRepository.GetNextCycleNumberAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(2);
+        var openSchedule = IbsSssAssessmentSchedule.Create(
+            Guid.NewGuid(), Guid.NewGuid(), DateTime.UtcNow.AddDays(-1), DateTime.UtcNow.AddDays(-15));
+        _scheduleRepository.FindOpenByPatientAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(openSchedule);
+
+        await CreateHandler().Handle(Command(AssessmentType.Periodic), CancellationToken.None);
+
+        openSchedule.Completed.Should().BeTrue();
+        await _scheduleRepository.Received(1).AddAsync(Arg.Any<IbsSssAssessmentSchedule>(), Arg.Any<CancellationToken>());
     }
 }
