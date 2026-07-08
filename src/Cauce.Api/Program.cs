@@ -208,7 +208,16 @@ if (keycloakOptions.RequireHttpsMetadata)
 }
 
 app.UseCors("CaucePortalPolicy");
-app.UseRateLimiter();
+
+// Rate limiting activable por configuración (DEC-B3-03). En Development se desactiva por defecto
+// (appsettings.Development.json) para no chocar con 429 durante el desarrollo local; en Production y
+// en las pruebas de integración permanece activo con los thresholds reales. Las políticas siempre se
+// registran (AddRateLimiter); solo el middleware de aplicación queda condicionado.
+if (app.Configuration.GetValue("RateLimiting:Enabled", true))
+{
+    app.UseRateLimiter();
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 
