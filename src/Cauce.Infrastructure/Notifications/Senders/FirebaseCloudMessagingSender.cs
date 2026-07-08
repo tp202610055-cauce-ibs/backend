@@ -61,9 +61,48 @@ public sealed class FirebaseCloudMessagingSender : INotificationSender
         }
         catch (FirebaseMessagingException exception)
         {
+            // TS10 CA01: si el proveedor indica que el token ya no es válido, se desvincula del usuario
+            // para dejar de reintentar contra un dispositivo inexistente.
+            if (IsInvalidTokenError(exception.MessagingErrorCode))
+            {
+                await ClearInvalidTokenAsync(notification.UserId, exception.MessagingErrorCode, ct).ConfigureAwait(false);
+                return new NotificationSendResult(false, null, "fcm_token_invalid_cleared");
+            }
+
             _logger.LogWarning(exception, "FCM push notification {NotificationId} failed.", notification.Id);
             return new NotificationSendResult(false, null, exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Indica si el código de error de FCM implica que el token del dispositivo dejó de ser válido y,
+    /// por tanto, debe desvincularse (TS10 CA01).
+    /// </summary>
+    /// <param name="errorCode">Código de error de FCM.</param>
+    /// <returns><see langword="true"/> si el token es inválido y debe limpiarse.</returns>
+    internal static bool IsInvalidTokenError(MessagingErrorCode? errorCode)
+    {
+        return errorCode is MessagingErrorCode.Unregistered or MessagingErrorCode.InvalidArgument;
+    }
+
+    /// <summary>
+    /// Desvincula el token de FCM del usuario cuando el proveedor lo reporta como inválido, y persiste
+    /// el cambio en su propio ámbito.
+    /// </summary>
+    /// <param name="userId">Identificador del usuario destinatario.</param>
+    /// <param name="errorCode">Código de error de FCM que motivó la invalidación.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Tarea que representa la operación asíncrona.</returns>
+    private async Task ClearInvalidTokenAsync(Guid userId, MessagingErrorCode? errorCode, CancellationToken ct)
+    {
+        var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct).ConfigureAwait(false);
+        if (user is not null)
+        {
+            user.RegisterFcmToken(null);
+            await _context.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+
+        _logger.LogWarning("FCM token invalidated for user {UserId} due to {ErrorCode}.", userId, errorCode);
     }
 
     /// <summary>
