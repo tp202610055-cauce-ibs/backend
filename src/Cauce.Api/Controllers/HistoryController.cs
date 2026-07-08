@@ -1,4 +1,5 @@
 using Cauce.Api.Configuration;
+using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Application.ClinicalRegistry.UseCases.GetUnifiedHistory;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -13,6 +14,10 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/history")]
 [Authorize(Policy = "Patient")]
 [EnableRateLimiting(RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class HistoryController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -35,6 +40,8 @@ public sealed class HistoryController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los eventos del historial.</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<HistoryEvent>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Get([FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetUnifiedHistoryQuery(from, to), ct);
