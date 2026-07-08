@@ -1,5 +1,6 @@
 using Cauce.Api.Configuration;
 using Cauce.Api.Contracts.ClinicalRegistry;
+using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Application.ClinicalRegistry.UseCases.CreateClinicalNote;
 using Cauce.Application.ClinicalRegistry.UseCases.GetClinicalNotes;
 using MediatR;
@@ -15,6 +16,10 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/clinical-notes")]
 [Authorize(Policy = "Patient")]
 [EnableRateLimiting(RateLimitingPolicies.DefaultAuthenticated)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class ClinicalNotesController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -35,6 +40,9 @@ public sealed class ClinicalNotesController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El identificador de la nota creada, con código 201.</returns>
     [HttpPost]
+    [ProducesResponseType(typeof(CreateClinicalNoteResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Create([FromBody] CreateClinicalNoteRequest request, CancellationToken ct)
     {
         var command = new CreateClinicalNoteCommand(request.MealId, request.SymptomId, request.Content);
@@ -50,6 +58,8 @@ public sealed class ClinicalNotesController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Las notas clínicas.</returns>
     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<ClinicalNoteSummary>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> List([FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetClinicalNotesQuery(from, to), ct);
