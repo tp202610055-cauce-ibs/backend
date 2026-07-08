@@ -9,6 +9,8 @@ using Cauce.Domain.Recommendations.Exceptions;
 using Cauce.Domain.Reports.Exceptions;
 using FluentValidation;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Cauce.Api.Middleware;
 
@@ -60,31 +62,90 @@ public sealed class ExceptionHandlingMiddleware
     {
         var traceId = Activity.Current?.Id ?? context.TraceIdentifier;
 
-        var problemDetails = exception is ValidationException validationException
-            ? BuildValidationProblem(validationException, traceId)
-            : BuildProblemForException(exception, traceId);
-
-        if (problemDetails.Status == StatusCodes.Status500InternalServerError)
+        ProblemDetails problemDetails;
+        if (IsAuditLogTamperAttempt(exception))
         {
-            _logger.LogError(
-                exception,
-                "Unhandled exception of type {ExceptionType}. TraceId: {TraceId}",
-                exception.GetType().Name,
+            // TS04 CA02: un intento de modificar audit_logs (bloqueado por el trigger de inmutabilidad)
+            // se registra como evento de seguridad de nivel Error, con actor, IP y tabla, para su
+            // detección posterior (acta A18).
+            LogAuditTamperAttempt(context, exception);
+            problemDetails = BuildProblem(
+                StatusCodes.Status403Forbidden,
+                "Operación no permitida",
+                "La bitácora de auditoría es inmutable y no admite modificaciones.",
+                "audit_log_immutable",
                 traceId);
+        }
+        else if (exception is UnconfirmedAllergensException allergenException)
+        {
+            // US10 CA03: coincidencias de alérgenos sin confirmar. Se devuelve 409 con el detalle de las
+            // coincidencias para que el cliente pida confirmación al paciente.
+            _logger.LogWarning(
+                "Handled exception of type {ExceptionType} mapped to {StatusCode}. TraceId: {TraceId}",
+                nameof(UnconfirmedAllergensException), StatusCodes.Status409Conflict, traceId);
+            problemDetails = BuildProblem(
+                StatusCodes.Status409Conflict,
+                "Alérgenos detectados",
+                allergenException.Message,
+                "unconfirmed_allergens",
+                traceId);
+            problemDetails.Extensions["detected"] = true;
+            problemDetails.Extensions["allergens"] = allergenException.DetectedAllergens;
         }
         else
         {
-            _logger.LogWarning(
-                "Handled exception of type {ExceptionType} mapped to {StatusCode}. TraceId: {TraceId}",
-                exception.GetType().Name,
-                problemDetails.Status,
-                traceId);
+            problemDetails = exception is ValidationException validationException
+                ? BuildValidationProblem(validationException, traceId)
+                : BuildProblemForException(exception, traceId);
+
+            if (problemDetails.Status == StatusCodes.Status500InternalServerError)
+            {
+                _logger.LogError(
+                    exception,
+                    "Unhandled exception of type {ExceptionType}. TraceId: {TraceId}",
+                    exception.GetType().Name,
+                    traceId);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Handled exception of type {ExceptionType} mapped to {StatusCode}. TraceId: {TraceId}",
+                    exception.GetType().Name,
+                    problemDetails.Status,
+                    traceId);
+            }
         }
 
         context.Response.Clear();
         context.Response.StatusCode = problemDetails.Status ?? StatusCodes.Status500InternalServerError;
         context.Response.ContentType = ProblemJsonContentType;
         await context.Response.WriteAsJsonAsync(problemDetails, problemDetails.GetType()).ConfigureAwait(false);
+    }
+
+    private static bool IsAuditLogTamperAttempt(Exception exception)
+    {
+        var postgres = exception as PostgresException
+            ?? (exception as DbUpdateException)?.InnerException as PostgresException;
+
+        return postgres is not null
+            && postgres.SqlState == PostgresErrorCodes.CheckViolation
+            && postgres.MessageText.Contains("audit_logs", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void LogAuditTamperAttempt(HttpContext context, Exception exception)
+    {
+        var actor = context.User?.FindFirst("sub")?.Value
+            ?? context.User?.Identity?.Name
+            ?? "anonymous";
+        var ip = context.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
+
+        _logger.LogError(
+            exception,
+            "SecurityEvent audit_tamper_attempt: intento de modificar {Table} por actor {Actor} desde {Ip} (event_type={EventType}).",
+            "audit_logs",
+            actor,
+            ip,
+            "audit_tamper_attempt");
     }
 
     private static ProblemDetails BuildProblemForException(Exception exception, string traceId)
@@ -107,6 +168,10 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status400BadRequest, "Token de restablecimiento expirado", "expired_password_reset_token", exception.Message),
             ConsentTextMismatchException => (
                 StatusCodes.Status400BadRequest, "Consentimiento no coincide", "consent_text_mismatch", exception.Message),
+            ActivePilotRetentionException => (
+                StatusCodes.Status409Conflict, "Retención por piloto activo", "active_pilot_retention", exception.Message),
+            ConsentRecordNotFoundException => (
+                StatusCodes.Status404NotFound, "Consentimiento no encontrado", "consent_record_not_found", exception.Message),
             DuplicatePatientProfileException => (
                 StatusCodes.Status409Conflict, "Perfil de paciente duplicado", "duplicate_patient_profile", exception.Message),
             PatientProfileNotFoundException => (
@@ -168,6 +233,8 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict, "Recomendación expirada", "recommendation_expired", exception.Message),
             InvalidRecommendationStateTransitionException => (
                 StatusCodes.Status409Conflict, "Transición de estado inválida", "conflict_state", exception.Message),
+            RecommendationNotArchivableException => (
+                StatusCodes.Status409Conflict, "Recomendación no archivable", "recommendation_not_archivable", exception.Message),
             InvalidCredentialsException => (
                 StatusCodes.Status401Unauthorized, "Credenciales inválidas", "invalid_credentials", exception.Message),
             ReportAccessDeniedException => (
