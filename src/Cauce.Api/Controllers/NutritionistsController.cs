@@ -1,3 +1,4 @@
+using Cauce.Application.Patients.Dtos;
 using Cauce.Application.Patients.UseCases.GetAssignedPatientDetail;
 using Cauce.Application.Patients.UseCases.GetPatientEvolutionForNutritionist;
 using Cauce.Application.Patients.UseCases.ListAssignedPatients;
@@ -12,6 +13,9 @@ namespace Cauce.Api.Controllers;
 /// </summary>
 [Route("api/v{version:apiVersion}/nutritionists")]
 [Authorize(Policy = "Nutritionist")]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class NutritionistsController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -31,6 +35,7 @@ public sealed class NutritionistsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los pacientes asignados.</returns>
     [HttpGet("me/patients")]
+    [ProducesResponseType(typeof(IReadOnlyList<AssignedPatientSummary>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListAssignedPatients(CancellationToken ct)
     {
         var result = await _mediator.Send(new ListAssignedPatientsQuery(), ct);
@@ -45,6 +50,8 @@ public sealed class NutritionistsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El detalle del paciente.</returns>
     [HttpGet("me/patients/{patientUserId:guid}")]
+    [ProducesResponseType(typeof(GetAssignedPatientDetailResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetAssignedPatientDetail(Guid patientUserId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetAssignedPatientDetailQuery(patientUserId), ct);
@@ -60,6 +67,7 @@ public sealed class NutritionistsController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Las métricas de evolución del paciente.</returns>
     [HttpGet("me/patients/{patientId:guid}/evolution")]
+    [ProducesResponseType(typeof(PatientEvolutionForNutritionistResult), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetPatientEvolution(Guid patientId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetPatientEvolutionForNutritionistQuery(patientId), ct);
