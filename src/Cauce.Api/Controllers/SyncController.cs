@@ -14,6 +14,10 @@ namespace Cauce.Api.Controllers;
 [Route("api/v{version:apiVersion}/sync")]
 [Authorize(Policy = "Patient")]
 [EnableRateLimiting(RateLimitingPolicies.Sync)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+[ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
 public sealed class SyncController : BaseApiController
 {
     private readonly ISender _mediator;
@@ -35,6 +39,8 @@ public sealed class SyncController : BaseApiController
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El resultado de la sincronización.</returns>
     [HttpPost("batch")]
+    [ProducesResponseType(typeof(SyncBatchResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> Batch([FromBody] SyncBatchRequest request, CancellationToken ct)
     {
         var result = await _mediator.Send(new SyncBatchCommand(request.Meals, request.Symptoms), ct);
