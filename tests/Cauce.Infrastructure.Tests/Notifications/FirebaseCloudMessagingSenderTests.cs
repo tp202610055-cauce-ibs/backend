@@ -2,12 +2,13 @@ using Cauce.Domain.Notifications;
 using Cauce.Domain.Notifications.Enums;
 using Cauce.Infrastructure.Notifications.Senders;
 using FluentAssertions;
+using MessagingErrorCode = FirebaseAdmin.Messaging.MessagingErrorCode;
 
 namespace Cauce.Infrastructure.Tests.Notifications;
 
 /// <summary>
-/// Pruebas del mapeo dominio→payload de FCM en <see cref="FirebaseCloudMessagingSender"/>. No valida
-/// la integración con Firebase (sin red); protege contra regresiones en la construcción del mensaje.
+/// Pruebas del mapeo dominio→payload de FCM y de la clasificación de errores de token inválido en
+/// <see cref="FirebaseCloudMessagingSender"/>. No valida la integración con Firebase (sin red).
 /// </summary>
 public sealed class FirebaseCloudMessagingSenderTests
 {
@@ -23,5 +24,21 @@ public sealed class FirebaseCloudMessagingSenderTests
         message.Token.Should().Be("device-token-abc");
         message.Notification.Title.Should().Be("Tu recomendación está lista");
         message.Notification.Body.Should().Be("Revisa tu nueva recomendación dietética.");
+    }
+
+    [Theory]
+    [InlineData(MessagingErrorCode.Unregistered, true)]
+    [InlineData(MessagingErrorCode.InvalidArgument, true)]
+    [InlineData(MessagingErrorCode.Internal, false)]
+    [InlineData(MessagingErrorCode.Unavailable, false)]
+    public void IsInvalidTokenError_ClassifiesTokenErrors(MessagingErrorCode code, bool expected)
+    {
+        FirebaseCloudMessagingSender.IsInvalidTokenError(code).Should().Be(expected);
+    }
+
+    [Fact]
+    public void IsInvalidTokenError_Null_ReturnsFalse()
+    {
+        FirebaseCloudMessagingSender.IsInvalidTokenError(null).Should().BeFalse();
     }
 }
