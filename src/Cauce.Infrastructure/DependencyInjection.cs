@@ -213,6 +213,9 @@ public static class DependencyInjection
         services.AddScoped<FoodItemsSeeder>();
         services.AddScoped<GlossaryTermsSeeder>();
         services.AddScoped<DevAdminSeeder>();
+        services.Configure<Cauce.Infrastructure.Identity.DemoPatientOptions>(
+            configuration.GetSection(Cauce.Infrastructure.Identity.DemoPatientOptions.SectionName));
+        services.AddScoped<DemoPatientSeeder>();
         services.AddScoped<RecommendationsModelVersionsSeeder>();
         services.AddScoped<MinioBucketSeeder>();
 
