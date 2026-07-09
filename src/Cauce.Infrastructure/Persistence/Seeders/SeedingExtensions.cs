@@ -33,6 +33,7 @@ public static class SeedingExtensions
             await services.GetRequiredService<FoodItemsSeeder>().SeedAsync(ct).ConfigureAwait(false);
             await services.GetRequiredService<GlossaryTermsSeeder>().SeedAsync(ct).ConfigureAwait(false);
             await services.GetRequiredService<DevAdminSeeder>().SeedAsync(ct).ConfigureAwait(false);
+            await services.GetRequiredService<DemoPatientSeeder>().SeedAsync(ct).ConfigureAwait(false);
             await services.GetRequiredService<RecommendationsModelVersionsSeeder>().SeedAsync(ct).ConfigureAwait(false);
             await services.GetRequiredService<MinioBucketSeeder>().SeedAsync(ct).ConfigureAwait(false);
         }
