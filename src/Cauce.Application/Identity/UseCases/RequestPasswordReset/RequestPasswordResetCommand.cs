@@ -14,9 +14,14 @@ namespace Cauce.Application.Identity.UseCases.RequestPasswordReset;
 /// </summary>
 /// <param name="Email">Correo electrónico de la cuenta.</param>
 /// <param name="IpAddress">Dirección IP de origen, o <see langword="null"/>.</param>
+/// <param name="ClientId">
+/// Cliente OIDC de origen, que determina el destino del enlace enviado por correo. Si es
+/// <see langword="null"/>, el handler asume la app móvil.
+/// </param>
 public sealed record RequestPasswordResetCommand(
     string Email,
-    string? IpAddress) : IRequest, IAuditableCommand
+    string? IpAddress,
+    string? ClientId = null) : IRequest, IAuditableCommand
 {
     /// <inheritdoc />
     public string AuditEntityType => nameof(User);

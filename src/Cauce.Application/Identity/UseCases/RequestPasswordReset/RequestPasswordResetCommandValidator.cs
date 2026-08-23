@@ -1,3 +1,4 @@
+using Cauce.Application.Common.Identity;
 using FluentValidation;
 
 namespace Cauce.Application.Identity.UseCases.RequestPasswordReset;
@@ -16,5 +17,10 @@ public sealed class RequestPasswordResetCommandValidator : AbstractValidator<Req
             .NotEmpty()
             .MaximumLength(150)
             .EmailAddress();
+
+        RuleFor(x => x.ClientId!)
+            .Must(OidcClients.IsKnown)
+            .When(x => !string.IsNullOrWhiteSpace(x.ClientId))
+            .WithMessage("El cliente OIDC indicado no es válido.");
     }
 }

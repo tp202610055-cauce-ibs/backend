@@ -128,7 +128,8 @@ public sealed class AuthController : BaseApiController
     {
         var command = new RequestPasswordResetCommand(
             request.Email,
-            HttpContext.Connection.RemoteIpAddress?.ToString());
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            request.ClientId);
 
         await _mediator.Send(command, ct);
         return Ok();
