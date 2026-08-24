@@ -92,7 +92,7 @@ public sealed class UpdateCustomFoodCommandHandler : IRequestHandler<UpdateCusto
         // transacción persiste los cambios y la bitácora de forma atómica (DEC-B5-01 capa 3, acta A8).
         await _auditLogger.LogAsync(
             AuditActionType.Update, nameof(CustomFood), customFood.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

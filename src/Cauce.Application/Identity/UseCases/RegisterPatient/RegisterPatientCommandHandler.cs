@@ -115,7 +115,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
                 oldValuesHash: null,
                 newValuesHash: null,
                 additionalContext: JsonSerializer.Serialize(new { role = UserRoles.Patient }),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         }

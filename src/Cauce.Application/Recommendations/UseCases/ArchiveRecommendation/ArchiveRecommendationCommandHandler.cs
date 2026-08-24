@@ -77,7 +77,7 @@ public sealed class ArchiveRecommendationCommandHandler : IRequestHandler<Archiv
             oldValuesHash: null,
             newValuesHash: null,
             additionalContext: JsonSerializer.Serialize(new { archive_reason = request.Reason.ToString() }),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

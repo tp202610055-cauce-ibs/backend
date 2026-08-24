@@ -101,7 +101,7 @@ public sealed class ModifyRecommendationCommandHandler : IRequestHandler<ModifyR
             oldValuesHash: null,
             newValuesHash: AuditHash.Sha256Hex(request.ClinicalNote),
             additionalContext: JsonSerializer.Serialize(new { operation = "modified_approved" }),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _outboxWriter.PublishAsync(
             recommendation.Id,

@@ -67,7 +67,7 @@ public sealed class ExportMyDataCommandHandler : IRequestHandler<ExportMyDataCom
             oldValuesHash: null,
             newValuesHash: null,
             additionalContext: JsonSerializer.Serialize(new { counts = export.Counts }),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

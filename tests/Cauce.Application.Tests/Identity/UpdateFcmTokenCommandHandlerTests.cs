@@ -47,6 +47,7 @@ public sealed class UpdateFcmTokenCommandHandlerTests
             Arg.Any<string?>(),
             Arg.Any<string?>(),
             Arg.Is<string?>(context => context != null && context.Contains("fcm_token_updated")),
+            Arg.Any<Guid?>(),
             Arg.Any<CancellationToken>());
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
     }

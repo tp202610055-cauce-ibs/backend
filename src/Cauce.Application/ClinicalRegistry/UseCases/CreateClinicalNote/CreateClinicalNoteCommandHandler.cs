@@ -65,7 +65,7 @@ public sealed class CreateClinicalNoteCommandHandler : IRequestHandler<CreateCli
         // transacción persiste la nota y la bitácora de forma atómica (DEC-B5-01 capa 3, acta A8).
         await _auditLogger.LogAsync(
             AuditActionType.Create, nameof(ClinicalNote), note.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken).ConfigureAwait(false);
+            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

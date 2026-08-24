@@ -238,6 +238,8 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict, "Recomendación no archivable", "recommendation_not_archivable", exception.Message),
             InvalidCredentialsException => (
                 StatusCodes.Status401Unauthorized, "Credenciales inválidas", "invalid_credentials", exception.Message),
+            InvalidRefreshTokenException => (
+                StatusCodes.Status401Unauthorized, "Token de refresco inválido", "invalid_refresh_token", exception.Message),
             // Va antes del caso general de DomainException, del que hereda. Es inconsistencia entre
             // Keycloak y la base local, no un error del cliente: 500 con detalle genérico.
             UserLocalMissingException => (

@@ -45,7 +45,7 @@ public sealed class AuditingBehavior<TRequest, TResponse> : IPipelineBehavior<TR
                 oldValuesHash: null,
                 newValuesHash,
                 auditable.AuditAdditionalContext,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         return await next().ConfigureAwait(false);

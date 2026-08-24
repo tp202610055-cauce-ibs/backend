@@ -47,9 +47,14 @@ public sealed class AuditLogger : IAuditLogger
         string? oldValuesHash,
         string? newValuesHash,
         string? additionalContext,
+        Guid? actorUserId = null,
         CancellationToken cancellationToken = default)
     {
-        var actorLocalId = await _actorResolver.ResolveLocalActorIdAsync(cancellationToken).ConfigureAwait(false);
+        // Un actor explícito tiene prioridad sobre el resolutor: hay flujos anónimos, como la
+        // renovación de sesión, donde no hay principal autenticado pero el handler sí sabe de qué
+        // cuenta se trata.
+        var actorLocalId = actorUserId
+            ?? await _actorResolver.ResolveLocalActorIdAsync(cancellationToken).ConfigureAwait(false);
 
         if (actorLocalId is null && _currentUserService.IsAuthenticated)
         {

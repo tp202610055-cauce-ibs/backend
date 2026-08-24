@@ -97,7 +97,7 @@ public sealed class RejectRecommendationCommandHandler : IRequestHandler<RejectR
             oldValuesHash: null,
             newValuesHash: AuditHash.Sha256Hex(request.Reason),
             additionalContext: null,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _outboxWriter.PublishAsync(
             recommendation.Id,

@@ -84,6 +84,8 @@ public sealed class AuditingBehaviorTests
 
         public string LastEntityType { get; private set; } = string.Empty;
 
+        public Guid? LastActorUserId { get; private set; }
+
         public Task LogAsync(
             AuditActionType actionType,
             string entityType,
@@ -91,11 +93,13 @@ public sealed class AuditingBehaviorTests
             string? oldValuesHash,
             string? newValuesHash,
             string? additionalContext,
+            Guid? actorUserId = null,
             CancellationToken cancellationToken = default)
         {
             Calls++;
             LastActionType = actionType;
             LastEntityType = entityType;
+            LastActorUserId = actorUserId;
             Hashes.Add(newValuesHash);
             return Task.CompletedTask;
         }
