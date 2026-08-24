@@ -20,9 +20,11 @@ public sealed record LoginCommand(string Email, string Password, string ClientId
 /// <param name="ExpiresIn">Vigencia del token de acceso, en segundos.</param>
 /// <param name="RefreshExpiresIn">Vigencia del token de refresco, en segundos.</param>
 /// <param name="TokenType">Tipo de token.</param>
+/// <param name="User">Identidad del usuario autenticado.</param>
 public sealed record LoginResult(
     string AccessToken,
     string RefreshToken,
     int ExpiresIn,
     int RefreshExpiresIn,
-    string TokenType);
+    string TokenType,
+    AuthenticatedUser User);

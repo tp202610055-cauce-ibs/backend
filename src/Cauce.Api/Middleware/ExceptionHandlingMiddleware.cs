@@ -238,6 +238,11 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict, "Recomendación no archivable", "recommendation_not_archivable", exception.Message),
             InvalidCredentialsException => (
                 StatusCodes.Status401Unauthorized, "Credenciales inválidas", "invalid_credentials", exception.Message),
+            // Va antes del caso general de DomainException, del que hereda. Es inconsistencia entre
+            // Keycloak y la base local, no un error del cliente: 500 con detalle genérico.
+            UserLocalMissingException => (
+                StatusCodes.Status500InternalServerError, "Inconsistencia de identidad", "user_local_missing",
+                "Ocurrió un error al resolver la identidad del usuario."),
             ReportAccessDeniedException => (
                 StatusCodes.Status403Forbidden, "Acceso al reporte no autorizado", "report_access_denied", exception.Message),
             PatientHasNoDataInPeriodException => (

@@ -54,4 +54,14 @@ public interface IUserRepository
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El identificador del rol.</returns>
     Task<int> GetRoleIdAsync(string roleName, CancellationToken ct = default);
+
+    /// <summary>
+    /// Devuelve el nombre canónico de un rol del catálogo a partir de su identificador. El catálogo
+    /// se cachea en memoria del proceso porque es fijo y de dos filas.
+    /// </summary>
+    /// <param name="roleId">Identificador del rol.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El nombre del rol.</returns>
+    /// <exception cref="InvalidOperationException">Si el rol no existe en el catálogo.</exception>
+    Task<string> GetRoleNameAsync(int roleId, CancellationToken ct = default);
 }

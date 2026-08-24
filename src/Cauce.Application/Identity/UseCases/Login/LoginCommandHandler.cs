@@ -1,5 +1,7 @@
+using Cauce.Application.Common.Auditing;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Domain.Identity.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -40,18 +42,38 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
             .ConfigureAwait(false);
 
         var user = await _userRepository.FindByEmailAsync(request.Email, cancellationToken).ConfigureAwait(false);
-        if (user is not null)
+        if (user is null)
         {
-            user.RegisterSuccessfulLogin(DateTime.UtcNow);
-            await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-            _logger.LogInformation("Login succeeded for user {UserId}.", user.Id);
+            // Keycloak autenticó pero la cuenta local no existe: el aprovisionamiento quedó a medias.
+            // Antes esto pasaba en silencio y se devolvían tokens de un usuario que el backend no
+            // conoce, así que el cliente arrancaba sesión contra una identidad fantasma.
+            _logger.LogCritical(
+                "Authenticated subject without a local user account for {MaskedEmail}.",
+                AuditMask.Email(request.Email));
+            throw new UserLocalMissingException();
         }
+
+        user.RegisterSuccessfulLogin(DateTime.UtcNow);
+        await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("Login succeeded for user {UserId}.", user.Id);
+
+        var roleName = await _userRepository
+            .GetRoleNameAsync(user.RoleId, cancellationToken)
+            .ConfigureAwait(false);
 
         return new LoginResult(
             token.AccessToken,
             token.RefreshToken,
             token.ExpiresIn,
             token.RefreshExpiresIn,
-            token.TokenType);
+            token.TokenType,
+            new AuthenticatedUser(
+                user.Id,
+                user.KeycloakId,
+                user.Email,
+                roleName,
+                user.FullName,
+                user.EmailVerified,
+                user.IsInActivePilot));
     }
 }

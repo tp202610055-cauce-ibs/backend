@@ -11,14 +11,17 @@ namespace Cauce.Infrastructure.Persistence.Repositories;
 public sealed class UserRepository : IUserRepository
 {
     private readonly CauceDbContext _context;
+    private readonly IRoleNameCache _roleNameCache;
 
     /// <summary>
-    /// Inicializa el repositorio con el contexto de base de datos.
+    /// Inicializa el repositorio con el contexto de base de datos y el caché de nombres de rol.
     /// </summary>
     /// <param name="context">Contexto de Entity Framework Core.</param>
-    public UserRepository(CauceDbContext context)
+    /// <param name="roleNameCache">Caché del catálogo de roles, compartido por todo el proceso.</param>
+    public UserRepository(CauceDbContext context, IRoleNameCache roleNameCache)
     {
         _context = context;
+        _roleNameCache = roleNameCache;
     }
 
     /// <inheritdoc />
@@ -62,5 +65,27 @@ public sealed class UserRepository : IUserRepository
             .ConfigureAwait(false);
 
         return roleId ?? throw new InvalidOperationException($"El rol '{roleName}' no existe en el catálogo.");
+    }
+
+    /// <inheritdoc />
+    public async Task<string> GetRoleNameAsync(int roleId, CancellationToken ct = default)
+    {
+        if (_roleNameCache.TryGetName(roleId, out var cached))
+        {
+            return cached;
+        }
+
+        // El catálogo tiene dos filas y no cambia en runtime, así que se trae entero de una vez en
+        // lugar de consultar rol por rol.
+        var catalog = await _context.Set<UserRoleEntity>()
+            .AsNoTracking()
+            .ToDictionaryAsync(x => x.RoleId, x => x.RoleName, ct)
+            .ConfigureAwait(false);
+
+        _roleNameCache.Store(catalog);
+
+        return catalog.TryGetValue(roleId, out var roleName)
+            ? roleName
+            : throw new InvalidOperationException($"El rol con identificador {roleId} no existe en el catálogo.");
     }
 }
