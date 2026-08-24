@@ -27,6 +27,44 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
     /// </summary>
     public List<string> DisabledUsers { get; } = [];
 
+    /// <summary>
+    /// Estado de fuerza bruta que devuelve el doble, indexado por identificador de Keycloak. Si un
+    /// usuario no está aquí, se considera que nunca falló.
+    /// </summary>
+    public ConcurrentDictionary<string, BruteForceStatus> BruteForceStatuses { get; } = new();
+
+    /// <summary>
+    /// Excepción que lanza <see cref="GetBruteForceStatusAsync"/>, para ejercitar la degradación
+    /// cuando la Admin API no responde.
+    /// </summary>
+    public Exception? BruteForceFailure { get; set; }
+
+    /// <summary>
+    /// Marca a un usuario como bloqueado por fuerza bruta hasta el momento indicado.
+    /// </summary>
+    /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
+    /// <param name="lockedUntil">Momento UTC de desbloqueo.</param>
+    public void LockUser(string keycloakUserId, DateTime lockedUntil)
+    {
+        BruteForceStatuses[keycloakUserId] = new BruteForceStatus(
+            Disabled: true,
+            NumFailures: 5,
+            LastFailure: new DateTimeOffset(lockedUntil.AddSeconds(-60), TimeSpan.Zero).ToUnixTimeMilliseconds(),
+            LastIPFailure: "127.0.0.1",
+            LockedUntil: lockedUntil);
+    }
+
+    /// <inheritdoc />
+    public Task<BruteForceStatus?> GetBruteForceStatusAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        if (BruteForceFailure is not null)
+        {
+            throw BruteForceFailure;
+        }
+
+        return Task.FromResult(BruteForceStatuses.TryGetValue(keycloakUserId, out var status) ? status : null);
+    }
+
     /// <inheritdoc />
     public Task<string> CreateUserAsync(string email, string fullName, string roleName, bool requireEmailVerification, CancellationToken ct = default)
     {

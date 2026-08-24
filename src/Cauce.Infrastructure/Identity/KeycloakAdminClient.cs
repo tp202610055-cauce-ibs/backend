@@ -181,6 +181,51 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         return new KeycloakUserDto(id, foundEmail, emailVerified);
     }
 
+    /// <inheritdoc />
+    public async Task<BruteForceStatus?> GetBruteForceStatusAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        using var response = await SendAsync(
+            () => new HttpRequestMessage(
+                HttpMethod.Get,
+                $"{AdminBaseUrl}/attack-detection/brute-force/users/{keycloakUserId}"),
+            ct).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BuildExceptionAsync(response, "consultar el estado de fuerza bruta", ct).ConfigureAwait(false);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        var root = document.RootElement;
+
+        var numFailures = root.TryGetProperty("numFailures", out var failures) ? failures.GetInt32() : 0;
+        if (numFailures == 0)
+        {
+            // Keycloak responde 200 con el contador en cero para un usuario que nunca falló; se
+            // normaliza a null para que el llamador no tenga que distinguir ese caso.
+            return null;
+        }
+
+        var disabled = root.TryGetProperty("disabled", out var disabledElement) && disabledElement.GetBoolean();
+        var lastFailure = root.TryGetProperty("lastFailure", out var lastFailureElement)
+            && lastFailureElement.TryGetInt64(out var lastFailureValue)
+            && lastFailureValue > 0
+                ? lastFailureValue
+                : (long?)null;
+        var lastIpFailure = root.TryGetProperty("lastIPFailure", out var ipElement) ? ipElement.GetString() : null;
+
+        // Keycloak reporta el momento del último fallo, no el del desbloqueo. El realm suma
+        // waitIncrementSeconds a partir de ahí; si no reporta la marca, se toma el instante actual
+        // como base para no devolver una ventana vacía.
+        var lockedFrom = lastFailure is not null
+            ? DateTimeOffset.FromUnixTimeMilliseconds(lastFailure.Value).UtcDateTime
+            : DateTime.UtcNow;
+        var lockedUntil = lockedFrom.AddSeconds(_options.WaitIncrementSeconds);
+
+        return new BruteForceStatus(disabled, numFailures, lastFailure, lastIpFailure, lockedUntil);
+    }
+
     private async Task ResetPasswordInternalAsync(string keycloakUserId, string password, bool temporary, CancellationToken ct)
     {
         var payload = new { type = "password", value = password, temporary };

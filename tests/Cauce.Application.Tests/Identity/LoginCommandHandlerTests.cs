@@ -18,11 +18,13 @@ public sealed class LoginCommandHandlerTests
     private const int PatientRoleId = 1;
 
     private readonly IKeycloakTokenClient _tokenClient = Substitute.For<IKeycloakTokenClient>();
+    private readonly IKeycloakAdminClient _adminClient = Substitute.For<IKeycloakAdminClient>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<LoginCommandHandler> _logger = Substitute.For<ILogger<LoginCommandHandler>>();
 
-    private LoginCommandHandler CreateHandler() => new(_tokenClient, _userRepository, _unitOfWork, _logger);
+    private LoginCommandHandler CreateHandler() =>
+        new(_tokenClient, _adminClient, _userRepository, _unitOfWork, _logger);
 
     private void GivenKeycloakAuthenticates()
     {
@@ -93,6 +95,11 @@ public sealed class LoginCommandHandlerTests
             .Handle(new LoginCommand(Email, "wrong", "cauce-mobile"), CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidCredentialsException>();
-        await _userRepository.DidNotReceive().FindByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+
+        // Desde el fix 7 el handler sí resuelve la cuenta local en el camino de fallo, para poder
+        // distinguir una contraseña incorrecta de un bloqueo por intentos fallidos. Lo que no debe
+        // ocurrir es persistir nada ni emitir tokens.
+        await _userRepository.Received(1).FindByEmailAsync(Email, Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
     }
 }

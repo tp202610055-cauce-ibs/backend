@@ -99,6 +99,12 @@ public sealed class ExceptionHandlingMiddleware
                 ? BuildValidationProblem(validationException, traceId)
                 : BuildProblemForException(exception, traceId);
 
+            if (exception is AccountLockedException lockedException)
+            {
+                // US05 CA02 exige informar al usuario cuánto debe esperar, no solo que está bloqueado.
+                problemDetails.Extensions["lockedUntil"] = lockedException.LockedUntil;
+            }
+
             if (problemDetails.Status == StatusCodes.Status500InternalServerError)
             {
                 _logger.LogError(
