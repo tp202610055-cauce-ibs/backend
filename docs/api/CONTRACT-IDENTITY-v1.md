@@ -1,6 +1,6 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.0 · **Fecha:** 13 de julio de 2026 · **Backend:** tag `v0.6.2-dev-seed`
+**Versión:** 1.1 · **Fecha:** 25 de agosto de 2026 · **Backend:** rama `feature/backend-fixes-pre-mobile-1b`
 **Alcance:** endpoints de identidad que consume la app móvil Flutter (US01, US05, US07, US08, US20).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
@@ -20,26 +20,28 @@ directo, `audit_logs` quedaría sin registro de accesos.
 | Método | Ruta | Auth | Rate limit | Códigos declarados |
 |---|---|---|---|---|
 | POST | `/api/v1/auth/register` | Anónimo | `auth-register` 5/h por IP | 201, 400, 409, 429, 502, 500 |
-| POST | `/api/v1/auth/login` | Anónimo | `auth-login` 10/min por IP | 200, 400, 401, 429, 500 |
+| POST | `/api/v1/auth/login` | Anónimo | `auth-login` 10/min por IP | 200, 400, 401, **423**, 429, 500 |
+| POST | `/api/v1/auth/refresh` **(nuevo, v1.1)** | Anónimo | `auth-refresh` 20/min por IP | 200, 400, 401, 429, 500 |
 | POST | `/api/v1/auth/logout` | Bearer JWT | Sin política | 204, 400, 401, 500 |
 | POST | `/api/v1/auth/password-reset/request` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
+| GET | `/api/v1/consent/current` **(nuevo, v1.1)** | Anónimo | `consent-current` 60/min por IP | 200, 429, 500 |
 | GET | `/api/v1/patients/me/consent/pdf` | Bearer JWT · `Policy=Patient` | Sin política | 200 (`application/pdf`), 401, 403, 404, 500 |
 | PUT | `/api/v1/users/me/fcm-token` | Bearer JWT (cualquier rol) | Sin política | 204, 400, 401, 403, 500 |
 
-Evidencia de las políticas de rate limit: `src/Cauce.Api/Configuration/RateLimitingPolicies.cs:53-57`.
-Evidencia de los códigos: atributos `[ProducesResponseType]` en `AuthController.cs:45-49, 86-89, 104-106, 122-124, 146-148`.
+Evidencia de las políticas de rate limit: `src/Cauce.Api/Configuration/RateLimitingPolicies.cs`.
+Evidencia de los códigos: atributos `[ProducesResponseType]` en `AuthController.cs`.
 
-**Endpoints que NO existen** y que el móvil podría esperar:
+**Endpoints que siguen sin existir** y que el móvil podría esperar:
 
 | Endpoint esperado | Estado | Evidencia |
 |---|---|---|
-| `POST /auth/refresh` (renovación de token) | **NO EXISTE** | `AuthController.cs` no declara ninguna acción de refresh |
-| `GET /me`, `/users/me`, `/auth/session` (identidad post-login) | **NO EXISTE** | `src/Cauce.Api/Controllers/UsersController.cs:37` solo declara `PUT me/fcm-token` |
-| Texto y versión vigente del consentimiento (pre-aceptación) | **NO EXISTE** | `IConsentService` expone `GetCurrentText()` y `GetCurrentVersion()` pero ningún controller los publica |
+| `GET /me`, `/users/me`, `/auth/session` (identidad post-login) | **NO EXISTE, pero ya no hace falta** | Desde v1.1 el login y la renovación devuelven el objeto `user` (§2.2 y §2.9) |
 | Reenvío del correo de verificación | **NO EXISTE** | Sin acción de reenvío en `src/Cauce.Api/Controllers/` |
-| Canje de código de invitación después del registro | **NO EXISTE** | El código solo se acepta en `auth/register` (`AuthController.cs:70`) |
-| Estado de bloqueo de cuenta y tiempo de espera | **NO EXISTE** | Ningún endpoint expone `locked_until` |
+| Canje de código de invitación después del registro | **NO EXISTE** | El código solo se acepta en `auth/register` |
+
+**Resueltos en v1.1:** `POST /auth/refresh`, `GET /consent/current`, y el estado de bloqueo con tiempo
+de espera (423 `account_locked` con la extensión `lockedUntil`, §6).
 
 ---
 
@@ -238,17 +240,22 @@ Solicita el restablecimiento. Responde 200 exista o no la cuenta, para no filtra
 | Uso | Único | `PasswordResetToken.cs:106` (`!IsUsed && !IsExpired`) |
 | Auditoría | `PasswordResetRequest` en `audit_logs` | `RequestPasswordResetCommand.cs:19, 25` (`IAuditableCommand`) |
 
-**Enlace del correo** (`src/Cauce.Infrastructure/Identity/ClientUrlProvider.cs:28-29`)
+**Enlace del correo** (`src/Cauce.Infrastructure/Identity/ClientUrlProvider.cs`) *(corregido en v1.1)*
 
-```
-{AppBaseUrl}/auth/password-reset?token={plainToken}
-```
+El destino depende del cliente que originó la solicitud:
 
-En Development, `AppBaseUrl` vale `http://localhost:5074`
-(`src/Cauce.Api/appsettings.Development.json:29`), que es la URL del **backend**. El backend no expone una
-ruta `GET /auth/password-reset`, así que ese enlace hoy no resuelve a ninguna pantalla. Para el móvil,
-`AppBaseUrl` tendría que apuntar a un deep link del esquema `cauce://`. **Este cambio de configuración no
-está hecho.**
+| `clientId` recibido | Enlace generado | Base configurable |
+|---|---|---|
+| `cauce-mobile` (o ausente) | `cauce://auth/password-reset?token={plainToken}` | `Email:MobileAppBaseUrl` |
+| `cauce-web-portal` | `http://localhost:5173/auth/password-reset?token={plainToken}` | `Email:PortalAppBaseUrl` |
+
+**Campo `clientId` del request:** opcional. Si se omite, el handler asume `cauce-mobile`. Se dejó
+opcional para no romper a los clientes que ya consumían el endpoint ni el OpenAPI publicado. Un valor
+desconocido devuelve **400 `validation_error`**.
+
+Hasta v1.0 existía una sola base, `AppBaseUrl`, que en Development apuntaba a `http://localhost:5074`
+—el propio backend, que no expone ninguna ruta fuera de `api/v{version}`—, así que el enlace del
+correo devolvía 404 y **US07 no podía cerrarse end to end**.
 
 ---
 
@@ -314,6 +321,74 @@ texto e IP de origen. El nombre del archivo es `consentimiento-{documentVersion}
 
 ---
 
+### 2.8 `GET /api/v1/consent/current` *(nuevo en v1.1)*
+
+Publica el documento de consentimiento vigente. Es anónimo porque el paciente lo consulta **antes** de
+registrarse, cuando todavía no tiene cuenta ni token.
+
+| Campo | Valor |
+|---|---|
+| Auth | Anónimo (`[AllowAnonymous]`) |
+| Rate limit | `consent-current`, 60 por minuto por IP |
+
+**Response 200** (`src/Cauce.Application/Identity/UseCases/GetCurrentConsent/GetCurrentConsentQuery.cs`)
+
+| Campo | Tipo | Notas |
+|---|---|---|
+| `version` | string | Versión vigente. Hoy `"1.0"` |
+| `text` | string | Texto íntegro del documento |
+| `hash` | string | SHA-256 del texto, hexadecimal minúscula, 64 caracteres |
+
+**Por qué se publica el hash y no solo el texto.** El registro compara el hash recibido contra el del
+documento vigente, y el cálculo **no aplica ninguna normalización**: ni `Trim()`, ni conversión de CRLF
+a LF, ni normalización Unicode. El texto vigente mide 297 caracteres pero **301 bytes UTF-8** por las
+tildes. Si el móvil replicara el texto y lo hasheara por su cuenta, cualquier diferencia de
+codificación, BOM o salto de línea produciría un hash distinto y **todo intento de registro fallaría**
+con 400 `consent_text_mismatch`, sin distinguir "versión desactualizada" de "hash incorrecto".
+
+**Uso previsto:** llamar a este endpoint, y enviar en `POST /auth/register` exactamente los valores
+`version` y `hash` recibidos. Recalcular el hash localmente es válido como verificación defensiva; el
+invariante está cubierto por un test de integración.
+
+---
+
+### 2.9 `POST /api/v1/auth/refresh` *(nuevo en v1.1)*
+
+Renueva la sesión a partir de un refresh token vigente.
+
+| Campo | Valor |
+|---|---|
+| Auth | Anónimo (`[AllowAnonymous]`): la credencial es el propio refresh token |
+| Rate limit | `auth-refresh`, 20 por minuto por IP |
+
+**Request** (`src/Cauce.Api/Contracts/Identity/RefreshTokenRequest.cs`)
+
+| Campo | Tipo | Obligatorio | Validación |
+|---|---|---|---|
+| `refreshToken` | string | Sí | No vacío |
+| `clientId` | string | Sí | No vacío, máx 100, uno de `cauce-mobile` o `cauce-web-portal` |
+
+**Response 200.** Idéntico al de `POST /auth/login`, incluido el objeto `user`.
+
+**ROTACIÓN. El realm tiene `revokeRefreshToken: true` y `refreshTokenMaxReuse: 0`.** Cada renovación
+emite un refresh token nuevo e invalida el anterior de inmediato. **El cliente debe persistir el token
+que recibe**; reintentar con el anterior devuelve 401. Verificado end-to-end contra el stack real.
+
+**Errores**
+
+| HTTP | `errorCode` | Cuándo |
+|---|---|---|
+| 400 | `validation_error` | Falta un campo o el `clientId` no es conocido |
+| 401 | `invalid_refresh_token` | El token expiró, fue revocado por un logout, o ya se consumió por una renovación previa |
+| 429 | *(sin `errorCode`)* | Se superó el límite |
+| 500 | `user_local_missing` | El token renovó pero no existe la cuenta local del sujeto |
+
+**Auditoría.** Una renovación exitosa escribe `token_refresh` en `audit_logs` con el actor resuelto;
+una fallida escribe `failed_token_refresh` **sin actor** (el token rechazado no permite identificar la
+cuenta con garantías), conservando IP y momento. Lo escribe el handler, no el `AuditingMiddleware`.
+
+---
+
 ## 3. Envelope de error (RFC 7807)
 
 El middleware serializa un `ProblemDetails` con `Content-Type: application/problem+json`
@@ -352,8 +427,9 @@ Ejemplo con datos ficticios (correo ya registrado):
 
 | Caso | Extensiones extra |
 |---|---|
-| 429 | `retryAfterSeconds` (int) y header `Retry-After` cuando el valor es mayor que 0 (`RateLimitingPolicies.cs:65-77`) |
-| 409 `unconfirmed_allergens` | `detected` (bool) y `allergens` (array) (`ExceptionHandlingMiddleware.cs:92-93`) |
+| 429 | `retryAfterSeconds` (int) y header `Retry-After` cuando el valor es mayor que 0 (`RateLimitingPolicies.cs`) |
+| 409 `unconfirmed_allergens` | `detected` (bool) y `allergens` (array) (`ExceptionHandlingMiddleware.cs`) |
+| **423 `account_locked`** *(v1.1)* | `lockedUntil` (fecha-hora ISO 8601 en UTC), el momento en que expira el bloqueo |
 
 **El 429 no lleva `errorCode`.** El objeto que construye `RateLimitingPolicies.cs:71-77` solo trae `status`,
 `title`, `detail` y `retryAfterSeconds`. El cliente debe detectar el 429 por el status HTTP, no por el
@@ -375,12 +451,15 @@ el middleware la convierte en `ValidationProblemDetails` (`ExceptionHandlingMidd
 |---|---|
 | `errorCode` | `"validation_error"` |
 | Campo con el detalle | `errors`, un diccionario `{ nombreDeCampo: [mensaje, ...] }` |
-| **Casing de las claves de `errors`** | **PascalCase**, tal como los nombra FluentValidation (`Email`, `Password`, `ConsentTextHash`, `InvitationCode`, `FullName`, `ConsentDocumentVersion`) |
+| **Casing de las claves de `errors`** | **camelCase** desde v1.1 (`email`, `password`, `consentTextHash`, `invitationCode`, `fullName`, `consentDocumentVersion`) |
 
-El casing de las claves merece atención. `Program.cs:131` configura
-`PropertyNamingPolicy = JsonNamingPolicy.CamelCase`, pero **no** configura `DictionaryKeyPolicy`, y
-`JsonSerializerDefaults.Web` tampoco lo hace. Las claves del diccionario `errors` **no se transforman a
-camelCase**: llegan en PascalCase.
+Hasta v1.0 estas claves salían en **PascalCase**, inconsistentes con el resto del contrato. La causa:
+`Program.cs` configura `PropertyNamingPolicy = JsonNamingPolicy.CamelCase`, que aplica a **nombres de
+propiedad** pero no a **claves de diccionario**, y `DictionaryKeyPolicy` no está configurado. Desde
+v1.1 `BuildValidationProblem` normaliza la clave al agrupar los errores.
+
+La conversión respeta rutas anidadas e indexadores: una regla sobre una colección produce
+`items[0].quantity`, no `items[0].Quantity`.
 
 Ejemplo con datos ficticios:
 
@@ -391,13 +470,17 @@ Ejemplo con datos ficticios:
   "status": 400,
   "detail": "Una o más reglas de validación no se cumplieron.",
   "errors": {
-    "Email": ["'Email' no es una dirección de correo electrónico válida."],
-    "Password": ["La contraseña debe contener al menos un dígito."]
+    "email": ["'Email' no es una dirección de correo electrónico válida."],
+    "password": ["La contraseña debe contener al menos un dígito."]
   },
   "traceId": "00-3f1a9c2e7b4d5a6f8e0c1b2a3d4e5f60-1a2b3c4d5e6f7a8b-00",
   "errorCode": "validation_error"
 }
 ```
+
+> Los **mensajes** siguen nombrando la propiedad en PascalCase (`'Email' no es...`) porque los genera
+> FluentValidation. Solo cambió la clave del diccionario, que es lo que el cliente usa para asociar el
+> error a su campo de formulario.
 
 ### 4.2 Validación de binding de `[ApiController]`
 
@@ -422,21 +505,28 @@ campo obligatorio del record ausente, produce el `ValidationProblemDetails` auto
 | Obtención | `POST /api/v1/auth/login` | Devuelve `accessToken`, `refreshToken`, `expiresIn`, `refreshExpiresIn`, `tokenType` |
 | Duración del access token | Realm Keycloak | 900 segundos (15 minutos). `accessTokenLifespan: 900` y `access.token.lifespan: "900"` del cliente `cauce-mobile` en `infrastructure/keycloak/import/realm.json` |
 | Vida de la sesión del cliente móvil | Realm Keycloak | `client.session.max.lifespan: "2592000"` (30 días) |
-| Rotación de refresh token | Realm Keycloak | `revokeRefreshToken: true` |
-| **Renovación** | **NO EXISTE en el backend** | No hay endpoint de refresh. `KeycloakTokenClient` solo implementa `LoginAsync` (`grant_type=password`) y `LogoutAsync` (revocación) |
+| Rotación de refresh token | Realm Keycloak | `revokeRefreshToken: true`, `refreshTokenMaxReuse: 0` |
+| **Renovación** *(v1.1)* | `POST /api/v1/auth/refresh` | Ver §2.9. Devuelve el mismo cuerpo que el login, con tokens nuevos |
 | Revocación | `POST /api/v1/auth/logout` | Revoca el refresh token en Keycloak |
 | Uso | Todo endpoint protegido | Header `Authorization: Bearer {accessToken}` |
 
-**Consecuencia operativa.** El backend no ofrece renovación. Con un access token de 15 minutos, el móvil
-tiene dos caminos, y ninguno está implementado hoy:
+### 5.1 El scope `offline_access` y por qué importa
 
-1. Llamar directamente al token endpoint de Keycloak con `grant_type=refresh_token`. El backend no
-   participa, así que la renovación no queda auditada.
-2. Pedir al backend un endpoint de refresh nuevo. **No existe.**
+El login del cliente `cauce-mobile` solicita **`scope=openid offline_access`**; cualquier otro cliente
+recibe solo `openid` (`KeycloakTokenClient.ResolveScope`).
 
-Con `revokeRefreshToken: true`, cada renovación emite un refresh token nuevo e invalida el anterior. Quien
-haga la rotación tiene que persistir el token nuevo. Hoy **ese manejo no está en el backend**: queda del lado
-del cliente.
+Sin `offline_access`, el refresh token queda atado a la sesión SSO del realm, cuyo
+`ssoSessionIdleTimeout` es de **1800 segundos (30 minutos)**. Medido antes del fix, el login devolvía
+`refreshExpiresIn: 1800`: la sesión moría por inactividad a la media hora, y **un endpoint de refresh
+por sí solo no lo habría resuelto**. Con el scope pedido, el token pasa a regirse por
+`offlineSessionIdleTimeout: 2592000` y el login devuelve `refreshExpiresIn: 2591999`, los 30 días que
+prevé DEC-B3-01.
+
+### 5.2 Obligación del cliente ante la rotación
+
+Cada renovación invalida el refresh token presentado. El cliente **debe** sustituir el que tenga
+guardado por el que recibe en la respuesta. Reintentar con el anterior devuelve 401
+`invalid_refresh_token`, comportamiento verificado end-to-end contra el stack real.
 
 **Validación del JWT en el backend** (`src/Cauce.Api/Program.cs:62-89`)
 
@@ -454,18 +544,33 @@ del cliente.
 
 ## 6. Bloqueo de cuenta por intentos fallidos
 
+**Funciona end to end desde v1.1.** La fuente de verdad del bloqueo es **Keycloak**; el backend solo
+traduce su estado a un código que el cliente pueda interpretar.
+
 | Pieza | Estado | Evidencia |
 |---|---|---|
 | Configuración de fuerza bruta en Keycloak | **Activa** | `realm.json`: `bruteForceProtected: true`, `failureFactor: 5`, `waitIncrementSeconds: 60`, `maxFailureWaitSeconds: 900`, `permanentLockout: false` |
-| `users.failed_login_attempts` | **Nadie lo incrementa** | `User.RegisterFailedLogin()` (`User.cs:218`) tiene 0 llamadores en `src/` |
-| `users.locked_until` | **Nadie lo asigna** | `User.Lock()` (`User.cs:234`) solo se invoca desde `RegisterFailedLogin`, que nunca corre |
-| `AccountLockedException` → 423 `account_locked` | **Código muerto** | Mapeada en `ExceptionHandlingMiddleware.cs:163-164`, con 0 sitios de `throw` |
-| Endpoint que exponga el tiempo de espera | **NO EXISTE** | |
+| Detección del bloqueo | **Implementada** | `LoginCommandHandler` consulta `GET /admin/realms/{realm}/attack-detection/brute-force/users/{id}` cuando Keycloak rechaza las credenciales |
+| `AccountLockedException` → 423 `account_locked` | **Vivo** | Se lanza desde `LoginCommandHandler`; el middleware añade la extensión `lockedUntil` |
+| Tiempo de espera expuesto al cliente | **Sí** | Extensión `lockedUntil` (ISO 8601 UTC) en el cuerpo del 423 |
+| `users.failed_login_attempts` / `users.locked_until` | **Código muerto documentado** | `User.RegisterFailedLogin()`, `User.IsLocked()` y `User.Unlock()` siguen sin llamadores en `src/`. Duplicar el contador crearía desincronía con el que Keycloak mantiene de verdad |
 
-**Lo que ve el móvil hoy.** Keycloak bloquea la cuenta tras 5 fallos y responde 401 al token endpoint.
-`KeycloakTokenClient.cs:61-65` colapsa 400 y 401 en `InvalidCredentialsException`, que sale como **401
-`invalid_credentials`**, idéntico a una contraseña incorrecta. **El móvil no puede distinguir la cuenta
-bloqueada ni mostrar el tiempo de espera que pide US05 CA02.**
+**Lo que ve el móvil.** Un 401 `invalid_credentials` significa contraseña incorrecta. Un **423
+`account_locked`** significa cuenta bloqueada, y trae `lockedUntil` para mostrar la espera. Estando
+bloqueada, **incluso la contraseña correcta devuelve 423**.
+
+**Degradación deliberada.** Si la Admin API de Keycloak falla o no responde al consultar el estado, el
+backend registra un warning y devuelve el **401 genérico**, no un 500. Un fallo de diagnóstico no debe
+convertir un login rechazado en un error del servidor ni revelar al cliente que la consulta falló.
+
+**Un correo no registrado nunca llega a consultar la Admin API:** responder distinto revelaría qué
+cuentas existen.
+
+> **Matiz observado en el stack real.** El bloqueo puede dispararse **antes** de los 5 intentos. El
+> realm tiene `quickLoginCheckMilliSeconds: 1000` y `minimumQuickLoginWaitSeconds: 60`: dos fallos
+> consecutivos en menos de un segundo activan la protección anti-ráfaga sin llegar al `failureFactor`.
+> Ambos caminos marcan la cuenta como deshabilitada y producen el mismo 423, pero el cliente no debe
+> asumir que hacen falta exactamente cinco intentos para ver un bloqueo.
 
 ---
 
@@ -561,17 +666,18 @@ con el mismo `errorCode`: `consent_text_mismatch`. El contrato **no distingue** 
 `ConsentRecord.Capture(...)` (`RegisterPatientCommandHandler.cs:86-93`) guarda: `userId`,
 `documentVersion`, `consentTextHash`, `ipAddress`, `acceptedAt`. **No guarda el texto.**
 
-### 8.5 Consecuencia para el móvil
+### 8.5 Consecuencia para el móvil *(resuelta en v1.1)*
 
-El móvil tiene que enviar `consentDocumentVersion` y `consentTextHash`, pero **no tiene de dónde leer el
-texto ni la versión**, porque no hay endpoint que los publique. Las opciones son:
+El móvil obtiene versión, texto y hash de **`GET /api/v1/consent/current`** (§2.8) y envía en el
+registro exactamente los valores `version` y `hash` recibidos.
 
-| Opción | Riesgo |
-|---|---|
-| Replicar el texto en el cliente y hashearlo con SHA-256 UTF-8 hex minúscula | Cualquier diferencia de un byte (espacio, acento, salto de línea) produce un hash distinto y el registro falla siempre |
-| Agregar al backend un endpoint que publique versión, texto y hash | **No existe.** Requiere decisión y cambio de backend |
+Hasta v1.0 esto era una **brecha bloqueante para US01**: el cliente tenía que enviar
+`consentDocumentVersion` y `consentTextHash` sin ninguna fuente de donde leerlos, y la única
+alternativa —replicar el texto y hashearlo— era frágil hasta el punto de romperse por un solo byte de
+diferencia. El texto vigente mide 297 caracteres pero 301 bytes UTF-8.
 
-Esta es una **brecha bloqueante para US01**. Se documenta, no se resuelve en este documento.
+Recalcular el hash en el cliente sigue siendo válido como verificación defensiva, pero ya no es la
+única vía.
 
 ---
 
@@ -579,16 +685,18 @@ Esta es una **brecha bloqueante para US01**. Se documenta, no se resuelve en est
 
 | US | Método | Ruta | Auth | Códigos |
 |---|---|---|---|---|
+| US01 | GET | `/api/v1/consent/current` | Anónimo | 200, 429, 500 |
 | US01, US20 | POST | `/api/v1/auth/register` | Anónimo | 201, 400, 409, 429, 502, 500 |
 | US01 CA04 | GET | `/api/v1/patients/me/consent/pdf` | `Policy=Patient` | 200, 401, 403, 404, 500 |
-| US05 | POST | `/api/v1/auth/login` | Anónimo | 200, 400, 401, 429, 500 |
+| US05 | POST | `/api/v1/auth/login` | Anónimo | 200, 400, 401, 423, 429, 500 |
 | US07 CA01 | POST | `/api/v1/auth/password-reset/request` | Anónimo | 200, 400, 429, 500 |
 | US07 CA02 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | 200, 400, 429, 500 |
 | US08 CA01 | POST | `/api/v1/auth/logout` | Bearer | 204, 400, 401, 500 |
+| US08 CA02 | POST | `/api/v1/auth/refresh` | Anónimo | 200, 400, 401, 429, 500 |
 
-**Rutas faltantes para cerrar estos US:** texto y versión del consentimiento (US01), estado de bloqueo con
-tiempo de espera (US05 CA02), renovación de token (US08 CA02), reenvío de verificación de correo, y canje de
-código de invitación después del registro (US20 CA02).
+**Rutas que siguen faltando:** reenvío de verificación de correo, y canje de código de invitación
+después del registro (US20 CA02). El texto del consentimiento (US01), el estado de bloqueo con tiempo
+de espera (US05 CA02) y la renovación de token (US08 CA02) quedaron cubiertos en v1.1.
 
 ---
 
@@ -597,3 +705,4 @@ código de invitación después del registro (US20 CA02).
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 1.0 | 2026-07-13 | Versión inicial. Levantada del código en el tag `v0.6.2-dev-seed` para habilitar Mobile-1b. |
+| 1.1 | 2026-08-25 | Cierre de los 8 gaps del `REPORTE-VERIFICACION-03`. Nuevos §2.8 `GET /consent/current` y §2.9 `POST /auth/refresh`. `POST /auth/login` incorpora el objeto `user` (§2.2) y declara 423 `account_locked` con la extensión `lockedUntil` (§6). El login del móvil pide `offline_access`, llevando `refreshExpiresIn` de 1800 a 2591999 (§5.1). Las claves de `errors` pasan a camelCase (§4.1). El enlace de recuperación se parametriza por cliente de origen. |
