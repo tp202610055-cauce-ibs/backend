@@ -95,6 +95,24 @@ public sealed class KeycloakTokenClientTests
         await act.Should().ThrowAsync<InvalidOperationException>();
     }
 
+    [Fact]
+    public async Task LogoutAsync_KeycloakRejectsRevocation_DoesNotThrow()
+    {
+        // El cierre de sesión es best-effort: si el refresh token ya venció, Keycloak responde 400 y
+        // el cliente no debe convertir eso en un error para el usuario, que igual quedó desconectado.
+        var response = new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent("""{"error":"invalid_grant"}""", Encoding.UTF8, "application/json")
+        };
+        var handler = new CapturingHandler(response);
+        var client = CreateClient(handler);
+
+        var act = async () => await client.LogoutAsync("token-vencido", "cauce-mobile");
+
+        await act.Should().NotThrowAsync();
+        handler.LastForm["refresh_token"].Should().Be("token-vencido");
+    }
+
     private static KeycloakTokenClient CreateClient(CapturingHandler handler)
     {
         var httpClient = new HttpClient(handler);
