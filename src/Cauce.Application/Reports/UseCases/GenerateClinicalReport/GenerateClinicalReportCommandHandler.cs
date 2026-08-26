@@ -100,7 +100,7 @@ public sealed class GenerateClinicalReportCommandHandler
         });
         await _auditLogger.LogAsync(
             AuditActionType.ExportPdf, "clinical_report", report.ReportId,
-            oldValuesHash: null, newValuesHash: null, additionalContext: context, cancellationToken).ConfigureAwait(false);
+            oldValuesHash: null, newValuesHash: null, additionalContext: context, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

@@ -1,7 +1,9 @@
+using Cauce.Api.Configuration;
 using Cauce.Api.Contracts.Identity;
 using Cauce.Application.Identity.UseCases.ConfirmPasswordReset;
 using Cauce.Application.Identity.UseCases.Login;
 using Cauce.Application.Identity.UseCases.Logout;
+using Cauce.Application.Identity.UseCases.RefreshToken;
 using Cauce.Application.Identity.UseCases.RegisterPatient;
 using Cauce.Application.Identity.UseCases.RequestPasswordReset;
 using MediatR;
@@ -86,10 +88,32 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(LoginResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status423Locked)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
         var result = await _mediator.Send(new LoginCommand(request.Email, request.Password, request.ClientId), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Renueva la sesión a partir de un refresh token vigente. Devuelve un juego de tokens nuevo,
+    /// incluida la identidad del usuario. El realm rota los refresh tokens: el enviado aquí queda
+    /// revocado y el cliente debe persistir el que recibe.
+    /// </summary>
+    /// <param name="request">Refresh token y cliente OIDC.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>200 con los tokens renovados.</returns>
+    [AllowAnonymous]
+    [HttpPost("refresh")]
+    [EnableRateLimiting(RateLimitingPolicies.AuthRefresh)]
+    [ProducesResponseType(typeof(LoginResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RefreshTokenCommand(request.RefreshToken, request.ClientId), ct);
         return Ok(result);
     }
 
@@ -128,7 +152,8 @@ public sealed class AuthController : BaseApiController
     {
         var command = new RequestPasswordResetCommand(
             request.Email,
-            HttpContext.Connection.RemoteIpAddress?.ToString());
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            request.ClientId);
 
         await _mediator.Send(command, ct);
         return Ok();

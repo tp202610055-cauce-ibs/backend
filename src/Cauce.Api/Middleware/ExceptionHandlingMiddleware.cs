@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Cauce.Application.Common.Exceptions;
 using Cauce.Domain.ClinicalRegistry.Exceptions;
 using Cauce.Domain.Common.Exceptions;
@@ -97,6 +98,12 @@ public sealed class ExceptionHandlingMiddleware
             problemDetails = exception is ValidationException validationException
                 ? BuildValidationProblem(validationException, traceId)
                 : BuildProblemForException(exception, traceId);
+
+            if (exception is AccountLockedException lockedException)
+            {
+                // US05 CA02 exige informar al usuario cuánto debe esperar, no solo que está bloqueado.
+                problemDetails.Extensions["lockedUntil"] = lockedException.LockedUntil;
+            }
 
             if (problemDetails.Status == StatusCodes.Status500InternalServerError)
             {
@@ -237,6 +244,13 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict, "Recomendación no archivable", "recommendation_not_archivable", exception.Message),
             InvalidCredentialsException => (
                 StatusCodes.Status401Unauthorized, "Credenciales inválidas", "invalid_credentials", exception.Message),
+            InvalidRefreshTokenException => (
+                StatusCodes.Status401Unauthorized, "Token de refresco inválido", "invalid_refresh_token", exception.Message),
+            // Va antes del caso general de DomainException, del que hereda. Es inconsistencia entre
+            // Keycloak y la base local, no un error del cliente: 500 con detalle genérico.
+            UserLocalMissingException => (
+                StatusCodes.Status500InternalServerError, "Inconsistencia de identidad", "user_local_missing",
+                "Ocurrió un error al resolver la identidad del usuario."),
             ReportAccessDeniedException => (
                 StatusCodes.Status403Forbidden, "Acceso al reporte no autorizado", "report_access_denied", exception.Message),
             PatientHasNoDataInPeriodException => (
@@ -270,8 +284,11 @@ public sealed class ExceptionHandlingMiddleware
 
     private static ProblemDetails BuildValidationProblem(ValidationException exception, string traceId)
     {
+        // Las claves de este diccionario no las transforma la política de nombres de JSON: solo se
+        // aplica a nombres de propiedad, y DictionaryKeyPolicy no está configurado. Se normalizan
+        // aquí para que el contrato salga íntegramente en camelCase.
         var errors = exception.Errors
-            .GroupBy(failure => failure.PropertyName)
+            .GroupBy(failure => ToCamelCase(failure.PropertyName))
             .ToDictionary(
                 group => group.Key,
                 group => group.Select(failure => failure.ErrorMessage).ToArray());
@@ -285,6 +302,45 @@ public sealed class ExceptionHandlingMiddleware
         problem.Extensions["traceId"] = traceId;
         problem.Extensions["errorCode"] = "validation_error";
         return problem;
+    }
+
+    /// <summary>
+    /// Convierte a camelCase el nombre de propiedad que reporta FluentValidation, respetando las
+    /// rutas anidadas y los indexadores de colección que generan <c>RuleForEach</c> y
+    /// <c>SetValidator</c>. Por ejemplo, <c>Items[0].Quantity</c> se convierte en
+    /// <c>items[0].quantity</c>.
+    /// </summary>
+    /// <param name="propertyName">Nombre de propiedad tal como lo reporta FluentValidation.</param>
+    /// <returns>El nombre en camelCase, o el mismo valor si viene nulo o vacío.</returns>
+    private static string ToCamelCase(string propertyName)
+    {
+        if (string.IsNullOrEmpty(propertyName))
+        {
+            return propertyName;
+        }
+
+        var segments = propertyName.Split('.');
+        for (var i = 0; i < segments.Length; i++)
+        {
+            segments[i] = ConvertSegment(segments[i]);
+        }
+
+        return string.Join('.', segments);
+
+        // Un segmento puede traer un indexador (por ejemplo, "Items[0]"); solo se convierte la parte
+        // del identificador y se conserva el indexador intacto.
+        static string ConvertSegment(string segment)
+        {
+            var indexerStart = segment.IndexOf('[', StringComparison.Ordinal);
+            if (indexerStart < 0)
+            {
+                return JsonNamingPolicy.CamelCase.ConvertName(segment);
+            }
+
+            var identifier = segment[..indexerStart];
+            var indexer = segment[indexerStart..];
+            return JsonNamingPolicy.CamelCase.ConvertName(identifier) + indexer;
+        }
     }
 
     private static ProblemDetails BuildProblem(int status, string title, string detail, string errorCode, string traceId)

@@ -97,7 +97,7 @@ public sealed class ApproveRecommendationCommandHandler : IRequestHandler<Approv
             oldValuesHash: null,
             newValuesHash: AuditHash.Sha256Hex(request.Note),
             additionalContext: null,
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _outboxWriter.PublishAsync(
             recommendation.Id,

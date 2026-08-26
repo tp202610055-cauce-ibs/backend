@@ -46,6 +46,13 @@ public sealed class KeycloakOptions
     public bool RequireHttpsMetadata { get; init; }
 
     /// <summary>
+    /// Segundos de espera que el realm añade tras alcanzar el umbral de intentos fallidos. Debe
+    /// reflejar el <c>waitIncrementSeconds</c> configurado en Keycloak: se usa para calcular, a partir
+    /// del último fallo, hasta cuándo permanece bloqueada la cuenta (US05 CA02).
+    /// </summary>
+    public int WaitIncrementSeconds { get; init; } = 60;
+
+    /// <summary>
     /// Dirección del documento de descubrimiento OIDC, derivada de
     /// <see cref="Authority"/>.
     /// </summary>

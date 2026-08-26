@@ -47,7 +47,14 @@ public sealed class EmailOptions
     public required string FromName { get; init; }
 
     /// <summary>
-    /// URL base de la aplicación, usada para construir enlaces de cara al cliente.
+    /// URL base de la app móvil, usada para construir enlaces dirigidos al paciente. En el piloto es
+    /// un esquema de deep link (<c>cauce://</c>), no una URL http, porque el destino es una pantalla
+    /// de la app y no una página web.
     /// </summary>
-    public required string AppBaseUrl { get; init; }
+    public required string MobileAppBaseUrl { get; init; }
+
+    /// <summary>
+    /// URL base del portal web, usada para construir enlaces dirigidos al nutricionista.
+    /// </summary>
+    public required string PortalAppBaseUrl { get; init; }
 }

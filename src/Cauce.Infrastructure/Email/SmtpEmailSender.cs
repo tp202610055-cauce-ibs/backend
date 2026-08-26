@@ -38,9 +38,9 @@ public sealed class SmtpEmailSender : IEmailSender
         CancellationToken ct = default)
     {
         var textBody = EmailTemplates.BuildNutritionistCredentialsText(
-            fullName, recipientEmail, temporaryPassword, _options.AppBaseUrl);
+            fullName, recipientEmail, temporaryPassword, _options.PortalAppBaseUrl);
         var htmlBody = EmailTemplates.BuildNutritionistCredentialsHtml(
-            fullName, recipientEmail, temporaryPassword, _options.AppBaseUrl);
+            fullName, recipientEmail, temporaryPassword, _options.PortalAppBaseUrl);
 
         await _dispatcher
             .SendAsync(recipientEmail, fullName, EmailTemplates.NutritionistCredentialsSubject, textBody, htmlBody, ct)

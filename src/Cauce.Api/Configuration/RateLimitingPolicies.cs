@@ -42,7 +42,20 @@ public static class RateLimitingPolicies
     public const string Sync = "sync";
 
     /// <summary>
-    /// Registra las cinco políticas de limitación de tasa y el comportamiento de
+    /// Política para la consulta del consentimiento vigente: 60 peticiones por minuto
+    /// por IP. Es un endpoint anónimo que el cliente consulta durante el registro.
+    /// </summary>
+    public const string ConsentCurrent = "consent-current";
+
+    /// <summary>
+    /// Política para la renovación de sesión: 20 peticiones por minuto por IP. Un cliente bien
+    /// portado renueva cerca de la expiración del access token (900 s), o sea cuatro veces por hora;
+    /// el margen absorbe ráfagas y varios dispositivos tras una misma IP compartida.
+    /// </summary>
+    public const string AuthRefresh = "auth-refresh";
+
+    /// <summary>
+    /// Registra las seis políticas de limitación de tasa y el comportamiento de
     /// rechazo (respuesta 429 con detalle de problema RFC 7807).
     /// </summary>
     /// <param name="options">Opciones del limitador de tasa a configurar.</param>
@@ -53,6 +66,8 @@ public static class RateLimitingPolicies
         AddIpFixedWindow(options, AuthRegister, permitLimit: 5, window: TimeSpan.FromHours(1));
         AddIpFixedWindow(options, AuthLogin, permitLimit: 10, window: TimeSpan.FromMinutes(1));
         AddIpFixedWindow(options, AuthPasswordReset, permitLimit: 3, window: TimeSpan.FromHours(1));
+        AddIpFixedWindow(options, ConsentCurrent, permitLimit: 60, window: TimeSpan.FromMinutes(1));
+        AddIpFixedWindow(options, AuthRefresh, permitLimit: 20, window: TimeSpan.FromMinutes(1));
         AddUserFixedWindow(options, DefaultAuthenticated, permitLimit: 60, window: TimeSpan.FromMinutes(1));
         AddUserFixedWindow(options, Sync, permitLimit: 120, window: TimeSpan.FromMinutes(1));
 

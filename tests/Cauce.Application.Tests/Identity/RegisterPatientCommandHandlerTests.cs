@@ -65,7 +65,8 @@ public sealed class RegisterPatientCommandHandlerTests
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
         await _auditLogger.Received(1).LogAsync(
             AuditActionType.Register, Arg.Any<string>(), Arg.Any<Guid?>(),
-            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
         await _keycloakAdminClient.Received(1).SendVerifyEmailAsync("kc-id", Arg.Any<CancellationToken>());
     }
 

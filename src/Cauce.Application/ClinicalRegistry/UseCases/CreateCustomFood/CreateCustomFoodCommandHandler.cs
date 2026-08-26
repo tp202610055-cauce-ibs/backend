@@ -105,7 +105,7 @@ public sealed class CreateCustomFoodCommandHandler : IRequestHandler<CreateCusto
             : null;
         await _auditLogger.LogAsync(
             AuditActionType.Create, nameof(CustomFood), customFood.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: auditContext, cancellationToken).ConfigureAwait(false);
+            oldValuesHash: null, newValuesHash: null, additionalContext: auditContext, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

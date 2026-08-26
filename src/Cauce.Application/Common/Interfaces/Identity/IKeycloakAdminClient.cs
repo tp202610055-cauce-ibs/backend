@@ -92,6 +92,21 @@ public interface IKeycloakAdminClient
     /// <param name="email">Correo electrónico a buscar.</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El usuario encontrado o <see langword="null"/> si no existe.</returns>
+    /// <summary>
+    /// Consulta el estado de detección de fuerza bruta de un usuario. Keycloak es la fuente de verdad
+    /// del bloqueo por intentos fallidos: lo aplica el propio realm con <c>bruteForceProtected</c>, y
+    /// el backend solo lo traduce a un código de respuesta que el cliente pueda interpretar.
+    /// </summary>
+    /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>
+    /// El estado de fuerza bruta, o <see langword="null"/> si el usuario no acumula intentos fallidos.
+    /// </returns>
+    Task<BruteForceStatus?> GetBruteForceStatusAsync(string keycloakUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Busca un usuario por correo electrónico.
+    /// </summary>
     Task<KeycloakUserDto?> FindByEmailAsync(
         string email,
         CancellationToken ct = default);
@@ -104,3 +119,25 @@ public interface IKeycloakAdminClient
 /// <param name="Email">Correo electrónico.</param>
 /// <param name="EmailVerified">Indica si el correo está verificado.</param>
 public sealed record KeycloakUserDto(string Id, string Email, bool EmailVerified);
+
+/// <summary>
+/// Estado de detección de fuerza bruta que Keycloak mantiene por usuario.
+/// </summary>
+/// <param name="Disabled">Indica si la cuenta está bloqueada temporalmente en este momento.</param>
+/// <param name="NumFailures">Intentos fallidos consecutivos acumulados.</param>
+/// <param name="LastFailure">
+/// Momento del último intento fallido, en milisegundos desde la época Unix, o <see langword="null"/>
+/// si Keycloak no lo reporta.
+/// </param>
+/// <param name="LastIPFailure">Dirección IP del último intento fallido.</param>
+/// <param name="LockedUntil">
+/// Momento UTC hasta el cual la cuenta permanece bloqueada. Lo calcula la capa de infraestructura a
+/// partir del último fallo y del incremento de espera del realm, porque esa política es de Keycloak y
+/// su configuración no cruza hacia la capa de aplicación.
+/// </param>
+public sealed record BruteForceStatus(
+    bool Disabled,
+    int NumFailures,
+    long? LastFailure,
+    string? LastIPFailure,
+    DateTime LockedUntil);

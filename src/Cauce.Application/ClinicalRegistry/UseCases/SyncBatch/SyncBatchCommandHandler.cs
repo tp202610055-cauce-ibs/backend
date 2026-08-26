@@ -97,7 +97,7 @@ public sealed class SyncBatchCommandHandler : IRequestHandler<SyncBatchCommand, 
         // persistir por su cuenta (DEC-B5-01 capa 3, acta A8).
         await _auditLogger.LogAsync(
             AuditActionType.Create, "SyncBatch", entityId: null,
-            oldValuesHash: null, newValuesHash: null, additionalContext, cancellationToken).ConfigureAwait(false);
+            oldValuesHash: null, newValuesHash: null, additionalContext, cancellationToken: cancellationToken).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation(

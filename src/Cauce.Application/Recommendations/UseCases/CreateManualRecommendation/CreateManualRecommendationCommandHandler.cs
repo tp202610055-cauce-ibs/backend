@@ -93,7 +93,7 @@ public sealed class CreateManualRecommendationCommandHandler
             oldValuesHash: null,
             newValuesHash: AuditHash.Sha256Hex(request.ClinicalNote),
             additionalContext: JsonSerializer.Serialize(new { source = "manual" }),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _outboxWriter.PublishAsync(
             recommendation.Id,

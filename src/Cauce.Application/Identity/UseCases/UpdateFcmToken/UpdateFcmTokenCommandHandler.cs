@@ -56,7 +56,7 @@ public sealed class UpdateFcmTokenCommandHandler : IRequestHandler<UpdateFcmToke
             oldValuesHash: null,
             newValuesHash: null,
             additionalContext: JsonSerializer.Serialize(new { operation = "fcm_token_updated" }),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

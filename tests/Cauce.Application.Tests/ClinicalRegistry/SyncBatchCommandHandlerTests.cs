@@ -61,7 +61,8 @@ public sealed class SyncBatchCommandHandlerTests
         result.Errors[0].ErrorCode.Should().Be("validation_error");
         await _auditLogger.Received(1).LogAsync(
             AuditActionType.Create, "SyncBatch", Arg.Any<Guid?>(),
-            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<CancellationToken>());
+            Arg.Any<string?>(), Arg.Any<string?>(), Arg.Any<string?>(),
+            Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

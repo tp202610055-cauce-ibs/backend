@@ -86,7 +86,7 @@ public sealed class DeleteMyAccountCommandHandler : IRequestHandler<DeleteMyAcco
             oldValuesHash: null,
             newValuesHash: null,
             additionalContext: JsonSerializer.Serialize(new { operation = "anonymization", keycloak_action = "disable" }),
-            cancellationToken).ConfigureAwait(false);
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

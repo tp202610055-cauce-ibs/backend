@@ -93,5 +93,15 @@ public enum AuditActionType
     /// Registro de fallback del orquestador del modelo de lenguaje: la explicación de una recomendación
     /// se generó con el proveedor de respaldo tras un fallo o timeout de Ollama (TS08 CA02).
     /// </summary>
-    LlmFallback
+    LlmFallback,
+
+    /// <summary>
+    /// Renovación exitosa de la sesión mediante refresh token.
+    /// </summary>
+    TokenRefresh,
+
+    /// <summary>
+    /// Intento fallido de renovación: el refresh token estaba vencido, revocado o ya consumido.
+    /// </summary>
+    FailedTokenRefresh
 }

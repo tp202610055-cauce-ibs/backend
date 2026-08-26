@@ -27,5 +27,6 @@ public interface IAuditLogger
         string? oldValuesHash,
         string? newValuesHash,
         string? additionalContext,
+        Guid? actorUserId = null,
         CancellationToken cancellationToken = default);
 }

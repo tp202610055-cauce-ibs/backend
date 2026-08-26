@@ -90,6 +90,9 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordResetTokenGenerator, PasswordResetTokenGenerator>();
         services.AddSingleton<ITemporaryPasswordGenerator, TemporaryPasswordGenerator>();
         services.AddSingleton<IClientUrlProvider, ClientUrlProvider>();
+        // Singleton a propósito: el catálogo de roles es fijo y los repositorios son de ámbito por
+        // petición, así que un caché por repositorio no cachearía nada.
+        services.AddSingleton<IRoleNameCache, RoleNameCache>();
         services.AddSingleton<IConsentPdfRenderer, QuestPdfConsentRenderer>();
         services.AddSingleton<SmtpMessageDispatcher>();
         services.AddScoped<IEmailSender, SmtpEmailSender>();

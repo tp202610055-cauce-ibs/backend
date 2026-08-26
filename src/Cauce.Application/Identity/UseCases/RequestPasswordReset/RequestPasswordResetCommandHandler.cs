@@ -1,3 +1,4 @@
+using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Identity;
@@ -13,6 +14,12 @@ namespace Cauce.Application.Identity.UseCases.RequestPasswordReset;
 /// </summary>
 public sealed class RequestPasswordResetCommandHandler : IRequestHandler<RequestPasswordResetCommand>
 {
+    /// <summary>
+    /// Cliente asumido cuando la petición no declara uno. Es el móvil porque es el único cliente que
+    /// consume hoy este endpoint; el portal web lo enviará explícitamente.
+    /// </summary>
+    private const string DefaultClientId = OidcClients.Mobile;
+
     private readonly IUserRepository _userRepository;
     private readonly IPasswordResetTokenGenerator _tokenGenerator;
     private readonly IPasswordResetTokenRepository _tokenRepository;
@@ -61,7 +68,7 @@ public sealed class RequestPasswordResetCommandHandler : IRequestHandler<Request
         // de este handler; solo se persiste cuando la cuenta existe y se llama a SaveChanges (acta A8).
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        var resetLink = _clientUrlProvider.BuildPasswordResetLink(plainToken);
+        var resetLink = _clientUrlProvider.BuildPasswordResetLink(plainToken, request.ClientId ?? DefaultClientId);
         await _emailSender
             .SendPasswordResetLinkAsync(user.Email, user.FullName, resetLink, cancellationToken)
             .ConfigureAwait(false);

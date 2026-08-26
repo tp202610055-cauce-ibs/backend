@@ -83,7 +83,7 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
                 oldValuesHash: null,
                 newValuesHash: null,
                 additionalContext: JsonSerializer.Serialize(new { actor = "admin_api_key", role = UserRoles.Nutritionist }),
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

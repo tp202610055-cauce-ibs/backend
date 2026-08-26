@@ -166,7 +166,7 @@ public sealed class GenerateRecommendationCommandHandler
                 oldValuesHash: null,
                 newValuesHash: null,
                 additionalContext: fallbackContext,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken: cancellationToken).ConfigureAwait(false);
         }
 
         var requiresReview = recommendation.Status == RecommendationStatus.PendingReview;

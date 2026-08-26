@@ -26,6 +26,20 @@ public interface IKeycloakTokenClient
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Tarea que representa la operación asíncrona.</returns>
     Task LogoutAsync(string refreshToken, string clientId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Renueva los tokens a partir de un refresh token vigente (<c>grant_type=refresh_token</c>). El
+    /// realm tiene rotación activada, así que la respuesta trae un refresh token nuevo y el anterior
+    /// queda revocado: el cliente debe persistir el nuevo.
+    /// </summary>
+    /// <param name="refreshToken">Refresh token vigente.</param>
+    /// <param name="clientId">Identificador del cliente OIDC.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Los tokens renovados.</returns>
+    /// <exception cref="Cauce.Domain.Identity.Exceptions.InvalidRefreshTokenException">
+    /// Si el refresh token expiró, fue revocado o ya se consumió.
+    /// </exception>
+    Task<KeycloakTokenResult> RefreshAsync(string refreshToken, string clientId, CancellationToken ct = default);
 }
 
 /// <summary>
@@ -36,9 +50,14 @@ public interface IKeycloakTokenClient
 /// <param name="ExpiresIn">Vigencia del token de acceso, en segundos.</param>
 /// <param name="RefreshExpiresIn">Vigencia del token de refresco, en segundos.</param>
 /// <param name="TokenType">Tipo de token (por ejemplo, <c>Bearer</c>).</param>
+/// <param name="Subject">
+/// Identificador del usuario en Keycloak, leído del claim <c>sub</c> del access token. Permite
+/// resolver la cuenta local en flujos que no llevan el correo en la petición, como la renovación.
+/// </param>
 public sealed record KeycloakTokenResult(
     string AccessToken,
     string RefreshToken,
     int ExpiresIn,
     int RefreshExpiresIn,
-    string TokenType);
+    string TokenType,
+    string? Subject = null);
