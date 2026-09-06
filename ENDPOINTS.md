@@ -1,11 +1,21 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.0.0 · **Actualizado:** 2026-07-08 · **Contrato:** [`openapi-v1.0.0.json`](openapi-v1.0.0.json) (289 KB, 57 operaciones, ~48 paths)
+**Versión:** 1.1.0 · **Actualizado:** 2026-09-05 · **Contrato:** [`openapi-v1.0.0.json`](openapi-v1.0.0.json) (289 KB, 57 operaciones, ~48 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
 Aquí está el detalle largo: por endpoint, con DTO de request/response, idempotencia, rate limit y códigos de
 respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este documento lo narra.
+
+> **Nota.** `CLAUDE.md` es un documento operativo local: está en el `.gitignore` del backend y no viaja en
+> el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
+> Para el detalle de los siete endpoints de identidad, la fuente autoritativa versionada es
+> [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.1.
+
+**Novedades de la v1.1.0.** Los ocho gaps pre-Mobile-1b (commits `0eb63fd` a `4ee6496`) agregaron dos
+endpoints anónimos (`POST /auth/refresh` y `GET /consent/current`), el objeto `user` en la respuesta de
+login, el 423 `account_locked` con extensión `lockedUntil`, el enlace de restablecimiento parametrizado por
+cliente, y el paso de las claves de `errors` a camelCase.
 
 ## Convenciones
 
@@ -19,7 +29,14 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
-  los `409 unconfirmed_allergens` incluyen `detected` y `allergens[]`.
+  los `409 unconfirmed_allergens` incluyen `detected` y `allergens[]`; los `423 account_locked` incluyen
+  `lockedUntil` (ISO 8601 UTC).
+- **Claves de `errors`:** el diccionario de errores por campo del `validation_error` usa **camelCase** desde
+  el commit `0eb63fd` (antes PascalCase). Ante un 400, leer `errors` primero: siempre está presente. Tratar
+  `errorCode` como opcional, porque un 400 de binding automático de `[ApiController]` no lo trae.
+- **`ProblemDetails` generado:** el esquema del OpenAPI lo declara con `additionalProperties: {}` y solo
+  cinco campos, así que el tipo que emiten los generadores de cliente **no expone** `errorCode`, `errors`,
+  `lockedUntil` ni `retryAfterSeconds`. El cliente debe leer el `Map` crudo de la respuesta.
 - **Idempotencia:** header `Idempotency-Key` (UUID v4). En comidas/síntomas/sync también puede viajar en el
   cuerpo (`clientGuid`). "Requerido" = el endpoint lo exige; "opcional" = lo acepta; "—" = no aplica.
 - **Casing:** el ruteo de ASP.NET Core es **case-insensitive** (una llamada en otra caja resuelve igual); el
@@ -57,6 +74,7 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `invalid_ibs_sss_dimension` | 400 | Dimensión IBS-SSS fuera de 0–100. |
 | `invalid_clinical_note_association` | 400 | La nota no se asocia a exactamente una comida o un síntoma. |
 | `invalid_credentials` | 401 | Login fallido (mensaje genérico; no revela si la cuenta existe). |
+| `invalid_refresh_token` | 401 | Refresh token vencido, revocado o ya consumido (el realm rota y no permite reuso). |
 | *(sin `errorCode`)* | 401 | Falta/expira el Bearer JWT, o falta `X-Admin-Api-Key` en `/admin/*`. |
 | `forbidden` | 403 | Rol incorrecto para la política del endpoint. |
 | `unauthorized_patient_access` | 403 | El nutricionista no está asignado a ese paciente. |
@@ -79,9 +97,10 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `no_active_model_version` | 422 | No hay `ModelVersion` activa. |
 | `patient_has_no_data_in_period` | 422 | El paciente no tiene datos en el período del reporte. |
 | `report_period_invalid` | 422 | Período de reporte inválido. |
-| `account_locked` | 423 | Cuenta bloqueada (brute-force lockout de Keycloak). |
+| `account_locked` | 423 | Cuenta bloqueada por el brute-force lockout de Keycloak (`failureFactor: 5`). Extensión `lockedUntil`. |
 | *(sin `errorCode`)* | 429 | Rate limit superado. Extensión `retryAfterSeconds`. |
 | `keycloak_integration_error` | 502 | Falla del proveedor de identidad al provisionar el usuario. |
+| `user_local_missing` | 500 | El token es válido en Keycloak pero no hay fila local en `users` para ese `sub`. Inconsistencia de identidad, no error del cliente. |
 | `internal_server_error` | 500 | Error inesperado. |
 
 ---
@@ -139,6 +158,26 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 
 ## 2. Autenticación
 
+Los siete endpoints de identidad tienen contrato detallado y versionado en
+[`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.1, incluida la lista completa de `errorCode` por
+flujo. Lo de aquí es el resumen operativo.
+
+### `GET /api/v1/consent/current`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Devuelve el documento de consentimiento vigente. El cliente lo consulta **antes** de registrarse y reenvía la versión y el hash tal cual en `POST /auth/register`. |
+| US/TS | US01 |
+| Autorización | Anónimo (`[AllowAnonymous]`: el paciente aún no tiene cuenta ni token) |
+| Request body | — |
+| Idempotencia | — |
+| Rate limit | `consent-current` (60/min·IP) |
+| Respuestas | **200** `CurrentConsentResult` (version, text, hash) · 429 · 500 |
+
+El `hash` es el SHA-256 del texto en hexadecimal minúscula, 64 caracteres. **No normaliza nada**: no hay
+`Trim` ni conversión CRLF a LF. Replicar el texto del consentimiento en el cliente y computar el hash por
+cuenta propia es frágil y termina en 400 `consent_text_mismatch` en el registro. El flujo correcto es
+consultar este endpoint y devolver los dos valores sin tocarlos.
+
 ### `POST /api/v1/auth/register`
 | Campo | Valor |
 | --- | --- |
@@ -153,13 +192,49 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 ### `POST /api/v1/auth/login`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Passthrough a Keycloak (`grant_type=password`). Devuelve los tokens. |
+| Resumen | Passthrough a Keycloak (`grant_type=password`). Devuelve los tokens y la identidad del usuario. |
 | US/TS | US05, US06 |
 | Autorización | Anónimo |
 | Request body | `LoginRequest` (email, password, clientId) |
 | Idempotencia | — |
 | Rate limit | `auth-login` (10/min·IP) |
-| Respuestas | **200** `LoginResult` (accessToken, refreshToken, expiresIn, refreshExpiresIn, tokenType) · 400 · 401 `invalid_credentials` · 429 · 500 |
+| Respuestas | **200** `LoginResult` (accessToken, refreshToken, expiresIn, refreshExpiresIn, tokenType, **user**) · 400 · 401 `invalid_credentials` · **423** `account_locked` · 429 · 500 |
+
+El objeto `user` (`AuthenticatedUser`) trae `userId`, `keycloakId`, `email`, `role`, `fullName`,
+`emailVerified` e `isInActivePilot`. **`isInActivePilot` no viaja en ningún claim del JWT:** login y refresh
+son los dos únicos puntos del contrato donde el cliente puede conocerlo. No existe un `GET /users/me` y no
+hace falta.
+
+El **423** traduce el brute-force lockout de Keycloak (`failureFactor: 5`) y trae la extensión `lockedUntil`
+en ISO 8601 UTC. Antes del commit `b20e196` ese bloqueo llegaba como un 401 `invalid_credentials`
+indistinguible de una contraseña incorrecta, lo que hacía imposible cumplir US05 CA02.
+
+**El `scope` solicitado depende del `clientId`** (`KeycloakTokenClient.ResolveScope`):
+
+| `clientId` | `scope` | Motivo |
+| --- | --- | --- |
+| `cauce-mobile` | `openid offline_access` | Sin `offline_access` el refresh token queda atado a la sesión SSO del realm, cuyo `ssoSessionIdleTimeout` es de 30 minutos, y la sesión moriría por inactividad mucho antes de los 30 días previstos para el piloto (DEC-B3-01). |
+| cualquier otro | `openid` | El portal web usa sesiones cortas y no lo necesita. |
+
+### `POST /api/v1/auth/refresh`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Renueva la sesión con un refresh token vigente. Devuelve un juego de tokens nuevo, con la misma forma que el login. |
+| US/TS | US08 (continuidad de sesión) |
+| Autorización | Anónimo (la credencial es el propio refresh token) |
+| Request body | `RefreshTokenRequest` (refreshToken, clientId) |
+| Idempotencia | — |
+| Rate limit | `auth-refresh` (20/min·IP) |
+| Respuestas | **200** `LoginResult` (mismo shape que login, `user` incluido) · 400 · 401 `invalid_refresh_token` · 429 · 500 |
+
+**Rotación obligatoria.** El realm tiene `revokeRefreshToken: true` y `refreshTokenMaxReuse: 0`. Cada
+renovación emite un refresh token nuevo e invalida el anterior de inmediato. El cliente **debe** persistir
+el que recibe; reintentar con el anterior devuelve 401 `invalid_refresh_token`.
+
+El access token dura 900 s. Un cliente bien portado renueva cerca de la expiración, o sea unas cuatro veces
+por hora: el límite de 20/min·IP deja margen para ráfagas y para varios dispositivos tras una IP compartida.
+
+Ambos desenlaces quedan auditados: `TokenRefresh` en el éxito y `FailedTokenRefresh` en el fallo.
 
 ### `POST /api/v1/auth/logout`
 | Campo | Valor |
@@ -178,10 +253,22 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | Resumen | Solicita restablecimiento. Responde 200 exista o no la cuenta (no leak). |
 | US/TS | US07 |
 | Autorización | Anónimo |
-| Request body | `RequestPasswordResetRequest` (email) |
+| Request body | `RequestPasswordResetRequest` (email, **clientId?**) |
 | Idempotencia | — |
 | Rate limit | `auth-pwreset` (3/h·IP) |
 | Respuestas | **200** · 400 · 429 · 500 |
+
+`clientId` es opcional por compatibilidad con los clientes que ya consumían el endpoint. Determina el
+destino del enlace que se envía por correo (`ClientUrlProvider`); si se omite, se asume `cauce-mobile`:
+
+| `clientId` recibido | Enlace generado | Base configurable |
+| --- | --- | --- |
+| `cauce-mobile` o ausente | `cauce://auth/password-reset?token={plainToken}` | `Email:MobileAppBaseUrl` |
+| `cauce-web-portal` | `http://localhost:5173/auth/password-reset?token={plainToken}` | `Email:PortalAppBaseUrl` |
+
+Antes del commit `b054719` el enlace se armaba contra `AppBaseUrl`, que en Development apunta al propio
+backend (`http://localhost:5074`), y el correo llegaba con un link que daba 404. El token en el enlace es el
+plaintext; en base de datos solo se guarda su hash SHA-256, con vigencia de 30 minutos.
 
 ### `POST /api/v1/auth/password-reset/confirm`
 | Campo | Valor |

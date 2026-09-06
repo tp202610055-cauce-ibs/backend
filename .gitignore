@@ -427,3 +427,10 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Documentos operativos locales. Se mantienen fuera del repo por decisión de Trigo,
+# en simetría con la regla R7 del repo mobile. Cada developer guarda su respaldo
+# fuera del árbol git: un "discard all changes" borra también los untracked.
+/CLAUDE.md
+/PROMPT-*.md
+/HANDOFF-*.md
