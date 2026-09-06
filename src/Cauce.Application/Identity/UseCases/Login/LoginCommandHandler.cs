@@ -1,6 +1,7 @@
 using Cauce.Application.Common.Auditing;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -73,6 +74,10 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
             throw new UserLocalMissingException();
         }
 
+        // Antes del SaveChanges para que una sola transacción persista la marca de acceso y el estado
+        // de verificación sincronizado.
+        await TrySyncEmailVerifiedAsync(user, cancellationToken).ConfigureAwait(false);
+
         user.RegisterSuccessfulLogin(DateTime.UtcNow);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Login succeeded for user {UserId}.", user.Id);
@@ -95,6 +100,59 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
                 user.FullName,
                 user.EmailVerified,
                 user.IsInActivePilot));
+    }
+
+    /// <summary>
+    /// Sincroniza el estado de verificación del correo desde Keycloak, que es su fuente de verdad: el
+    /// enlace de confirmación lo emite y lo procesa el realm sin pasar por el backend, así que la copia
+    /// local se desactualiza en cuanto el paciente verifica (acta A39).
+    /// </summary>
+    /// <remarks>
+    /// La sincronización es <b>unidireccional</b>: solo promueve un correo a verificado. Si Keycloak
+    /// reporta como no verificado un correo que localmente sí lo está, el valor local no se revierte y
+    /// se registra una advertencia. Des-verificar es un cambio de estado sensible que exige un flujo
+    /// explícito y auditado, no un efecto colateral de un inicio de sesión.
+    /// <para>
+    /// No persiste: la escritura queda en el <c>ChangeTracker</c> y la confirma el
+    /// <c>SaveChangesAsync</c> del llamador, en la misma transacción que la marca de último acceso.
+    /// </para>
+    /// </remarks>
+    /// <param name="user">Usuario local ya autenticado.</param>
+    /// <param name="cancellationToken">Token de cancelación.</param>
+    /// <returns>Tarea que representa la operación asíncrona.</returns>
+    private async Task TrySyncEmailVerifiedAsync(User user, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var verifiedInKeycloak = await _adminClient
+                .GetUserEmailVerifiedAsync(user.KeycloakId, cancellationToken)
+                .ConfigureAwait(false);
+
+            if (verifiedInKeycloak == user.EmailVerified)
+            {
+                return;
+            }
+
+            if (!verifiedInKeycloak)
+            {
+                _logger.LogWarning(
+                    "Keycloak reports an unverified email for user {UserId} that is verified locally; keeping the local value.",
+                    user.Id);
+                return;
+            }
+
+            user.VerifyEmail();
+            _logger.LogInformation("Synced emailVerified from Keycloak for user {UserId}.", user.Id);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // Un fallo de la Admin API no debe convertir un login válido en un error: se degrada al
+            // valor local y la sesión continúa (acta A39, decisión D2).
+            _logger.LogWarning(
+                exception,
+                "Could not sync emailVerified from Keycloak for user {UserId}; continuing with the local value.",
+                user.Id);
+        }
     }
 
     /// <summary>
