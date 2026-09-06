@@ -182,6 +182,28 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     }
 
     /// <inheritdoc />
+    public async Task<bool> GetUserEmailVerifiedAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        using var response = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Get, $"{AdminBaseUrl}/users/{keycloakUserId}"),
+            ct).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            // Incluye el 404 del usuario desincronizado: no se normaliza a false, porque "no lo pude
+            // averiguar" y "no está verificado" son cosas distintas y el llamador debe poder
+            // distinguirlas para no degradar el estado local (acta A39).
+            throw await BuildExceptionAsync(response, "consultar la verificación del correo", ct).ConfigureAwait(false);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+
+        return document.RootElement.TryGetProperty("emailVerified", out var verifiedElement)
+            && verifiedElement.GetBoolean();
+    }
+
+    /// <inheritdoc />
     public async Task<BruteForceStatus?> GetBruteForceStatusAsync(string keycloakUserId, CancellationToken ct = default)
     {
         using var response = await SendAsync(

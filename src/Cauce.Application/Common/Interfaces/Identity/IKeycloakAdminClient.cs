@@ -87,12 +87,6 @@ public interface IKeycloakAdminClient
         CancellationToken ct = default);
 
     /// <summary>
-    /// Busca un usuario por correo electrónico exacto.
-    /// </summary>
-    /// <param name="email">Correo electrónico a buscar.</param>
-    /// <param name="ct">Token de cancelación.</param>
-    /// <returns>El usuario encontrado o <see langword="null"/> si no existe.</returns>
-    /// <summary>
     /// Consulta el estado de detección de fuerza bruta de un usuario. Keycloak es la fuente de verdad
     /// del bloqueo por intentos fallidos: lo aplica el propio realm con <c>bruteForceProtected</c>, y
     /// el backend solo lo traduce a un código de respuesta que el cliente pueda interpretar.
@@ -105,8 +99,25 @@ public interface IKeycloakAdminClient
     Task<BruteForceStatus?> GetBruteForceStatusAsync(string keycloakUserId, CancellationToken ct = default);
 
     /// <summary>
-    /// Busca un usuario por correo electrónico.
+    /// Consulta si el correo del usuario está verificado en Keycloak. Keycloak es la fuente de verdad
+    /// de la verificación: el enlace de confirmación lo emite y lo procesa el propio realm, sin pasar
+    /// por el backend, de modo que la copia local puede quedar desactualizada (acta A39).
     /// </summary>
+    /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns><see langword="true"/> si el correo está verificado en Keycloak.</returns>
+    /// <exception cref="Cauce.Application.Common.Exceptions.KeycloakIntegrationException">
+    /// Si el usuario no existe en Keycloak o la Admin API responde con un error. El llamador decide
+    /// si el fallo es tolerable; en el login lo es (acta A39, decisión D2).
+    /// </exception>
+    Task<bool> GetUserEmailVerifiedAsync(string keycloakUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Busca un usuario por correo electrónico exacto.
+    /// </summary>
+    /// <param name="email">Correo electrónico a buscar.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El usuario encontrado o <see langword="null"/> si no existe.</returns>
     Task<KeycloakUserDto?> FindByEmailAsync(
         string email,
         CancellationToken ct = default);
