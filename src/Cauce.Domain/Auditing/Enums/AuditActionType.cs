@@ -103,5 +103,12 @@ public enum AuditActionType
     /// <summary>
     /// Intento fallido de renovación: el refresh token estaba vencido, revocado o ya consumido.
     /// </summary>
-    FailedTokenRefresh
+    FailedTokenRefresh,
+
+    /// <summary>
+    /// Solicitud de reenvío del correo de verificación (acta A40). Se registra siempre que la petición
+    /// supere la validación, exista o no la cuenta y esté o no verificada, porque la respuesta es
+    /// deliberadamente uniforme y la bitácora es el único lugar donde queda el intento.
+    /// </summary>
+    VerificationEmailResendRequest
 }
