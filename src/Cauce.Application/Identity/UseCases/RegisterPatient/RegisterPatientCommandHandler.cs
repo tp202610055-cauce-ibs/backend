@@ -1,9 +1,9 @@
 using System.Text.Json;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
-using Cauce.Domain.Identity.Events;
 using Cauce.Domain.Identity.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -22,7 +22,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
     private readonly IInvitationCodeRepository _invitationCodeRepository;
     private readonly IConsentRecordRepository _consentRecordRepository;
     private readonly IKeycloakAdminClient _keycloakAdminClient;
-    private readonly IOutboxWriter _outboxWriter;
+    private readonly IPatientNutritionistAssignmentService _assignmentService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditLogger _auditLogger;
     private readonly ILogger<RegisterPatientCommandHandler> _logger;
@@ -36,7 +36,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
         IInvitationCodeRepository invitationCodeRepository,
         IConsentRecordRepository consentRecordRepository,
         IKeycloakAdminClient keycloakAdminClient,
-        IOutboxWriter outboxWriter,
+        IPatientNutritionistAssignmentService assignmentService,
         IUnitOfWork unitOfWork,
         IAuditLogger auditLogger,
         ILogger<RegisterPatientCommandHandler> logger)
@@ -46,7 +46,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
         _invitationCodeRepository = invitationCodeRepository;
         _consentRecordRepository = consentRecordRepository;
         _keycloakAdminClient = keycloakAdminClient;
-        _outboxWriter = outboxWriter;
+        _assignmentService = assignmentService;
         _unitOfWork = unitOfWork;
         _auditLogger = auditLogger;
         _logger = logger;
@@ -92,17 +92,14 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
                 utcNow);
             await _consentRecordRepository.AddAsync(consent, cancellationToken).ConfigureAwait(false);
 
-            invitation?.MarkAsUsed(user.Id, utcNow);
-
-            // US20 CA01: notificar al nutricionista del nuevo paciente vinculado, de forma asíncrona vía
-            // outbox (patrón DEC-B5-04), solo cuando el registro consumió un código de invitación válido.
+            // La vinculación vive en un servicio propio porque el canje post-registro la reutiliza
+            // (acta A41). Aquí se omite el contexto para tomar el de registro, que es el valor por
+            // defecto.
             if (invitation is not null)
             {
-                await _outboxWriter.PublishAsync(
-                    user.Id,
-                    nameof(User),
-                    new PatientLinkedToNutritionistEvent(user.Id, invitation.NutritionistId, invitation.Id, utcNow),
-                    cancellationToken).ConfigureAwait(false);
+                await _assignmentService
+                    .ConsumeInvitationAsync(user.Id, invitation, utcNow, ct: cancellationToken)
+                    .ConfigureAwait(false);
             }
 
             // Auditoría explícita ANTES del SaveChanges: users no tiene trigger, así que una sola

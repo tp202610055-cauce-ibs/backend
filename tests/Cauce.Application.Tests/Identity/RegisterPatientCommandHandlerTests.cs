@@ -1,5 +1,6 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Identity.UseCases.RegisterPatient;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
@@ -21,7 +22,8 @@ public sealed class RegisterPatientCommandHandlerTests
     private readonly IInvitationCodeRepository _invitationCodeRepository = Substitute.For<IInvitationCodeRepository>();
     private readonly IConsentRecordRepository _consentRecordRepository = Substitute.For<IConsentRecordRepository>();
     private readonly IKeycloakAdminClient _keycloakAdminClient = Substitute.For<IKeycloakAdminClient>();
-    private readonly IOutboxWriter _outboxWriter = Substitute.For<IOutboxWriter>();
+    private readonly IPatientNutritionistAssignmentService _assignmentService =
+        Substitute.For<IPatientNutritionistAssignmentService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ILogger<RegisterPatientCommandHandler> _logger = Substitute.For<ILogger<RegisterPatientCommandHandler>>();
@@ -32,7 +34,7 @@ public sealed class RegisterPatientCommandHandlerTests
         _invitationCodeRepository,
         _consentRecordRepository,
         _keycloakAdminClient,
-        _outboxWriter,
+        _assignmentService,
         _unitOfWork,
         _auditLogger,
         _logger);
