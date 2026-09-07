@@ -84,6 +84,41 @@ public sealed class KeycloakAdminClientTests
             .Should().EndWith($"/admin/realms/cauce/users/{KeycloakId}");
     }
 
+    [Fact]
+    public async Task SendVerifyEmailAsync_KeycloakAccepts_DoesNotThrow()
+    {
+        var client = CreateClient(new HttpResponseMessage(HttpStatusCode.NoContent));
+
+        var act = async () => await client.SendVerifyEmailAsync(KeycloakId);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SendVerifyEmailAsync_KeycloakFails_ThrowsKeycloakIntegrationException()
+    {
+        var client = CreateClient(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        var act = async () => await client.SendVerifyEmailAsync(KeycloakId);
+
+        // El cliente propaga: quien decide si el fallo es tolerable es el llamador. En el reenvío lo es,
+        // en el registro no.
+        await act.Should().ThrowAsync<KeycloakIntegrationException>();
+    }
+
+    [Fact]
+    public async Task SendVerifyEmailAsync_PostsToTheSendVerifyEmailAction()
+    {
+        var handler = new RoutingHandler(new HttpResponseMessage(HttpStatusCode.NoContent));
+        var client = CreateClient(handler);
+
+        await client.SendVerifyEmailAsync(KeycloakId);
+
+        handler.LastAdminRequestUri!.AbsolutePath
+            .Should().EndWith($"/admin/realms/cauce/users/{KeycloakId}/send-verify-email");
+        handler.LastAdminRequestMethod.Should().Be(HttpMethod.Put);
+    }
+
     private static KeycloakAdminClient CreateClient(HttpResponseMessage adminResponse) =>
         CreateClient(new RoutingHandler(adminResponse));
 
@@ -124,6 +159,8 @@ public sealed class KeycloakAdminClientTests
 
         public Uri? LastAdminRequestUri { get; private set; }
 
+        public HttpMethod? LastAdminRequestMethod { get; private set; }
+
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
@@ -140,6 +177,7 @@ public sealed class KeycloakAdminClientTests
             }
 
             LastAdminRequestUri = request.RequestUri;
+            LastAdminRequestMethod = request.Method;
             return Task.FromResult(_adminResponse);
         }
     }
