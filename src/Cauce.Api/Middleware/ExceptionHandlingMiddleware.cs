@@ -105,6 +105,13 @@ public sealed class ExceptionHandlingMiddleware
                 problemDetails.Extensions["lockedUntil"] = lockedException.LockedUntil;
             }
 
+            if (exception is NutritionistNotAvailableException nutritionistException)
+            {
+                // Un solo errorCode para el escenario, con el estado exacto en la extensión: el cliente
+                // puede afinar el mensaje o ignorarlo y mostrar uno genérico (acta A41, decisión D11).
+                problemDetails.Extensions["reason"] = nutritionistException.Reason;
+            }
+
             if (problemDetails.Status == StatusCodes.Status500InternalServerError)
             {
                 _logger.LogError(
@@ -191,6 +198,10 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status404NotFound, "Alergia no encontrada", "allergy_not_found", exception.Message),
             NutritionistAssignmentAlreadyExistsException => (
                 StatusCodes.Status409Conflict, "Asignación ya existente", "nutritionist_assignment_exists", exception.Message),
+            PatientAlreadyAssignedException => (
+                StatusCodes.Status409Conflict, "Paciente ya asignado", "patient_already_assigned", exception.Message),
+            NutritionistNotAvailableException => (
+                StatusCodes.Status409Conflict, "Nutricionista no disponible", "nutritionist_not_available", exception.Message),
             OnboardingAlreadyCompletedException => (
                 StatusCodes.Status409Conflict, "Onboarding ya completado", "onboarding_already_completed", exception.Message),
             PatientAccessNotAuthorizedException => (

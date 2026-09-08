@@ -110,5 +110,12 @@ public enum AuditActionType
     /// supere la validación, exista o no la cuenta y esté o no verificada, porque la respuesta es
     /// deliberadamente uniforme y la bitácora es el único lugar donde queda el intento.
     /// </summary>
-    VerificationEmailResendRequest
+    VerificationEmailResendRequest,
+
+    /// <summary>
+    /// Canje de un código de invitación para vincular a un paciente con su nutricionista después del
+    /// registro (acta A41). Se registra tanto el canje efectivo como el rechazado, con el motivo en el
+    /// contexto adicional, porque un rechazo es justamente lo que interesa investigar después.
+    /// </summary>
+    NutritionistAssignment
 }
