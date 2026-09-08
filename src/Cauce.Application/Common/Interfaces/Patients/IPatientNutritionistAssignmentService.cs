@@ -63,4 +63,23 @@ public interface IPatientNutritionistAssignmentService
         Guid patientId,
         DateTime utcNow,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Establece la asignación a partir de un código ya resuelto, sin volver a consultarlo.
+    /// </summary>
+    /// <remarks>
+    /// Necesaria cuando el consumo del código y el establecimiento del vínculo ocurren en la misma
+    /// transacción, como en el canje post-registro: allí <c>MarkAsUsed</c> todavía no se persistió, así
+    /// que la búsqueda por paciente de la otra sobrecarga no encontraría nada.
+    /// </remarks>
+    /// <param name="patientId">Identificador de la cuenta del paciente.</param>
+    /// <param name="invitation">Código de invitación ya resuelto y consumido por este paciente.</param>
+    /// <param name="utcNow">Momento de la operación, en UTC.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Si se creó la asignación y, en ese caso, su identificador.</returns>
+    Task<(bool Assigned, Guid? AssignmentId)> EstablishAssignmentAsync(
+        Guid patientId,
+        InvitationCode invitation,
+        DateTime utcNow,
+        CancellationToken ct = default);
 }

@@ -68,6 +68,16 @@ public sealed class PatientNutritionistAssignmentService : IPatientNutritionistA
             return (false, null);
         }
 
+        return await EstablishAssignmentAsync(patientId, invitation, utcNow, ct).ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<(bool Assigned, Guid? AssignmentId)> EstablishAssignmentAsync(
+        Guid patientId,
+        InvitationCode invitation,
+        DateTime utcNow,
+        CancellationToken ct = default)
+    {
         if (await _nutritionistPatientRepository
             .ActiveAssignmentExistsAsync(invitation.NutritionistId, patientId, ct)
             .ConfigureAwait(false))

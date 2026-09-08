@@ -93,6 +93,39 @@ public sealed class PatientNutritionistAssignmentServiceTests
             .AddAsync(Arg.Any<NutritionistPatient>(), Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task EstablishAssignmentAsync_WithAResolvedCode_DoesNotQueryTheRepository()
+    {
+        // Sobrecarga para el canje post-registro: el MarkAsUsed todavía no se persistió, así que buscar
+        // el código por paciente no lo encontraría y el vínculo no se crearía.
+        _nutritionistPatientRepository
+            .ActiveAssignmentExistsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(false);
+
+        var (assigned, assignmentId) = await CreateService()
+            .EstablishAssignmentAsync(Guid.NewGuid(), AnInvitation(), DateTime.UtcNow, CancellationToken.None);
+
+        assigned.Should().BeTrue();
+        assignmentId.Should().NotBeNull();
+        await _invitationCodeRepository.DidNotReceive()
+            .FindByUsedByPatientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EstablishAssignmentAsync_WithAResolvedCode_StillRespectsAnActiveAssignment()
+    {
+        _nutritionistPatientRepository
+            .ActiveAssignmentExistsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+
+        var (assigned, _) = await CreateService()
+            .EstablishAssignmentAsync(Guid.NewGuid(), AnInvitation(), DateTime.UtcNow, CancellationToken.None);
+
+        assigned.Should().BeFalse();
+        await _nutritionistPatientRepository.DidNotReceive()
+            .AddAsync(Arg.Any<NutritionistPatient>(), Arg.Any<CancellationToken>());
+    }
+
     // ----- ConsumeInvitationAsync -----
 
     [Fact]
