@@ -1,5 +1,9 @@
 # Estado de los Gaps de Backend — Pre-Mobile-1b
 
+> **Este documento cubre dos bloques.** La parte histórica, desde aquí hasta el final, es el diagnóstico
+> y cierre de los 8 gaps previos a Mobile-1b. El bloque **Backend-Fix-2** tiene su propia sección, más
+> abajo, y no altera nada de lo anterior. Ir a [Backend-Fix-2](#backend-fix-2).
+
 **Fecha de verificación:** 20 de agosto de 2026
 **Fecha de cierre:** 25 de agosto de 2026
 **Backend al verificar:** `develop` @ `b2dfd9c` (tag `v0.6.2-dev-seed`)
@@ -142,3 +146,42 @@ OpenAPI, donde hoy no aparece en ningún endpoint (P8.7).
 **Gaps listos para especificar hoy sin más decisiones: 3 y 4.**
 **Gaps que exigen levantar el entorno antes de estimar: 7.**
 **Gaps que exigen una decisión de arquitectura previa: 1, 2, 5, 8.**
+
+---
+
+## Backend-Fix-2
+
+**Última actualización:** 2026-09-08
+**Backend al cerrar:** `feature/backend-fix-2-for-mobile`, tag `v0.8.0-backend-fix-2`
+**Alcance:** las tres deudas técnicas de identidad que quedaron abiertas tras el bloque anterior, más la
+documentación formal de las deudas que se difieren.
+
+Los identificadores de commit no se replican aquí ni en las actas: viven en el historial de git, que es
+su fuente de verdad. Cada acta declara en su estado el bloque y el tag donde se resolvió.
+
+### Deudas cerradas en Backend-Fix-2
+
+| Acta | Deuda | Archivo | Cómo se resolvió |
+|---|---|---|---|
+| **A39** | `emailVerified` desincronizado con Keycloak | [`A39-lazy-sync-emailverified.md`](../decisions/A39-lazy-sync-emailverified.md) | El login consulta el estado real en Keycloak y promueve el valor local si difiere. Es unidireccional (solo `false → true`) y tolerante a fallos: si la Admin API no responde, la sesión continúa con el valor local |
+| **A40** | Sin reenvío del correo de verificación | [`A40-verification-email-resend-endpoint.md`](../decisions/A40-verification-email-resend-endpoint.md) | Endpoint anónimo `POST /auth/verification-email/resend`, con respuesta 200 uniforme que no revela si la cuenta existe ni si está verificada, y rate limit de 3/hora particionado por correo normalizado |
+| **A41** | Sin canje de código de invitación posterior al registro | [`A41-nutritionist-assignment-endpoint.md`](../decisions/A41-nutritionist-assignment-endpoint.md) | Endpoint `POST /patients/me/nutritionist-assignment` con `Policy=Patient`, precedido del refactor que extrajo la vinculación a un servicio dedicado. El código no se consume si el canje falla |
+
+### Deudas diferidas identificadas
+
+| Acta | Deuda | Archivo | Se resuelve en |
+|---|---|---|---|
+| **A38** | `isInActivePilot` hardcodeado | [`A38-isinactivepilot-hardcoded.md`](../decisions/A38-isinactivepilot-hardcoded.md) | **Sin bloque asignado.** Bloqueada por una dependencia externa: la lista definitiva de pacientes del piloto, que debe entregar el Complejo Hospitalario Guillermo Kaelín |
+| **A47** | Sin ciclo de vida de cuentas de nutricionista | [`A47-nutritionist-deferred-activation-debt.md`](../decisions/A47-nutritionist-deferred-activation-debt.md) | **Nutritionist-Activation-1.** Sin bloqueante externo: `Activate`, `Suspend` y `Reactivate` existen en el dominio pero no tienen ningún llamador en la aplicación |
+
+### Decisiones emergentes durante la ejecución
+
+Cuatro decisiones de arquitectura surgieron durante el bloque y se registraron antes de aplicarse, según
+la regla R8.
+
+| Acta | Tema |
+|---|---|
+| [**A43**](../decisions/A43-domain-event-for-nutritionist-notification.md) | Reemplaza a la decisión D6: la notificación al nutricionista se resuelve reusando el evento de dominio existente, con el texto parametrizado por contexto. Evitó un doble correo por canje |
+| [**A44**](../decisions/A44-rate-limit-partition-by-request-body.md) | Partición del rate limit por el correo del cuerpo de la petición, mediante un middleware previo al limitador |
+| [**A45**](../decisions/A45-test-migration-on-constructor-refactor.md) | Marco para migrar pruebas en un refactor por inyección de constructor, distinguiendo el intercambio mecánico de la reexpresión al nivel correcto |
+| [**A46**](../decisions/A46-swashbuckle-cli-tool.md) | Swashbuckle CLI como herramienta local para regenerar el snapshot OpenAPI de forma reproducible |
