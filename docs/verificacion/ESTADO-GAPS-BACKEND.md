@@ -173,6 +173,7 @@ su fuente de verdad. Cada acta declara en su estado el bloque y el tag donde se 
 |---|---|---|---|
 | **A38** | `isInActivePilot` hardcodeado | [`A38-isinactivepilot-hardcoded.md`](../decisions/A38-isinactivepilot-hardcoded.md) | **Sin bloque asignado.** Bloqueada por una dependencia externa: la lista definitiva de pacientes del piloto, que debe entregar el Complejo Hospitalario Guillermo Kaelín |
 | **A47** | Sin ciclo de vida de cuentas de nutricionista | [`A47-nutritionist-deferred-activation-debt.md`](../decisions/A47-nutritionist-deferred-activation-debt.md) | **Nutritionist-Activation-1.** Sin bloqueante externo: `Activate`, `Suspend` y `Reactivate` existen en el dominio pero no tienen ningún llamador en la aplicación |
+| **A48** | Asimetría en la persistencia de la auditoría de intentos anónimos | [`A48-audit-persistence-asymmetry.md`](../decisions/A48-audit-persistence-asymmetry.md) | **Por definir, recomendado antes de Deployment-1.** `password-reset/request` descarta su fila de auditoría cuando la cuenta no existe; `verification-email/resend` la persiste. Descubierta en el smoke de cierre |
 
 ### Decisiones emergentes durante la ejecución
 
@@ -185,3 +186,32 @@ la regla R8.
 | [**A44**](../decisions/A44-rate-limit-partition-by-request-body.md) | Partición del rate limit por el correo del cuerpo de la petición, mediante un middleware previo al limitador |
 | [**A45**](../decisions/A45-test-migration-on-constructor-refactor.md) | Marco para migrar pruebas en un refactor por inyección de constructor, distinguiendo el intercambio mecánico de la reexpresión al nivel correcto |
 | [**A46**](../decisions/A46-swashbuckle-cli-tool.md) | Swashbuckle CLI como herramienta local para regenerar el snapshot OpenAPI de forma reproducible |
+
+### Hallazgo de instrumentación: `Cauce.Api` no se mide
+
+Detectado al medir la cobertura de cierre del bloque. **No requiere acta formal: es un cambio de
+configuración, no una decisión de arquitectura.** Se registra aquí para que un bloque futuro lo tome.
+
+`Cauce.Api` **no aparece en ninguno de los cuatro archivos `coverage.cobertura.xml`** que produce
+`dotnet test --collect:"XPlat Code Coverage"`. Solo se instrumentan `Cauce.Domain`, `Cauce.Application`
+y `Cauce.Infrastructure`. Los controllers, el middleware y las ocho políticas de rate limit no tienen
+cifra de cobertura, pese a que las 186 pruebas de integración los ejercitan vía
+`WebApplicationFactory`.
+
+La causa es que las pruebas de integración referencian el proyecto de API y coverlet instrumenta los
+ensamblados que la corrida carga, pero el filtro efectivo deja fuera a `Cauce.Api`. El arreglo es
+declarar el include explícitamente, con un `runsettings` o con
+`/p:Include="[Cauce.*]*"`, y verificar que el archivo resultante trae el paquete.
+
+**Segundo hallazgo, del mismo origen.** La cifra histórica de «>85% global» que declaraban `CLAUDE.md`
+y los criterios de calidad del bloque **incluye las migraciones de EF Core**, que son código generado.
+`Cauce.Infrastructure` tiene 25 684 líneas instrumentadas, de las cuales **20 065 son migraciones**,
+que se ejecutan al crear la base en las pruebas y cuentan como cubiertas. Medido el 2026-09-09:
+
+| Medición | Líneas | Ramas |
+|---|---|---|
+| Incluyendo migraciones EF | 89,6 % | 57,1 % |
+| **Excluyendo migraciones EF** | **76,1 %** | **57,1 %** |
+
+La cifra defendible es la segunda. Un bloque futuro debería excluir las migraciones del cálculo, además
+de instrumentar `Cauce.Api`, para que el número que se reporte signifique algo.
