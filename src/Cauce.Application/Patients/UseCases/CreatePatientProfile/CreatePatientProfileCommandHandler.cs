@@ -19,8 +19,7 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
     private readonly IPatientProfileRepository _patientProfileRepository;
-    private readonly IInvitationCodeRepository _invitationCodeRepository;
-    private readonly INutritionistPatientRepository _nutritionistPatientRepository;
+    private readonly IPatientNutritionistAssignmentService _assignmentService;
     private readonly IBmiCalculator _bmiCalculator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<CreatePatientProfileCommandHandler> _logger;
@@ -32,8 +31,7 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
         ICurrentUserService currentUserService,
         IUserRepository userRepository,
         IPatientProfileRepository patientProfileRepository,
-        IInvitationCodeRepository invitationCodeRepository,
-        INutritionistPatientRepository nutritionistPatientRepository,
+        IPatientNutritionistAssignmentService assignmentService,
         IBmiCalculator bmiCalculator,
         IUnitOfWork unitOfWork,
         ILogger<CreatePatientProfileCommandHandler> logger)
@@ -41,8 +39,7 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _patientProfileRepository = patientProfileRepository;
-        _invitationCodeRepository = invitationCodeRepository;
-        _nutritionistPatientRepository = nutritionistPatientRepository;
+        _assignmentService = assignmentService;
         _bmiCalculator = bmiCalculator;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -73,7 +70,9 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
 
         await _patientProfileRepository.AddAsync(profile, cancellationToken).ConfigureAwait(false);
 
-        var (assigned, assignmentId) = await TryEstablishAssignmentAsync(user.Id, utcNow, cancellationToken).ConfigureAwait(false);
+        var (assigned, assignmentId) = await _assignmentService
+            .EstablishAssignmentAsync(user.Id, utcNow, cancellationToken)
+            .ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
@@ -105,21 +104,4 @@ public sealed class CreatePatientProfileCommandHandler : IRequestHandler<CreateP
         return user;
     }
 
-    private async Task<(bool Assigned, Guid? AssignmentId)> TryEstablishAssignmentAsync(Guid patientId, DateTime utcNow, CancellationToken ct)
-    {
-        var invitation = await _invitationCodeRepository.FindByUsedByPatientIdAsync(patientId, ct).ConfigureAwait(false);
-        if (invitation is null)
-        {
-            return (false, null);
-        }
-
-        if (await _nutritionistPatientRepository.ActiveAssignmentExistsAsync(invitation.NutritionistId, patientId, ct).ConfigureAwait(false))
-        {
-            return (false, null);
-        }
-
-        var assignment = NutritionistPatient.Establish(Guid.NewGuid(), invitation.NutritionistId, patientId, invitation.Id, utcNow);
-        await _nutritionistPatientRepository.AddAsync(assignment, ct).ConfigureAwait(false);
-        return (true, assignment.Id);
-    }
 }

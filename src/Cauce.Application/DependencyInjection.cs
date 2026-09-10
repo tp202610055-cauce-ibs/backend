@@ -1,5 +1,7 @@
 using Cauce.Application.Common.Behaviors;
 using Cauce.Application.Common.Idempotency;
+using Cauce.Application.Common.Interfaces.Patients;
+using Cauce.Application.Patients.Services;
 using FluentValidation;
 using Mapster;
 using MapsterMapper;
@@ -42,6 +44,10 @@ public static class DependencyInjection
 
         // Contexto de idempotencia con alcance de petición, actualizado por el behavior.
         services.AddScoped<IIdempotencyContext, IdempotencyContext>();
+
+        // Vinculación paciente-nutricionista, compartida entre el registro, la creación de perfil y el
+        // canje post-registro (acta A41).
+        services.AddScoped<IPatientNutritionistAssignmentService, PatientNutritionistAssignmentService>();
 
         var typeAdapterConfig = TypeAdapterConfig.GlobalSettings;
         typeAdapterConfig.Scan(applicationAssembly);

@@ -6,6 +6,7 @@ using Cauce.Application.Identity.UseCases.Logout;
 using Cauce.Application.Identity.UseCases.RefreshToken;
 using Cauce.Application.Identity.UseCases.RegisterPatient;
 using Cauce.Application.Identity.UseCases.RequestPasswordReset;
+using Cauce.Application.Identity.UseCases.ResendVerificationEmail;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -177,6 +178,31 @@ public sealed class AuthController : BaseApiController
     {
         var command = new ConfirmPasswordResetCommand(request.Token, request.NewPassword);
         await _mediator.Send(command, ct);
+        return Ok();
+    }
+
+    /// <summary>
+    /// Reenvía el correo de verificación de una cuenta. Responde 200 siempre que la petición supere la
+    /// validación, exista o no la cuenta y esté o no verificada, para no revelar qué correos están
+    /// registrados ni su estado.
+    /// </summary>
+    /// <param name="request">Correo de la cuenta.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>200 si la petición fue aceptada.</returns>
+    [AllowAnonymous]
+    [HttpPost("verification-email/resend")]
+    [EnableRateLimiting(RateLimitingPolicies.AuthVerifyResend)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ResendVerificationEmail(
+        [FromBody] ResendVerificationEmailRequest request,
+        CancellationToken ct)
+    {
+        // Se normaliza aquí, igual que en la partición del rate limit, para que ambas miren la misma
+        // clave y una variación de caja no eluda el límite.
+        var normalizedEmail = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        await _mediator.Send(new ResendVerificationEmailCommand(normalizedEmail), ct);
         return Ok();
     }
 

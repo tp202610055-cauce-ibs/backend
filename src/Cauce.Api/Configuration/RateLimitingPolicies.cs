@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Cauce.Api.Middleware;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -55,7 +56,15 @@ public static class RateLimitingPolicies
     public const string AuthRefresh = "auth-refresh";
 
     /// <summary>
-    /// Registra las seis políticas de limitación de tasa y el comportamiento de
+    /// Política para el reenvío del correo de verificación: 3 peticiones por hora, particionadas por el
+    /// correo normalizado del cuerpo y no por IP (acta A40, decisión D3). Particionar por IP dejaría que
+    /// un usuario legítimo tras una NAT compartida agotara el cupo de sus vecinos, y no frenaría a quien
+    /// hostiga un mismo buzón desde direcciones distintas.
+    /// </summary>
+    public const string AuthVerifyResend = "auth-verify-resend";
+
+    /// <summary>
+    /// Registra las ocho políticas de limitación de tasa y el comportamiento de
     /// rechazo (respuesta 429 con detalle de problema RFC 7807).
     /// </summary>
     /// <param name="options">Opciones del limitador de tasa a configurar.</param>
@@ -68,6 +77,7 @@ public static class RateLimitingPolicies
         AddIpFixedWindow(options, AuthPasswordReset, permitLimit: 3, window: TimeSpan.FromHours(1));
         AddIpFixedWindow(options, ConsentCurrent, permitLimit: 60, window: TimeSpan.FromMinutes(1));
         AddIpFixedWindow(options, AuthRefresh, permitLimit: 20, window: TimeSpan.FromMinutes(1));
+        AddEmailFixedWindow(options, AuthVerifyResend, permitLimit: 3, window: TimeSpan.FromHours(1));
         AddUserFixedWindow(options, DefaultAuthenticated, permitLimit: 60, window: TimeSpan.FromMinutes(1));
         AddUserFixedWindow(options, Sync, permitLimit: 120, window: TimeSpan.FromMinutes(1));
 
@@ -108,6 +118,41 @@ public static class RateLimitingPolicies
         options.AddPolicy(policyName, httpContext =>
         {
             var partitionKey = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey,
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = permitLimit,
+                    Window = window
+                });
+        });
+    }
+
+    /// <summary>
+    /// Registra una política particionada por el correo normalizado que
+    /// <see cref="VerificationResendPartitionMiddleware"/> dejó en <see cref="HttpContext.Items"/>.
+    /// </summary>
+    /// <param name="options">Opciones del limitador de tasa.</param>
+    /// <param name="policyName">Nombre de la política.</param>
+    /// <param name="permitLimit">Peticiones permitidas por ventana.</param>
+    /// <param name="window">Duración de la ventana fija.</param>
+    private static void AddEmailFixedWindow(
+        RateLimiterOptions options,
+        string policyName,
+        int permitLimit,
+        TimeSpan window)
+    {
+        options.AddPolicy(policyName, httpContext =>
+        {
+            // Sin correo utilizable (cuerpo malformado o ausente) se cae a la IP de origen. Una clave
+            // compartida permitiría agotar el cupo de todos enviando cuerpos inválidos.
+            var email = httpContext.Items.TryGetValue(VerificationResendPartitionMiddleware.EmailItemKey, out var value)
+                ? value as string
+                : null;
+
+            var partitionKey = email
+                ?? $"ip:{httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown"}";
+
             return RateLimitPartition.GetFixedWindowLimiter(
                 partitionKey,
                 _ => new FixedWindowRateLimiterOptions

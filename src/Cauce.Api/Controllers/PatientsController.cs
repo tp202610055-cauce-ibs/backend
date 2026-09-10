@@ -1,6 +1,7 @@
 using Cauce.Api.Contracts.Patients;
 using Cauce.Application.Identity.UseCases.GetMyConsentPdf;
 using Cauce.Application.Patients.Dtos;
+using Cauce.Application.Patients.UseCases.AssignNutritionist;
 using Cauce.Application.Patients.UseCases.CreatePatientProfile;
 using Cauce.Application.Patients.UseCases.DeclarePatientAllergy;
 using Cauce.Application.Patients.UseCases.DeleteMyAccount;
@@ -228,5 +229,33 @@ public sealed class PatientsController : BaseApiController
     {
         var result = await _mediator.Send(new GenerateMyClinicalReportCommand(), ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Canjea un código de invitación para vincular al paciente autenticado con un nutricionista
+    /// (US20 CA02, acta A41). Está pensado para quienes se registraron sin código y no tenían forma de
+    /// vincularse después.
+    /// </summary>
+    /// <param name="request">Código de invitación a canjear.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Los datos del nutricionista asignado, con código 201.</returns>
+    /// <remarks>
+    /// El 409 <c>nutritionist_not_available</c> incluye la extensión <c>reason</c> con el estado exacto
+    /// de la cuenta del nutricionista: <c>pending_activation</c>, <c>inactive</c> o <c>suspended</c>.
+    /// En ese caso el código <b>no</b> se consume.
+    /// </remarks>
+    [HttpPost("me/nutritionist-assignment")]
+    [ProducesResponseType(typeof(AssignNutritionistResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> AssignNutritionist(
+        [FromBody] AssignNutritionistRequest request,
+        CancellationToken ct)
+    {
+        // Se normaliza antes de validar para que el formato de mayúsculas del código no dependa de cómo
+        // lo haya tipeado el paciente.
+        var normalizedCode = request.InvitationCode?.Trim().ToUpperInvariant() ?? string.Empty;
+        var result = await _mediator.Send(new AssignNutritionistCommand(normalizedCode), ct);
+        return StatusCode(StatusCodes.Status201Created, result);
     }
 }

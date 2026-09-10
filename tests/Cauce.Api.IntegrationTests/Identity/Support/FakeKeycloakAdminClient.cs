@@ -54,6 +54,27 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
             LockedUntil: lockedUntil);
     }
 
+    /// <summary>
+    /// Estado de verificación del correo que devuelve el doble, indexado por identificador de
+    /// Keycloak. Si un usuario no está aquí, se considera no verificado.
+    /// </summary>
+    public ConcurrentDictionary<string, bool> EmailVerifiedByKeycloakId { get; } = new();
+
+    /// <summary>
+    /// Excepción que lanza <see cref="GetUserEmailVerifiedAsync"/>, para ejercitar la degradación del
+    /// login cuando la Admin API no responde (acta A39).
+    /// </summary>
+    public Exception? EmailVerifiedFailure { get; set; }
+
+    /// <summary>
+    /// Marca el correo de un usuario como verificado en Keycloak, sin tocar la copia local.
+    /// </summary>
+    /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
+    public void MarkEmailVerifiedInKeycloak(string keycloakUserId)
+    {
+        EmailVerifiedByKeycloakId[keycloakUserId] = true;
+    }
+
     /// <inheritdoc />
     public Task<BruteForceStatus?> GetBruteForceStatusAsync(string keycloakUserId, CancellationToken ct = default)
     {
@@ -63,6 +84,18 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
         }
 
         return Task.FromResult(BruteForceStatuses.TryGetValue(keycloakUserId, out var status) ? status : null);
+    }
+
+    /// <inheritdoc />
+    public Task<bool> GetUserEmailVerifiedAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        if (EmailVerifiedFailure is not null)
+        {
+            throw EmailVerifiedFailure;
+        }
+
+        return Task.FromResult(
+            EmailVerifiedByKeycloakId.TryGetValue(keycloakUserId, out var verified) && verified);
     }
 
     /// <inheritdoc />

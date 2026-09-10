@@ -23,8 +23,8 @@ public sealed class CreatePatientProfileCommandHandlerTests
     private readonly ICurrentUserService _currentUserService = Substitute.For<ICurrentUserService>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly IPatientProfileRepository _patientProfileRepository = Substitute.For<IPatientProfileRepository>();
-    private readonly IInvitationCodeRepository _invitationCodeRepository = Substitute.For<IInvitationCodeRepository>();
-    private readonly INutritionistPatientRepository _nutritionistPatientRepository = Substitute.For<INutritionistPatientRepository>();
+    private readonly IPatientNutritionistAssignmentService _assignmentService =
+        Substitute.For<IPatientNutritionistAssignmentService>();
     private readonly IBmiCalculator _bmiCalculator = Substitute.For<IBmiCalculator>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<CreatePatientProfileCommandHandler> _logger = Substitute.For<ILogger<CreatePatientProfileCommandHandler>>();
@@ -33,8 +33,7 @@ public sealed class CreatePatientProfileCommandHandlerTests
         _currentUserService,
         _userRepository,
         _patientProfileRepository,
-        _invitationCodeRepository,
-        _nutritionistPatientRepository,
+        _assignmentService,
         _bmiCalculator,
         _unitOfWork,
         _logger);
@@ -64,14 +63,15 @@ public sealed class CreatePatientProfileCommandHandlerTests
     {
         ArrangePatient();
         _patientProfileRepository.ExistsByUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
-        _invitationCodeRepository.FindByUsedByPatientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns((InvitationCode?)null);
+        _assignmentService
+            .EstablishAssignmentAsync(Arg.Any<Guid>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns((false, (Guid?)null));
 
         var result = await CreateHandler().Handle(ValidCommand(), CancellationToken.None);
 
         result.NutritionistAssigned.Should().BeFalse();
         result.NutritionistAssignmentId.Should().BeNull();
         await _patientProfileRepository.Received(1).AddAsync(Arg.Any<PatientProfile>(), Arg.Any<CancellationToken>());
-        await _nutritionistPatientRepository.DidNotReceive().AddAsync(Arg.Any<NutritionistPatient>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -79,15 +79,17 @@ public sealed class CreatePatientProfileCommandHandlerTests
     {
         ArrangePatient();
         _patientProfileRepository.ExistsByUserIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
-        var invitation = InvitationCode.Generate(Guid.NewGuid(), "ABCDEFGH", Guid.NewGuid(), DateTime.UtcNow, InvitationCode.Validity);
-        _invitationCodeRepository.FindByUsedByPatientIdAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(invitation);
-        _nutritionistPatientRepository.ActiveAssignmentExistsAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(false);
+        var assignmentId = Guid.NewGuid();
+        _assignmentService
+            .EstablishAssignmentAsync(Arg.Any<Guid>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
+            .Returns((true, (Guid?)assignmentId));
 
         var result = await CreateHandler().Handle(ValidCommand(), CancellationToken.None);
 
         result.NutritionistAssigned.Should().BeTrue();
-        result.NutritionistAssignmentId.Should().NotBeNull();
-        await _nutritionistPatientRepository.Received(1).AddAsync(Arg.Any<NutritionistPatient>(), Arg.Any<CancellationToken>());
+        result.NutritionistAssignmentId.Should().Be(assignmentId);
+        await _assignmentService.Received(1)
+            .EstablishAssignmentAsync(Arg.Any<Guid>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

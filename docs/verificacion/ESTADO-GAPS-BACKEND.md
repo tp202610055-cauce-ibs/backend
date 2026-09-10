@@ -1,5 +1,9 @@
 # Estado de los Gaps de Backend — Pre-Mobile-1b
 
+> **Este documento cubre dos bloques.** La parte histórica, desde aquí hasta el final, es el diagnóstico
+> y cierre de los 8 gaps previos a Mobile-1b. El bloque **Backend-Fix-2** tiene su propia sección, más
+> abajo, y no altera nada de lo anterior. Ir a [Backend-Fix-2](#backend-fix-2).
+
 **Fecha de verificación:** 20 de agosto de 2026
 **Fecha de cierre:** 25 de agosto de 2026
 **Backend al verificar:** `develop` @ `b2dfd9c` (tag `v0.6.2-dev-seed`)
@@ -142,3 +146,72 @@ OpenAPI, donde hoy no aparece en ningún endpoint (P8.7).
 **Gaps listos para especificar hoy sin más decisiones: 3 y 4.**
 **Gaps que exigen levantar el entorno antes de estimar: 7.**
 **Gaps que exigen una decisión de arquitectura previa: 1, 2, 5, 8.**
+
+---
+
+## Backend-Fix-2
+
+**Última actualización:** 2026-09-08
+**Backend al cerrar:** `feature/backend-fix-2-for-mobile`, tag `v0.8.0-backend-fix-2`
+**Alcance:** las tres deudas técnicas de identidad que quedaron abiertas tras el bloque anterior, más la
+documentación formal de las deudas que se difieren.
+
+Los identificadores de commit no se replican aquí ni en las actas: viven en el historial de git, que es
+su fuente de verdad. Cada acta declara en su estado el bloque y el tag donde se resolvió.
+
+### Deudas cerradas en Backend-Fix-2
+
+| Acta | Deuda | Archivo | Cómo se resolvió |
+|---|---|---|---|
+| **A39** | `emailVerified` desincronizado con Keycloak | [`A39-lazy-sync-emailverified.md`](../decisions/A39-lazy-sync-emailverified.md) | El login consulta el estado real en Keycloak y promueve el valor local si difiere. Es unidireccional (solo `false → true`) y tolerante a fallos: si la Admin API no responde, la sesión continúa con el valor local |
+| **A40** | Sin reenvío del correo de verificación | [`A40-verification-email-resend-endpoint.md`](../decisions/A40-verification-email-resend-endpoint.md) | Endpoint anónimo `POST /auth/verification-email/resend`, con respuesta 200 uniforme que no revela si la cuenta existe ni si está verificada, y rate limit de 3/hora particionado por correo normalizado |
+| **A41** | Sin canje de código de invitación posterior al registro | [`A41-nutritionist-assignment-endpoint.md`](../decisions/A41-nutritionist-assignment-endpoint.md) | Endpoint `POST /patients/me/nutritionist-assignment` con `Policy=Patient`, precedido del refactor que extrajo la vinculación a un servicio dedicado. El código no se consume si el canje falla |
+
+### Deudas diferidas identificadas
+
+| Acta | Deuda | Archivo | Se resuelve en |
+|---|---|---|---|
+| **A38** | `isInActivePilot` hardcodeado | [`A38-isinactivepilot-hardcoded.md`](../decisions/A38-isinactivepilot-hardcoded.md) | **Sin bloque asignado.** Bloqueada por una dependencia externa: la lista definitiva de pacientes del piloto, que debe entregar el Complejo Hospitalario Guillermo Kaelín |
+| **A47** | Sin ciclo de vida de cuentas de nutricionista | [`A47-nutritionist-deferred-activation-debt.md`](../decisions/A47-nutritionist-deferred-activation-debt.md) | **Nutritionist-Activation-1.** Sin bloqueante externo: `Activate`, `Suspend` y `Reactivate` existen en el dominio pero no tienen ningún llamador en la aplicación |
+| **A48** | Asimetría en la persistencia de la auditoría de intentos anónimos | [`A48-audit-persistence-asymmetry.md`](../decisions/A48-audit-persistence-asymmetry.md) | **Por definir, recomendado antes de Deployment-1.** `password-reset/request` descarta su fila de auditoría cuando la cuenta no existe; `verification-email/resend` la persiste. Descubierta en el smoke de cierre |
+
+### Decisiones emergentes durante la ejecución
+
+Cuatro decisiones de arquitectura surgieron durante el bloque y se registraron antes de aplicarse, según
+la regla R8.
+
+| Acta | Tema |
+|---|---|
+| [**A43**](../decisions/A43-domain-event-for-nutritionist-notification.md) | Reemplaza a la decisión D6: la notificación al nutricionista se resuelve reusando el evento de dominio existente, con el texto parametrizado por contexto. Evitó un doble correo por canje |
+| [**A44**](../decisions/A44-rate-limit-partition-by-request-body.md) | Partición del rate limit por el correo del cuerpo de la petición, mediante un middleware previo al limitador |
+| [**A45**](../decisions/A45-test-migration-on-constructor-refactor.md) | Marco para migrar pruebas en un refactor por inyección de constructor, distinguiendo el intercambio mecánico de la reexpresión al nivel correcto |
+| [**A46**](../decisions/A46-swashbuckle-cli-tool.md) | Swashbuckle CLI como herramienta local para regenerar el snapshot OpenAPI de forma reproducible |
+
+### Hallazgo de instrumentación: `Cauce.Api` no se mide
+
+Detectado al medir la cobertura de cierre del bloque. **No requiere acta formal: es un cambio de
+configuración, no una decisión de arquitectura.** Se registra aquí para que un bloque futuro lo tome.
+
+`Cauce.Api` **no aparece en ninguno de los cuatro archivos `coverage.cobertura.xml`** que produce
+`dotnet test --collect:"XPlat Code Coverage"`. Solo se instrumentan `Cauce.Domain`, `Cauce.Application`
+y `Cauce.Infrastructure`. Los controllers, el middleware y las ocho políticas de rate limit no tienen
+cifra de cobertura, pese a que las 186 pruebas de integración los ejercitan vía
+`WebApplicationFactory`.
+
+La causa es que las pruebas de integración referencian el proyecto de API y coverlet instrumenta los
+ensamblados que la corrida carga, pero el filtro efectivo deja fuera a `Cauce.Api`. El arreglo es
+declarar el include explícitamente, con un `runsettings` o con
+`/p:Include="[Cauce.*]*"`, y verificar que el archivo resultante trae el paquete.
+
+**Segundo hallazgo, del mismo origen.** La cifra histórica de «>85% global» que declaraban `CLAUDE.md`
+y los criterios de calidad del bloque **incluye las migraciones de EF Core**, que son código generado.
+`Cauce.Infrastructure` tiene 25 684 líneas instrumentadas, de las cuales **20 065 son migraciones**,
+que se ejecutan al crear la base en las pruebas y cuentan como cubiertas. Medido el 2026-09-09:
+
+| Medición | Líneas | Ramas |
+|---|---|---|
+| Incluyendo migraciones EF | 89,6 % | 57,1 % |
+| **Excluyendo migraciones EF** | **76,1 %** | **57,1 %** |
+
+La cifra defendible es la segunda. Un bloque futuro debería excluir las migraciones del cálculo, además
+de instrumentar `Cauce.Api`, para que el número que se reporte signifique algo.

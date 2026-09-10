@@ -1,5 +1,6 @@
 using Cauce.Application.Common.Interfaces.Notifications;
 using Cauce.Application.Common.Messaging;
+using Cauce.Domain.Identity.Enums;
 using Cauce.Domain.Identity.Events;
 using Cauce.Domain.Notifications;
 using Cauce.Domain.Notifications.Enums;
@@ -49,11 +50,26 @@ public sealed class PatientLinkedToNutritionistEventHandler
             NotificationType.Alert,
             NotificationChannel.Email,
             "Nuevo paciente vinculado a tu seguimiento",
-            "Un nuevo paciente se registró con tu código de invitación y ya forma parte de tu seguimiento en Cauce.",
+            BuildBody(domainEvent.Context),
             DateTime.UtcNow,
             RelatedEntityType,
             domainEvent.InvitationCodeId);
 
         await _scheduler.ScheduleAsync(email, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// Redacta el cuerpo del aviso según cómo ocurrió la vinculación. El hecho es el mismo, pero decirle
+    /// al nutricionista que el paciente "se registró" cuando en realidad ya tenía cuenta y canjeó el
+    /// código después sería inexacto (acta A43).
+    /// </summary>
+    /// <param name="context">Momento del ciclo de vida en que ocurrió la vinculación.</param>
+    /// <returns>El cuerpo del correo.</returns>
+    private static string BuildBody(LinkContext context) => context switch
+    {
+        LinkContext.PostRegistrationLink =>
+            "Un paciente que ya tenía cuenta canjeó tu código de invitación y ya forma parte de tu seguimiento en Cauce.",
+        _ =>
+            "Un nuevo paciente se registró con tu código de invitación y ya forma parte de tu seguimiento en Cauce."
+    };
 }

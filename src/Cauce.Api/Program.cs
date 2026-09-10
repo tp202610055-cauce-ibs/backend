@@ -215,6 +215,10 @@ app.UseCors("CaucePortalPolicy");
 // registran (AddRateLimiter); solo el middleware de aplicación queda condicionado.
 if (app.Configuration.GetValue("RateLimiting:Enabled", true))
 {
+    // Antes del limitador: la política de auth-verify-resend particiona por el correo del cuerpo, y las
+    // fábricas de partición son síncronas, así que alguien tiene que bufferizarlo y dejarlo resuelto
+    // antes (acta A44).
+    app.UseVerificationResendPartition();
     app.UseRateLimiter();
 }
 

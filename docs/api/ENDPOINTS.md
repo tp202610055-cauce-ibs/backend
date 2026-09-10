@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.1.0 · **Actualizado:** 2026-09-05 · **Contrato:** [`openapi-v1.0.0.json`](openapi-v1.0.0.json) (289 KB, 57 operaciones, ~48 paths)
+**Versión:** 1.2.0 · **Actualizado:** 2026-09-07 · **Contrato:** [`openapi-v1.1.0.json`](openapi-v1.1.0.json) (307 KB, 61 operaciones, 53 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -25,7 +25,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
   [CLAUDE.md → Enums](../../CLAUDE.md#enums-y-valores-controlados).
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
   `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.0.0.json` bajo
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.1.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -92,6 +92,8 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `recommendation_expired` | 409 | La recomendación superó su vigencia. |
 | `recommendation_not_archivable` | 409 | La recomendación no está en un estado archivable. |
 | `active_pilot_retention` | 409 | Baja bloqueada por retención de piloto activo (falta el acuse). |
+| `patient_already_assigned` | 409 | El paciente ya tiene un nutricionista activo y no se sobrescribe. |
+| `nutritionist_not_available` | 409 | El nutricionista del código no puede atender. Extensión `reason`: `pending_activation`, `inactive` o `suspended`. |
 | `insufficient_clinical_history` | 422 | Historial clínico insuficiente para generar. |
 | `all_candidates_filtered_by_allergies` | 422 | Todos los candidatos fueron filtrados por alergias. |
 | `no_active_model_version` | 422 | No hay `ModelVersion` activa. |
@@ -281,6 +283,22 @@ plaintext; en base de datos solo se guarda su hash SHA-256, con vigencia de 30 m
 | Rate limit | `auth-pwreset` (3/h·IP) |
 | Respuestas | **200** · 400 (`validation_error`, `invalid_password_reset_token`, `expired_password_reset_token`) · 429 · 500 |
 
+### `POST /api/v1/auth/verification-email/resend`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Reenvía el correo de verificación. Responde 200 exista o no la cuenta, y esté o no verificada (no leak). |
+| US/TS | US19 |
+| Autorización | Anónimo |
+| Request body | `ResendVerificationEmailRequest` (email) |
+| Idempotencia | — |
+| Rate limit | `auth-verify-resend` (**3/h por correo normalizado**, no por IP) |
+| Respuestas | **200** · 400 `validation_error` · 429 · 500 |
+
+La ventana se cuenta por correo en minúsculas y sin espacios envolventes: dos correos distintos desde la
+misma IP no se estorban, y el mismo correo en distinta caja cae en la misma cubeta. Si el cuerpo llega
+inutilizable, la partición cae a la IP de origen (acta A44). El envío a Keycloak es best-effort: si falla,
+la respuesta sigue siendo 200.
+
 ---
 
 ## 3. Paciente / Perfil clínico
@@ -356,6 +374,26 @@ plaintext; en base de datos solo se guarda su hash SHA-256, con vigencia de 30 m
 | Idempotencia | — |
 | Rate limit | — |
 | Respuestas | **200** `MyProfileSummaryResult` · 404 `patient_profile_not_found` · 401 · 403 · 500 |
+
+### `POST /api/v1/patients/me/nutritionist-assignment`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Canjea un código de invitación después del registro, para quien se registró sin código. |
+| US/TS | US20 CA02 |
+| Request body | `AssignNutritionistRequest` (invitationCode) |
+| Idempotencia | — |
+| Rate limit | `default-auth` (60/min·usuario) |
+| Respuestas | **201** `AssignNutritionistResult` (nutritionistId, nutritionistFullName, assignedAt) · 400 (`validation_error`, `invalid_invitation_code`, `expired_invitation_code`, `invitation_code_already_used`) · 409 (`patient_already_assigned`, `nutritionist_not_available`) · 401 · 403 · 500 |
+
+El código se normaliza a mayúsculas sin espacios envolventes, y se valida con las mismas reglas que el
+registro: longitud 8 a 20 y `^[A-Z0-9]+$`.
+
+**El código no se consume si el canje falla.** Todas las comprobaciones, incluida la disponibilidad del
+nutricionista, ocurren antes de marcarlo como usado, de modo que un rechazo lo deja reutilizable.
+
+El **409 `nutritionist_not_available`** trae la extensión `reason` con el estado exacto de la cuenta:
+`pending_activation`, `inactive` o `suspended`. Un solo `errorCode` para el escenario, con el detalle
+aparte, para que el cliente afine el mensaje o muestre uno genérico.
 
 ---
 

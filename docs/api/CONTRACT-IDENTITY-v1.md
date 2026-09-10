@@ -1,7 +1,7 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.1 · **Fecha:** 25 de agosto de 2026 · **Backend:** rama `feature/backend-fixes-pre-mobile-1b`
-**Alcance:** endpoints de identidad que consume la app móvil Flutter (US01, US05, US07, US08, US20).
+**Versión:** 1.2 · **Fecha:** 7 de septiembre de 2026 · **Backend:** rama `feature/backend-fix-2-for-mobile`
+**Alcance:** endpoints de identidad que consume la app móvil Flutter (US01, US05, US07, US08, US19, US20).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
 `src/Cauce.Application/Identity/`. Cada afirmación de este documento lleva su evidencia en `archivo:línea`.
@@ -25,8 +25,10 @@ directo, `audit_logs` quedaría sin registro de accesos.
 | POST | `/api/v1/auth/logout` | Bearer JWT | Sin política | 204, 400, 401, 500 |
 | POST | `/api/v1/auth/password-reset/request` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
+| POST | `/api/v1/auth/verification-email/resend` **(nuevo, v1.2)** | Anónimo | `auth-verify-resend` 3/h por **correo** | 200, 400, 429, 500 |
 | GET | `/api/v1/consent/current` **(nuevo, v1.1)** | Anónimo | `consent-current` 60/min por IP | 200, 429, 500 |
 | GET | `/api/v1/patients/me/consent/pdf` | Bearer JWT · `Policy=Patient` | Sin política | 200 (`application/pdf`), 401, 403, 404, 500 |
+| POST | `/api/v1/patients/me/nutritionist-assignment` **(nuevo, v1.2)** | Bearer JWT · `Policy=Patient` | `default-auth` 60/min por usuario | 201, 400, 401, 403, **409**, 500 |
 | PUT | `/api/v1/users/me/fcm-token` | Bearer JWT (cualquier rol) | Sin política | 204, 400, 401, 403, 500 |
 
 Evidencia de las políticas de rate limit: `src/Cauce.Api/Configuration/RateLimitingPolicies.cs`.
@@ -37,11 +39,14 @@ Evidencia de los códigos: atributos `[ProducesResponseType]` en `AuthController
 | Endpoint esperado | Estado | Evidencia |
 |---|---|---|
 | `GET /me`, `/users/me`, `/auth/session` (identidad post-login) | **NO EXISTE, pero ya no hace falta** | Desde v1.1 el login y la renovación devuelven el objeto `user` (§2.2 y §2.9) |
-| Reenvío del correo de verificación | **NO EXISTE** | Sin acción de reenvío en `src/Cauce.Api/Controllers/` |
-| Canje de código de invitación después del registro | **NO EXISTE** | El código solo se acepta en `auth/register` |
 
 **Resueltos en v1.1:** `POST /auth/refresh`, `GET /consent/current`, y el estado de bloqueo con tiempo
 de espera (423 `account_locked` con la extensión `lockedUntil`, §6).
+
+**Resueltos en v1.2:** `POST /auth/verification-email/resend` (§2.10),
+`POST /patients/me/nutritionist-assignment` (§2.11), y la sincronización del estado de verificación del
+correo en el login (§2.2), que hasta ahora podía devolver `emailVerified: false` a un paciente que ya
+había verificado.
 
 ---
 
@@ -141,10 +146,25 @@ Passthrough a Keycloak con `grant_type=password` (Direct Access Grants).
 | `email` | string | |
 | `role` | string | `patient` o `nutritionist`. Coincide con `realm_access.roles` del JWT |
 | `fullName` | string | |
-| `emailVerified` | bool | |
+| `emailVerified` | bool | **Sincronizado desde Keycloak en cada login** desde v1.2. Ver abajo |
 | `isInActivePilot` | bool | **No viaja en ningún claim del token.** Este es el único punto del contrato donde el cliente puede conocerlo |
 
 El móvil ya no necesita una segunda llamada ni decodificar el JWT para arrancar la sesión.
+
+**SINCRONIZACIÓN DE `emailVerified` *(nuevo en v1.2)*.** Keycloak emite y procesa el enlace de
+confirmación sin pasar por el backend, así que la copia local quedaba desactualizada en cuanto el
+paciente verificaba: el login devolvía `emailVerified: false` a alguien que ya había verificado, y la app
+lo dejaba en la pantalla de espera para siempre. Desde v1.2, tras autenticar, el backend consulta el
+estado real en Keycloak y actualiza el valor local si difiere.
+
+La sincronización es **unidireccional**: solo promueve un correo a verificado. Si Keycloak reporta como
+no verificado uno que localmente sí lo está, el valor local **no se revierte** y se registra una
+advertencia. Des-verificar es un cambio de estado sensible que exige un flujo explícito y auditado, no
+un efecto colateral de iniciar sesión.
+
+**El login no falla si la sincronización falla.** Un timeout o un error de la Admin API se registran como
+advertencia y la sesión continúa con el valor local. Para el cliente, el contrato del login no cambia:
+mismos códigos, mismo cuerpo.
 
 **Errores**
 
@@ -389,6 +409,117 @@ cuenta con garantías), conservando IP y momento. Lo escribe el handler, no el `
 
 ---
 
+### 2.10 `POST /api/v1/auth/verification-email/resend` *(nuevo en v1.2)*
+
+Reenvía el correo de verificación a quien perdió el original o cuyo enlace venció.
+
+| Campo | Valor |
+|---|---|
+| Auth | Anónimo (`[AllowAnonymous]`): el paciente aún no puede iniciar sesión |
+| Rate limit | `auth-verify-resend`, **3 por hora por correo normalizado**, no por IP |
+
+**Request** (`src/Cauce.Api/Contracts/Identity/ResendVerificationEmailRequest.cs`)
+
+| Campo | Tipo | Obligatorio | Validación |
+|---|---|---|---|
+| `email` | string | Sí | No vacío ni solo espacios, máx 320, formato de correo, sin espacios internos |
+
+**Response 200.** Sin cuerpo.
+
+**RESPUESTA UNIFORME.** El 200 se devuelve en los tres desenlaces: la cuenta no existe, la cuenta existe
+y ya está verificada, o la cuenta existe sin verificar y se pidió el reenvío. **El cliente no puede
+inferir del código de respuesta si el correo está registrado ni si ya fue verificado.** Es deliberado:
+distinguirlos convertiría el endpoint en un oráculo de cuentas.
+
+**Errores**
+
+| HTTP | `errorCode` | Cuándo |
+|---|---|---|
+| 400 | `validation_error` | Correo ausente, vacío, mal formado, con espacios o de más de 320 caracteres |
+| 429 | *(sin `errorCode`)* | Se superaron los 3 reenvíos por hora para ese correo. Extensión `retryAfterSeconds` |
+| 500 | `internal_server_error` | Fallo inesperado |
+
+**Partición del rate limit.** La ventana se cuenta **por correo normalizado** (minúsculas, sin espacios
+envolventes), no por IP. Dos correos distintos desde la misma IP no se estorban, y el mismo correo en
+distinta caja cae en la misma cubeta. Si el cuerpo llega inutilizable, la partición cae a la IP de
+origen. Detalle en el acta A44.
+
+**Best-effort.** Un fallo de la Admin API de Keycloak al pedir el reenvío no cambia la respuesta: se
+registra una advertencia y el cliente igual recibe 200.
+
+**Auditoría.** Todo intento que supere la validación escribe `verification_email_resend_request` en
+`audit_logs`, con el correo enmascarado y sin actor (el endpoint es anónimo). Es el único rastro del
+intento, dado que la respuesta es uniforme.
+
+---
+
+### 2.11 `POST /api/v1/patients/me/nutritionist-assignment` *(nuevo en v1.2)*
+
+Canjea un código de invitación después del registro. Cierra el callejón sin salida de quien se registró
+sin código y no tenía forma de vincularse a un nutricionista.
+
+| Campo | Valor |
+|---|---|
+| Auth | Bearer JWT · `Policy=Patient` |
+| Rate limit | `default-auth`, 60 por minuto por usuario |
+
+**Request** (`src/Cauce.Api/Contracts/Patients/AssignNutritionistRequest.cs`)
+
+| Campo | Tipo | Obligatorio | Validación |
+|---|---|---|---|
+| `invitationCode` | string | Sí | Longitud 8 a 20, `^[A-Z0-9]+$`. Se normaliza a mayúsculas sin espacios envolventes antes de validar |
+
+Las reglas son las mismas que aplica el registro (`RegisterPatientCommandValidator.cs:48-51`), para que
+un código sea válido o inválido igual en los dos flujos.
+
+**Response 201**
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `nutritionistId` | Guid | Identificador de la cuenta del nutricionista |
+| `nutritionistFullName` | string | Nombre completo del nutricionista |
+| `assignedAt` | string (ISO 8601 UTC) | Momento de la asignación |
+
+**Errores**
+
+| HTTP | `errorCode` | Cuándo |
+|---|---|---|
+| 400 | `validation_error` | El código no cumple longitud o formato |
+| 400 | `invalid_invitation_code` | El código no existe |
+| 400 | `expired_invitation_code` | El código venció |
+| 400 | `invitation_code_already_used` | Otro paciente ya lo canjeó |
+| 401 | *(sin `errorCode`)* | Falta el Bearer o no es válido |
+| 403 | `forbidden` | El token es válido pero no es de un paciente |
+| 409 | `patient_already_assigned` | El paciente ya tiene un nutricionista activo |
+| 409 | `nutritionist_not_available` | El nutricionista del código no está en condiciones de atender. Extensión `reason` |
+| 500 | `internal_server_error` | Fallo inesperado |
+
+**EL CÓDIGO NO SE CONSUME SI EL CANJE FALLA.** Todas las comprobaciones, incluida la disponibilidad del
+nutricionista, ocurren **antes** de marcar el código como usado. Un rechazo deja el código intacto para
+que el nutricionista pueda reemitirlo o reutilizarlo.
+
+**La extensión `reason` del 409 `nutritionist_not_available`.** Un solo `errorCode` cubre el escenario
+"el nutricionista no puede atender"; el estado exacto viaja aparte, para que la app afine el mensaje si
+quiere o lo ignore y muestre uno genérico:
+
+| `reason` | Estado de la cuenta | Lectura sugerida para el usuario |
+|---|---|---|
+| `pending_activation` | El nutricionista aún no activó su cuenta | Reintentar más tarde |
+| `inactive` | Cuenta dada de baja | Solicitar un código nuevo |
+| `suspended` | Cuenta suspendida | Contactar al hospital |
+
+**Sin sobrescritura.** Un paciente ya vinculado recibe 409 `patient_already_assigned`. Cambiar de
+nutricionista es una decisión clínica, no el efecto de que el paciente pegue otro código.
+
+**Notificación.** El canje exitoso avisa al nutricionista por correo, de forma asíncrona vía outbox,
+con el mismo mecanismo que usa el registro. El texto distingue ambos casos.
+
+**Auditoría.** Tanto el canje efectivo como el rechazado por nutricionista no disponible escriben
+`nutritionist_assignment` en `audit_logs`, sobre `invitation_codes`, con el desenlace y el estado exacto
+del nutricionista en el contexto. La fila de `nutritionist_patient` la audita su trigger de PostgreSQL.
+
+---
+
 ## 3. Envelope de error (RFC 7807)
 
 El middleware serializa un `ProblemDetails` con `Content-Type: application/problem+json`
@@ -430,6 +561,7 @@ Ejemplo con datos ficticios (correo ya registrado):
 | 429 | `retryAfterSeconds` (int) y header `Retry-After` cuando el valor es mayor que 0 (`RateLimitingPolicies.cs`) |
 | 409 `unconfirmed_allergens` | `detected` (bool) y `allergens` (array) (`ExceptionHandlingMiddleware.cs`) |
 | **423 `account_locked`** *(v1.1)* | `lockedUntil` (fecha-hora ISO 8601 en UTC), el momento en que expira el bloqueo |
+| **409 `nutritionist_not_available`** *(v1.2)* | `reason` (string): `pending_activation`, `inactive` o `suspended`. Precisa por qué el nutricionista no puede atender, sin multiplicar `errorCode` (§2.11) |
 
 **El 429 no lleva `errorCode`.** El objeto que construye `RateLimitingPolicies.cs:71-77` solo trae `status`,
 `title`, `detail` y `retryAfterSeconds`. El cliente debe detectar el 429 por el status HTTP, no por el
@@ -705,4 +837,5 @@ de espera (US05 CA02) y la renovación de token (US08 CA02) quedaron cubiertos e
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 1.0 | 2026-07-13 | Versión inicial. Levantada del código en el tag `v0.6.2-dev-seed` para habilitar Mobile-1b. |
+| 1.2 | 2026-09-07 | Cierre de las deudas A39, A40 y A41 (bloque Backend-Fix-2). Nuevos §2.10 `POST /auth/verification-email/resend`, con rate limit particionado por correo, y §2.11 `POST /patients/me/nutritionist-assignment`, con el invariante de que el código no se consume si el canje falla. `POST /auth/login` sincroniza `emailVerified` desde Keycloak de forma unidireccional y tolerante a fallos (§2.2). Nuevos `errorCode`: `patient_already_assigned` y `nutritionist_not_available`, este último con la extensión `reason` (§3). Se retiran de §1 los dos endpoints que figuraban como inexistentes. |
 | 1.1 | 2026-08-25 | Cierre de los 8 gaps del `REPORTE-VERIFICACION-03`. Nuevos §2.8 `GET /consent/current` y §2.9 `POST /auth/refresh`. `POST /auth/login` incorpora el objeto `user` (§2.2) y declara 423 `account_locked` con la extensión `lockedUntil` (§6). El login del móvil pide `offline_access`, llevando `refreshExpiresIn` de 1800 a 2591999 (§5.1). Las claves de `errors` pasan a camelCase (§4.1). El enlace de recuperación se parametriza por cliente de origen. |
