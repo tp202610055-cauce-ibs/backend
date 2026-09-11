@@ -278,7 +278,8 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
             "/api/v1/admin/nutritionists", new { email = UniqueEmail(), fullName = "Nutri Admin" });
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        _factory.EmailSender.SentEmails.Should().Contain(e => e.Kind == "credentials");
+        // La contraseña ya no viaja por correo: se pide a Keycloak el enlace para definirla (acta A52).
+        _factory.KeycloakClient.UpdatePasswordEmailsSent.Should().NotBeEmpty();
     }
 
     [SkippableFact]
@@ -371,6 +372,8 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         var roleId = await db.UserRoles.Where(r => r.RoleName == UserRoles.Nutritionist).Select(r => r.RoleId).FirstAsync();
         var keycloakId = Guid.NewGuid().ToString();
         var user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, email, "Nutri Seed", roleId);
+        // La fábrica lo crea pendiente (acta A51); estas pruebas necesitan uno operativo.
+        user.Activate();
         db.Users.Add(user);
         await db.SaveChangesAsync();
         return (user.Id, keycloakId);

@@ -11,7 +11,7 @@ namespace Cauce.Api.IntegrationTests.Patients;
 /// descargable cuando existe consentimiento y 404 cuando no. Requieren Docker (PostgreSQL + Redis).
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class ConsentPdfApiTests : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+public sealed class ConsentPdfApiTests : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     /// <summary>
     /// Inicializa la prueba con los fixtures compartidos.

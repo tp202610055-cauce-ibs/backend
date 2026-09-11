@@ -24,12 +24,34 @@ public sealed class UserTests
     }
 
     [Fact]
-    public void CreateNutritionist_ValidValues_CreatesActiveVerifiedUser()
+    public void CreateNutritionist_ValidValues_CreatesPendingVerifiedUser()
     {
         var user = User.CreateNutritionist(Guid.NewGuid(), "kc-2", "n@cauce.local", "Nutri Uno", NutritionistRoleId);
 
-        user.Status.Should().Be(UserStatus.Active);
+        // Nace pendiente: se activa recién al autenticarse por primera vez (acta A51).
+        user.Status.Should().Be(UserStatus.PendingActivation);
         user.EmailVerified.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Activate_PendingNutritionist_BecomesActive()
+    {
+        var user = User.CreateNutritionist(Guid.NewGuid(), "kc-2", "n@cauce.local", "Nutri Uno", NutritionistRoleId);
+
+        user.Activate();
+
+        user.Status.Should().Be(UserStatus.Active);
+    }
+
+    [Fact]
+    public void Activate_AlreadyActiveNutritionist_ThrowsInvalidOperation()
+    {
+        var user = User.CreateNutritionist(Guid.NewGuid(), "kc-2", "n@cauce.local", "Nutri Uno", NutritionistRoleId);
+        user.Activate();
+
+        var act = user.Activate;
+
+        act.Should().Throw<InvalidOperationException>();
     }
 
     [Fact]

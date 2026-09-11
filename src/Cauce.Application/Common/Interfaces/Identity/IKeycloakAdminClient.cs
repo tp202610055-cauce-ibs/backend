@@ -63,6 +63,23 @@ public interface IKeycloakAdminClient
         CancellationToken ct = default);
 
     /// <summary>
+    /// Pide a Keycloak que envíe al usuario el enlace para definir su contraseña
+    /// (<c>execute-actions-email</c> con la acción <c>UPDATE_PASSWORD</c>). El enlace es de un solo uso y
+    /// vence según <c>actionTokenGeneratedByAdminLifespan</c> del realm; el correo sale por el SMTP
+    /// configurado en el realm, no por el del backend (acta A52).
+    /// </summary>
+    /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Tarea que representa la operación asíncrona.</returns>
+    /// <exception cref="Cauce.Application.Common.Exceptions.KeycloakIntegrationException">
+    /// Si la Admin API rechaza la petición o no puede enviar el correo. El llamador decide si el fallo es
+    /// tolerable: en la provisión lo es, en el reenvío no.
+    /// </exception>
+    Task SendUpdatePasswordEmailAsync(
+        string keycloakUserId,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Elimina un usuario de Keycloak. Se usa como compensación cuando la
     /// persistencia local falla tras crear el usuario.
     /// </summary>

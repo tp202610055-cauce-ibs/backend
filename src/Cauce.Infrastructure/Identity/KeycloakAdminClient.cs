@@ -17,6 +17,8 @@ namespace Cauce.Infrastructure.Identity;
 /// </summary>
 public sealed class KeycloakAdminClient : IKeycloakAdminClient
 {
+    private const string UpdatePasswordAction = "UPDATE_PASSWORD";
+
     private static readonly TimeSpan TokenRenewalMargin = TimeSpan.FromSeconds(60);
 
     private readonly HttpClient _httpClient;
@@ -118,6 +120,25 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         if (!response.IsSuccessStatusCode)
         {
             throw await BuildExceptionAsync(response, "enviar el correo de verificación", ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task SendUpdatePasswordEmailAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        // Sin el parámetro lifespan: rige actionTokenGeneratedByAdminLifespan del realm, para que la vigencia
+        // del enlace se configure en un solo lugar. Sin client_id ni redirect_uri, la última pantalla solo
+        // confirma la actualización, sin redirigir a una aplicación.
+        using var response = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Put, $"{AdminBaseUrl}/users/{keycloakUserId}/execute-actions-email")
+            {
+                Content = JsonContent.Create(new[] { UpdatePasswordAction })
+            },
+            ct).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BuildExceptionAsync(response, "enviar el enlace para definir la contraseña", ct).ConfigureAwait(false);
         }
     }
 

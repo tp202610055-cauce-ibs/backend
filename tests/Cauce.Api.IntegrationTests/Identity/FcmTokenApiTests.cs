@@ -12,7 +12,7 @@ namespace Cauce.Api.IntegrationTests.Identity;
 /// explícita de la actualización. Requieren Docker (PostgreSQL + Redis).
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class FcmTokenApiTests : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+public sealed class FcmTokenApiTests : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     /// <summary>
     /// Inicializa la prueba con los fixtures compartidos.

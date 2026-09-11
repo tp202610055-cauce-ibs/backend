@@ -119,6 +119,43 @@ public sealed class KeycloakAdminClientTests
         handler.LastAdminRequestMethod.Should().Be(HttpMethod.Put);
     }
 
+    [Fact]
+    public async Task SendUpdatePasswordEmailAsync_KeycloakAccepts_DoesNotThrow()
+    {
+        var client = CreateClient(new HttpResponseMessage(HttpStatusCode.NoContent));
+
+        var act = async () => await client.SendUpdatePasswordEmailAsync(KeycloakId);
+
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task SendUpdatePasswordEmailAsync_KeycloakFails_ThrowsKeycloakIntegrationException()
+    {
+        // Es lo que responde Keycloak cuando el SMTP del realm no puede enviar el correo.
+        var client = CreateClient(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+
+        var act = async () => await client.SendUpdatePasswordEmailAsync(KeycloakId);
+
+        await act.Should().ThrowAsync<KeycloakIntegrationException>();
+    }
+
+    [Fact]
+    public async Task SendUpdatePasswordEmailAsync_PutsTheUpdatePasswordActionWithoutLifespan()
+    {
+        var handler = new RoutingHandler(new HttpResponseMessage(HttpStatusCode.NoContent));
+        var client = CreateClient(handler);
+
+        await client.SendUpdatePasswordEmailAsync(KeycloakId);
+
+        handler.LastAdminRequestUri!.AbsolutePath
+            .Should().EndWith($"/admin/realms/cauce/users/{KeycloakId}/execute-actions-email");
+        handler.LastAdminRequestMethod.Should().Be(HttpMethod.Put);
+        handler.LastAdminRequestBody.Should().Be("""["UPDATE_PASSWORD"]""");
+        // La vigencia del enlace la fija el realm (actionTokenGeneratedByAdminLifespan), no el backend.
+        handler.LastAdminRequestUri.Query.Should().BeEmpty();
+    }
+
     private static KeycloakAdminClient CreateClient(HttpResponseMessage adminResponse) =>
         CreateClient(new RoutingHandler(adminResponse));
 
@@ -161,24 +198,29 @@ public sealed class KeycloakAdminClientTests
 
         public HttpMethod? LastAdminRequestMethod { get; private set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(
+        public string? LastAdminRequestBody { get; private set; }
+
+        protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/protocol/openid-connect/token", StringComparison.Ordinal))
             {
-                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(
                         """{"access_token":"admin-token","expires_in":300}""",
                         Encoding.UTF8,
                         "application/json")
-                });
+                };
             }
 
             LastAdminRequestUri = request.RequestUri;
             LastAdminRequestMethod = request.Method;
-            return Task.FromResult(_adminResponse);
+            LastAdminRequestBody = request.Content is null
+                ? null
+                : await request.Content.ReadAsStringAsync(cancellationToken);
+            return _adminResponse;
         }
     }
 }

@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.2.0 · **Actualizado:** 2026-09-07 · **Contrato:** [`openapi-v1.1.0.json`](openapi-v1.1.0.json) (307 KB, 61 operaciones, 53 paths)
+**Versión:** 1.3.0 · **Actualizado:** 2026-09-11 · **Contrato:** [`openapi-v1.2.0.json`](openapi-v1.2.0.json) (316 KB, 63 operaciones, 55 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -10,7 +10,14 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > **Nota.** `CLAUDE.md` es un documento operativo local: está en el `.gitignore` del backend y no viaja en
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los siete endpoints de identidad, la fuente autoritativa versionada es
-> [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.1.
+> [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.3.
+
+**Novedades de la v1.3.0 (bloque Nutritionist-Activation-1).** El nutricionista se provisiona pendiente de
+activación y sin contraseña: Keycloak le envía el enlace para definirla, y la cuenta se activa en su primera
+autenticación. `POST /admin/nutritionists` devuelve `status` y `activationEmailSent` (antes
+`temporaryCredentialsEmailSent`) con header `Location`, y se suman `GET /admin/nutritionists/{id}` y
+`POST /admin/nutritionists/{id}/activation-email`. `POST /auth/register` y `POST /invitations` responden 409
+`nutritionist_not_available` cuando el nutricionista del código, o el que intenta generarlo, no está activo.
 
 **Novedades de la v1.1.0.** Los ocho gaps pre-Mobile-1b (commits `0eb63fd` a `4ee6496`) agregaron dos
 endpoints anónimos (`POST /auth/refresh` y `GET /consent/current`), el objeto `user` en la respuesta de
@@ -25,7 +32,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
   [CLAUDE.md → Enums](../../CLAUDE.md#enums-y-valores-controlados).
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
   `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.1.0.json` bajo
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.2.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -82,7 +89,7 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `recommendation_access_denied` | 403 | Sin autorización sobre la recomendación. |
 | `report_access_denied` | 403 | Sin autorización sobre el reporte. |
 | `audit_log_immutable` | 403 | Intento de modificar `audit_logs` (bloqueado por trigger). |
-| `*_not_found` (`patient_profile_not_found`, `food_item_not_found`, `custom_food_not_found`, `meal_not_found`, `symptom_not_found`, `clinical_note_not_found`, `allergy_not_found`, `recommendation_not_found`, `consent_record_not_found`, `not_found`) | 404 | El recurso solicitado no existe. |
+| `*_not_found` (`patient_profile_not_found`, `food_item_not_found`, `custom_food_not_found`, `meal_not_found`, `symptom_not_found`, `clinical_note_not_found`, `allergy_not_found`, `recommendation_not_found`, `consent_record_not_found`, `nutritionist_not_found`, `not_found`) | 404 | El recurso solicitado no existe. |
 | `duplicate_email` | 409 | Correo ya registrado. |
 | `duplicate_patient_profile` / `duplicate_patient_allergy` / `duplicate_custom_food` / `duplicate_baseline_assessment` / `duplicate_ingredient` | 409 | Entidad duplicada. |
 | `custom_food_in_use` | 409 | El alimento personalizado está referenciado por comidas. |
@@ -93,7 +100,8 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `recommendation_not_archivable` | 409 | La recomendación no está en un estado archivable. |
 | `active_pilot_retention` | 409 | Baja bloqueada por retención de piloto activo (falta el acuse). |
 | `patient_already_assigned` | 409 | El paciente ya tiene un nutricionista activo y no se sobrescribe. |
-| `nutritionist_not_available` | 409 | El nutricionista del código no puede atender. Extensión `reason`: `pending_activation`, `inactive` o `suspended`. |
+| `nutritionist_not_available` | 409 | El nutricionista no puede atender: el dueño del código, al registrarse o al canjearlo, o quien intenta generar un código. Extensión `reason`: `pending_activation`, `inactive` o `suspended`. |
+| `nutritionist_not_pending_activation` | 409 | Reenvío del enlace de activación a un nutricionista que ya no está pendiente. |
 | `insufficient_clinical_history` | 422 | Historial clínico insuficiente para generar. |
 | `all_candidates_filtered_by_allergies` | 422 | Todos los candidatos fueron filtrados por alergias. |
 | `no_active_model_version` | 422 | No hay `ModelVersion` activa. |
@@ -189,7 +197,7 @@ consultar este endpoint y devolver los dos valores sin tocarlos.
 | Request body | `RegisterPatientRequest` (email, fullName, password, consentDocumentVersion, consentTextHash, invitationCode?) |
 | Idempotencia | Opcional (header `Idempotency-Key`, UUID v4) |
 | Rate limit | `auth-register` (5/h·IP) |
-| Respuestas | **201** `RegisterPatientResult` · 400 (`validation_error`, `invalid_invitation_code`, `expired_invitation_code`, `invitation_code_already_used`, `consent_text_mismatch`) · 409 `duplicate_email` · 429 · 502 `keycloak_integration_error` · 500 |
+| Respuestas | **201** `RegisterPatientResult` · 400 (`validation_error`, `invalid_invitation_code`, `expired_invitation_code`, `invitation_code_already_used`, `consent_text_mismatch`) · 409 (`duplicate_email`, `nutritionist_not_available` con `reason`) · 429 · 502 `keycloak_integration_error` · 500 |
 
 ### `POST /api/v1/auth/login`
 | Campo | Valor |
@@ -826,7 +834,10 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 | Request body | — |
 | Idempotencia | — |
 | Rate limit | — |
-| Respuestas | **201** `GenerateInvitationCodeResult` (código + expiración) · 401 · 403 · 500 |
+| Respuestas | **201** `GenerateInvitationCodeResult` (código + expiración) · 401 · 403 · 409 `nutritionist_not_available` (cuenta suspendida o dada de baja; extensión `reason`) · 500 |
+
+Un nutricionista pendiente que llama a este endpoint se activa antes de que el handler corra (behavior del
+pipeline, acta A51), así que para esa cuenta la respuesta es 201.
 
 ---
 
@@ -835,10 +846,36 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 ### `POST /api/v1/admin/nutritionists`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Provisiona un nutricionista y le envía credenciales temporales. Protegido por clave de API, no JWT. |
+| Resumen | Provisiona un nutricionista en `PendingActivation`, sin contraseña, y pide a Keycloak que le envíe el enlace para definirla (vigencia de 12 h). La cuenta se activa en su primera autenticación. Protegido por clave de API, no JWT. |
 | US/TS | US02, TS02 |
 | Autorización | `[AdminApiKey]` — header **`X-Admin-Api-Key`** (401 si falta/incorrecta) |
 | Request body | `CreateNutritionistRequest` (email, fullName) |
 | Idempotencia | — |
 | Rate limit | — |
-| Respuestas | **201** `CreateNutritionistResult` · 400 · 401 (API key inválida) · 409 `duplicate_email` · 500 |
+| Respuestas | **201** `CreateNutritionistResult` (userId, email, status, activationEmailSent), con header `Location` al `GET` del recurso · 400 · 401 (API key inválida) · 409 `duplicate_email` · 502 `keycloak_integration_error` · 500 |
+
+Si el pedido del enlace falla, la cuenta queda provisionada igual: la respuesta sigue siendo 201, con
+`activationEmailSent: false`, y el enlace se vuelve a pedir con el reenvío. Hasta la v1.2.0 el campo se llamaba
+`temporaryCredentialsEmailSent` y el nutricionista recibía una contraseña temporal por correo.
+
+### `GET /api/v1/admin/nutritionists/{id}`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Resumen de una cuenta de nutricionista, incluido su estado. Permite ver si ya se activó. |
+| US/TS | US02 (acta A49) |
+| Autorización | `[AdminApiKey]` |
+| Request body | — |
+| Idempotencia | — |
+| Rate limit | — |
+| Respuestas | **200** `GetNutritionistResult` (userId, email, fullName, status) · 401 · 404 `nutritionist_not_found` (también si el id es de otro rol) · 500 |
+
+### `POST /api/v1/admin/nutritionists/{id}/activation-email`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Vuelve a enviar el enlace para definir la contraseña a un nutricionista pendiente, cuando el enlace venció o el envío falló en la provisión. |
+| US/TS | US02 (acta A52) |
+| Autorización | `[AdminApiKey]` |
+| Request body | — |
+| Idempotencia | — |
+| Rate limit | — |
+| Respuestas | **204** · 401 · 404 `nutritionist_not_found` · 409 `nutritionist_not_pending_activation` · 502 `keycloak_integration_error` (acá el fallo sí se informa) · 500 |

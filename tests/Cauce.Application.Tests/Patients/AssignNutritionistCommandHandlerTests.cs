@@ -70,6 +70,8 @@ public sealed class AssignNutritionistCommandHandlerTests
 
         var nutritionist = User.CreateNutritionist(
             Guid.NewGuid(), "kc-nutri", "n@cauce.local", "Nutri Demo", NutritionistRoleId);
+        // La fábrica lo crea pendiente (acta A51); el escenario feliz necesita uno que ya pueda atender.
+        nutritionist.Activate();
         var invitation = InvitationCode.Generate(
             Guid.NewGuid(), Code, nutritionist.Id, DateTime.UtcNow, InvitationCode.Validity);
 
@@ -87,11 +89,10 @@ public sealed class AssignNutritionistCommandHandlerTests
     /// Sustituye al nutricionista del escenario por uno en el estado indicado.
     /// </summary>
     /// <remarks>
-    /// El dominio no ofrece hoy una transición pública que deje a un nutricionista en
-    /// <see cref="UserStatus.PendingActivation"/> ni en <see cref="UserStatus.Inactive"/>: la fábrica de
-    /// nutricionista nace activa, y <c>Anonymize</c> es exclusivo de pacientes. Se construyen dobles que
-    /// alcanzan esos estados por la vía disponible, porque lo que el handler observa es únicamente
-    /// <c>Status</c>.
+    /// El dominio no ofrece una transición pública que deje a un nutricionista en
+    /// <see cref="UserStatus.Inactive"/>: <c>Anonymize</c> es exclusivo de pacientes. Para ese estado se
+    /// construye un doble que lo alcanza por la vía disponible, porque lo que el handler observa es
+    /// únicamente <c>Status</c>.
     /// </remarks>
     private User ArrangeNutritionistWithStatus(UserStatus status, Guid nutritionistId)
     {
@@ -110,9 +111,9 @@ public sealed class AssignNutritionistCommandHandlerTests
                 nutritionist.Anonymize(PatientRoleId);
                 break;
 
-            default: // PendingActivation
-                nutritionist = User.CreatePatient(
-                    nutritionistId, "kc-nutri", "n@cauce.local", "Nutri Demo", PatientRoleId);
+            default: // PendingActivation: el estado con el que nace un nutricionista (acta A51).
+                nutritionist = User.CreateNutritionist(
+                    nutritionistId, "kc-nutri", "n@cauce.local", "Nutri Demo", NutritionistRoleId);
                 break;
         }
 

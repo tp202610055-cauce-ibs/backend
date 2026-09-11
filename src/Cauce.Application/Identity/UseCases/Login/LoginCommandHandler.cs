@@ -10,14 +10,15 @@ namespace Cauce.Application.Identity.UseCases.Login;
 
 /// <summary>
 /// Handler del inicio de sesión. Delega la validación de credenciales a Keycloak y, si es exitosa,
-/// actualiza la fecha del último acceso del usuario local. El evento LOGIN se audita en el
-/// middleware; este handler no lo registra.
+/// actualiza la fecha del último acceso del usuario local y activa al nutricionista que se autentica por
+/// primera vez. El evento LOGIN se audita en el middleware; este handler no lo registra.
 /// </summary>
 public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResult>
 {
     private readonly IKeycloakTokenClient _tokenClient;
     private readonly IKeycloakAdminClient _adminClient;
     private readonly IUserRepository _userRepository;
+    private readonly INutritionistActivationService _activationService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<LoginCommandHandler> _logger;
 
@@ -28,12 +29,14 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
         IKeycloakTokenClient tokenClient,
         IKeycloakAdminClient adminClient,
         IUserRepository userRepository,
+        INutritionistActivationService activationService,
         IUnitOfWork unitOfWork,
         ILogger<LoginCommandHandler> logger)
     {
         _tokenClient = tokenClient;
         _adminClient = adminClient;
         _userRepository = userRepository;
+        _activationService = activationService;
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -77,6 +80,12 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
         // Antes del SaveChanges para que una sola transacción persista la marca de acceso y el estado
         // de verificación sincronizado.
         await TrySyncEmailVerifiedAsync(user, cancellationToken).ConfigureAwait(false);
+
+        // En esta petición no hay token que el behavior de activación pueda leer: la identidad aparece
+        // recién aquí, cuando Keycloak responde. Por eso el login invoca la regla directamente (acta A51).
+        await _activationService
+            .ActivateIfPendingAsync(user, NutritionistActivationTrigger.Login, cancellationToken)
+            .ConfigureAwait(false);
 
         user.RegisterSuccessfulLogin(DateTime.UtcNow);
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

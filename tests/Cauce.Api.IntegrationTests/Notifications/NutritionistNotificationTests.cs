@@ -24,7 +24,7 @@ namespace Cauce.Api.IntegrationTests.Notifications;
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class NutritionistNotificationTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     /// <summary>
     /// Inicializa la prueba con los fixtures compartidos.

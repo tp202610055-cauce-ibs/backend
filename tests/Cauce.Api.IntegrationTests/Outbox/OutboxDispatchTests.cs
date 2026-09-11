@@ -17,7 +17,7 @@ namespace Cauce.Api.IntegrationTests.Outbox;
 /// exactly-once. Requieren Docker (PostgreSQL + Redis).
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class OutboxDispatchTests : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+public sealed class OutboxDispatchTests : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     /// <summary>
     /// Inicializa la prueba con los fixtures compartidos.

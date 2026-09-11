@@ -18,7 +18,7 @@ namespace Cauce.Api.IntegrationTests.ClinicalRegistry;
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class CustomFoodAllergenApiTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     /// <summary>
     /// Inicializa la prueba con los fixtures compartidos.

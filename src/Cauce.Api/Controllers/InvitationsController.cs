@@ -37,6 +37,7 @@ public sealed class InvitationsController : BaseApiController
     /// <returns>El código generado y su fecha de expiración, con código 201.</returns>
     [HttpPost]
     [ProducesResponseType(typeof(GenerateInvitationCodeResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Generate(CancellationToken ct)
     {
         var nutritionistKeycloakId = _currentUserService.UserId;

@@ -67,6 +67,11 @@ public sealed class DevAdminSeeder
             .ConfigureAwait(false);
 
         var user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, options.Email, options.FullName, nutritionistRoleId);
+
+        // El nutricionista de desarrollo no pasa por el enlace de Keycloak: usa una contraseña temporal
+        // fija. Se activa aquí porque DemoPatientSeeder solo asigna el paciente demo a un nutricionista
+        // activo (acta A51).
+        user.Activate();
         await _userRepository.AddAsync(user, ct).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
 

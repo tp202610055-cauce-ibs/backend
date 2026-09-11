@@ -125,8 +125,10 @@ public sealed class User : Entity, IAggregateRoot
     }
 
     /// <summary>
-    /// Crea una cuenta de nutricionista en estado activo y con correo verificado,
-    /// ya que se provisiona administrativamente.
+    /// Crea una cuenta de nutricionista pendiente de activación y con correo verificado. El correo se
+    /// da por verificado porque la cuenta se provisiona administrativamente; la activación ocurre
+    /// recién cuando el nutricionista se autentica por primera vez, lo que prueba que definió su propia
+    /// contraseña (acta A51).
     /// </summary>
     /// <param name="id">Identificador de la cuenta.</param>
     /// <param name="keycloakId">Identificador del usuario en Keycloak.</param>
@@ -136,7 +138,7 @@ public sealed class User : Entity, IAggregateRoot
     /// <returns>La nueva cuenta de nutricionista.</returns>
     public static User CreateNutritionist(Guid id, string keycloakId, string email, string fullName, int nutritionistRoleId)
     {
-        return new User(id, keycloakId, email, fullName, nutritionistRoleId, UserStatus.Active, emailVerified: true);
+        return new User(id, keycloakId, email, fullName, nutritionistRoleId, UserStatus.PendingActivation, emailVerified: true);
     }
 
     /// <summary>

@@ -1,6 +1,6 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.2 · **Fecha:** 7 de septiembre de 2026 · **Backend:** rama `feature/backend-fix-2-for-mobile`
+**Versión:** 1.3 · **Fecha:** 11 de septiembre de 2026 · **Backend:** rama `feature/nutritionist-activation-1`
 **Alcance:** endpoints de identidad que consume la app móvil Flutter (US01, US05, US07, US08, US19, US20).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
@@ -95,6 +95,7 @@ La IP de origen no viaja en el body: el controller la toma de la conexión (`Aut
 | 400 | `expired_invitation_code` | El código venció |
 | 400 | `invitation_code_already_used` | El código ya se usó |
 | 409 | `duplicate_email` | El correo ya está registrado |
+| 409 | `nutritionist_not_available` *(v1.3)* | El nutricionista dueño del código no está activo. Extensión `reason` (§3). Se rechaza antes de crear el usuario en Keycloak, y el código no se consume |
 | 429 | *(sin `errorCode`)* | Se superó el límite. Ver sección 3 |
 | 502 | `keycloak_integration_error` | Falló el aprovisionamiento del usuario en Keycloak |
 | 500 | `internal_server_error` | Error inesperado |
@@ -102,6 +103,10 @@ La IP de origen no viaja en el body: el controller la toma de la conexión (`Aut
 **Orden de validación en el handler** (importante para el móvil): consentimiento (línea 60), correo duplicado
 (línea 65), código de invitación (línea 70). Un registro con hash de consentimiento incorrecto falla con
 `consent_text_mismatch` aunque el correo también esté duplicado.
+
+Desde v1.3 la validación del código incluye el **estado de su nutricionista**, con la misma regla que el
+canje de §2.11. Ocurre antes de crear el usuario en Keycloak: un 409 `nutritionist_not_available` no deja
+ninguna cuenta a medias y el código queda disponible.
 
 **Efecto en Keycloak:** el usuario se crea con `emailVerified: false` y la acción requerida `VERIFY_EMAIL`
 (`src/Cauce.Infrastructure/Identity/KeycloakAdminClient.cs:74-76`). Ver sección 5.
@@ -561,7 +566,7 @@ Ejemplo con datos ficticios (correo ya registrado):
 | 429 | `retryAfterSeconds` (int) y header `Retry-After` cuando el valor es mayor que 0 (`RateLimitingPolicies.cs`) |
 | 409 `unconfirmed_allergens` | `detected` (bool) y `allergens` (array) (`ExceptionHandlingMiddleware.cs`) |
 | **423 `account_locked`** *(v1.1)* | `lockedUntil` (fecha-hora ISO 8601 en UTC), el momento en que expira el bloqueo |
-| **409 `nutritionist_not_available`** *(v1.2)* | `reason` (string): `pending_activation`, `inactive` o `suspended`. Precisa por qué el nutricionista no puede atender, sin multiplicar `errorCode` (§2.11) |
+| **409 `nutritionist_not_available`** *(v1.2, en el registro desde v1.3)* | `reason` (string): `pending_activation`, `inactive` o `suspended`. Precisa por qué el nutricionista no puede atender, sin multiplicar `errorCode` (§2.1 y §2.11) |
 
 **El 429 no lleva `errorCode`.** El objeto que construye `RateLimitingPolicies.cs:71-77` solo trae `status`,
 `title`, `detail` y `retryAfterSeconds`. El cliente debe detectar el 429 por el status HTTP, no por el
@@ -837,5 +842,6 @@ de espera (US05 CA02) y la renovación de token (US08 CA02) quedaron cubiertos e
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 1.0 | 2026-07-13 | Versión inicial. Levantada del código en el tag `v0.6.2-dev-seed` para habilitar Mobile-1b. |
+| 1.3 | 2026-09-11 | Bloque Nutritionist-Activation-1 (acta A53). `POST /auth/register` valida el estado del nutricionista dueño del código con la misma regla que el canje de §2.11: responde 409 `nutritionist_not_available` con la extensión `reason`, antes de crear el usuario en Keycloak y sin consumir el código (§2.1). El cliente móvil todavía no mapea este `errorCode`. |
 | 1.2 | 2026-09-07 | Cierre de las deudas A39, A40 y A41 (bloque Backend-Fix-2). Nuevos §2.10 `POST /auth/verification-email/resend`, con rate limit particionado por correo, y §2.11 `POST /patients/me/nutritionist-assignment`, con el invariante de que el código no se consume si el canje falla. `POST /auth/login` sincroniza `emailVerified` desde Keycloak de forma unidireccional y tolerante a fallos (§2.2). Nuevos `errorCode`: `patient_already_assigned` y `nutritionist_not_available`, este último con la extensión `reason` (§3). Se retiran de §1 los dos endpoints que figuraban como inexistentes. |
 | 1.1 | 2026-08-25 | Cierre de los 8 gaps del `REPORTE-VERIFICACION-03`. Nuevos §2.8 `GET /consent/current` y §2.9 `POST /auth/refresh`. `POST /auth/login` incorpora el objeto `user` (§2.2) y declara 423 `account_locked` con la extensión `lockedUntil` (§6). El login del móvil pide `offline_access`, llevando `refreshExpiresIn` de 1800 a 2591999 (§5.1). Las claves de `errors` pasan a camelCase (§4.1). El enlace de recuperación se parametriza por cliente de origen. |

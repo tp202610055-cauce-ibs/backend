@@ -14,7 +14,7 @@ namespace Cauce.Api.IntegrationTests.Identity;
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class ConsentEndpointTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     private const string CurrentConsentUrl = "/api/v1/consent/current";
 

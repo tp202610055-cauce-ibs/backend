@@ -117,5 +117,18 @@ public enum AuditActionType
     /// registro (acta A41). Se registra tanto el canje efectivo como el rechazado, con el motivo en el
     /// contexto adicional, porque un rechazo es justamente lo que interesa investigar después.
     /// </summary>
-    NutritionistAssignment
+    NutritionistAssignment,
+
+    /// <summary>
+    /// Activación de una cuenta de nutricionista pendiente al autenticarse por primera vez (acta A51).
+    /// La tabla <c>users</c> no tiene trigger de auditoría, así que esta fila es el único rastro de la
+    /// transición de estado. El contexto adicional indica cuál de los dos puntos de entrada la disparó.
+    /// </summary>
+    AccountActivation,
+
+    /// <summary>
+    /// Reenvío, por el endpoint administrativo, del enlace con el que un nutricionista pendiente define su
+    /// contraseña (acta A52). Se registra solo cuando Keycloak aceptó el envío.
+    /// </summary>
+    ActivationEmailResend
 }

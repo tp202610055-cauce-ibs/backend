@@ -16,15 +16,17 @@ public sealed class LoginCommandHandlerTests
 {
     private const string Email = "p@cauce.local";
     private const int PatientRoleId = 1;
+    private const int NutritionistRoleId = 2;
 
     private readonly IKeycloakTokenClient _tokenClient = Substitute.For<IKeycloakTokenClient>();
     private readonly IKeycloakAdminClient _adminClient = Substitute.For<IKeycloakAdminClient>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
+    private readonly INutritionistActivationService _activationService = Substitute.For<INutritionistActivationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<LoginCommandHandler> _logger = Substitute.For<ILogger<LoginCommandHandler>>();
 
     private LoginCommandHandler CreateHandler() =>
-        new(_tokenClient, _adminClient, _userRepository, _unitOfWork, _logger);
+        new(_tokenClient, _adminClient, _userRepository, _activationService, _unitOfWork, _logger);
 
     private void GivenKeycloakAuthenticates()
     {
@@ -101,5 +103,41 @@ public sealed class LoginCommandHandlerTests
         // ocurrir es persistir nada ni emitir tokens.
         await _userRepository.Received(1).FindByEmailAsync(Email, Arg.Any<CancellationToken>());
         await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ValidCredentials_DelegatesActivationBeforePersisting()
+    {
+        GivenKeycloakAuthenticates();
+        var user = User.CreateNutritionist(Guid.NewGuid(), "kc-sub-2", Email, "Nutri Demo", NutritionistRoleId);
+        _userRepository.FindByEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(user);
+        _userRepository.GetRoleNameAsync(NutritionistRoleId, Arg.Any<CancellationToken>()).Returns(UserRoles.Nutritionist);
+
+        await CreateHandler().Handle(new LoginCommand(Email, "Correct123!", "cauce-mobile"), CancellationToken.None);
+
+        // La activación tiene que quedar enrolada antes del SaveChanges, para viajar en la misma
+        // transacción que la marca de último acceso (acta A51).
+        Received.InOrder(() =>
+        {
+            _activationService.ActivateIfPendingAsync(user, NutritionistActivationTrigger.Login, Arg.Any<CancellationToken>());
+            _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>());
+        });
+    }
+
+    [Fact]
+    public async Task Handle_InvalidCredentials_DoesNotAttemptActivation()
+    {
+        _tokenClient
+            .LoginAsync(Email, "wrong", "cauce-mobile", Arg.Any<CancellationToken>())
+            .Returns<KeycloakTokenResult>(_ => throw new InvalidCredentialsException());
+        var user = User.CreateNutritionist(Guid.NewGuid(), "kc-sub-2", Email, "Nutri Demo", NutritionistRoleId);
+        _userRepository.FindByEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(user);
+
+        var act = async () => await CreateHandler()
+            .Handle(new LoginCommand(Email, "wrong", "cauce-mobile"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidCredentialsException>();
+        await _activationService.DidNotReceiveWithAnyArgs()
+            .ActivateIfPendingAsync(default!, default, default);
     }
 }

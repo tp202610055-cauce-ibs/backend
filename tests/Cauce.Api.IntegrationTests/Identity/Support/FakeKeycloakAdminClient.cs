@@ -121,6 +121,28 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Identificadores de Keycloak para los que se pidió el enlace para definir la contraseña (acta A52).
+    /// </summary>
+    public List<string> UpdatePasswordEmailsSent { get; } = [];
+
+    /// <summary>
+    /// Excepción que lanza <see cref="SendUpdatePasswordEmailAsync"/>, para ejercitar un fallo del envío.
+    /// </summary>
+    public Exception? UpdatePasswordEmailFailure { get; set; }
+
+    /// <inheritdoc />
+    public Task SendUpdatePasswordEmailAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        if (UpdatePasswordEmailFailure is not null)
+        {
+            throw UpdatePasswordEmailFailure;
+        }
+
+        UpdatePasswordEmailsSent.Add(keycloakUserId);
+        return Task.CompletedTask;
+    }
+
     /// <inheritdoc />
     public Task DeleteUserAsync(string keycloakUserId, CancellationToken ct = default)
     {

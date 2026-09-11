@@ -20,7 +20,7 @@ namespace Cauce.Api.IntegrationTests.Reports;
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class ReportsApiTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>, IClassFixture<MinioFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>, IClassFixture<MinioFixture>
 {
     private readonly MinioFixture _minio;
 
