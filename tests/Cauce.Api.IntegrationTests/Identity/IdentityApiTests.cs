@@ -278,7 +278,8 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
             "/api/v1/admin/nutritionists", new { email = UniqueEmail(), fullName = "Nutri Admin" });
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
-        _factory.EmailSender.SentEmails.Should().Contain(e => e.Kind == "credentials");
+        // La contraseña ya no viaja por correo: se pide a Keycloak el enlace para definirla (acta A52).
+        _factory.KeycloakClient.UpdatePasswordEmailsSent.Should().NotBeEmpty();
     }
 
     [SkippableFact]

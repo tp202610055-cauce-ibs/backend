@@ -10,17 +10,21 @@ using Microsoft.Extensions.Logging;
 namespace Cauce.Application.Identity.UseCases.CreateNutritionist;
 
 /// <summary>
-/// Handler de la provisión de nutricionistas. Crea el usuario en Keycloak con una
-/// contraseña temporal que obliga al cambio en el primer acceso, persiste la
-/// cuenta local y envía las credenciales por correo. Ante un fallo posterior a la
-/// creación en Keycloak, compensa eliminando el usuario.
+/// Handler de la provisión de nutricionistas. Crea el usuario en Keycloak sin contraseña, persiste la
+/// cuenta local pendiente de activación y pide a Keycloak que envíe el enlace con el que el propio
+/// nutricionista define su contraseña (acta A52). Ante un fallo de persistencia posterior a la creación
+/// en Keycloak, compensa eliminando el usuario.
 /// </summary>
+/// <remarks>
+/// El enlace se pide <b>después</b> de confirmar la transacción y en modo best-effort: si falla, la cuenta
+/// queda provisionada y el resultado lo informa, en vez de compensar. Compensar a esa altura borraría el
+/// usuario de Keycloak con la fila local ya confirmada, que es justamente la cuenta huérfana que producía
+/// el envío de credenciales anterior. El enlace se vuelve a pedir con el endpoint de reenvío.
+/// </remarks>
 public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNutritionistCommand, CreateNutritionistResult>
 {
     private readonly IUserRepository _userRepository;
     private readonly IKeycloakAdminClient _keycloakAdminClient;
-    private readonly ITemporaryPasswordGenerator _temporaryPasswordGenerator;
-    private readonly IEmailSender _emailSender;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditLogger _auditLogger;
     private readonly ILogger<CreateNutritionistCommandHandler> _logger;
@@ -31,16 +35,12 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
     public CreateNutritionistCommandHandler(
         IUserRepository userRepository,
         IKeycloakAdminClient keycloakAdminClient,
-        ITemporaryPasswordGenerator temporaryPasswordGenerator,
-        IEmailSender emailSender,
         IUnitOfWork unitOfWork,
         IAuditLogger auditLogger,
         ILogger<CreateNutritionistCommandHandler> logger)
     {
         _userRepository = userRepository;
         _keycloakAdminClient = keycloakAdminClient;
-        _temporaryPasswordGenerator = temporaryPasswordGenerator;
-        _emailSender = emailSender;
         _unitOfWork = unitOfWork;
         _auditLogger = auditLogger;
         _logger = logger;
@@ -58,8 +58,8 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
             .GetRoleIdAsync(UserRoles.Nutritionist, cancellationToken)
             .ConfigureAwait(false);
 
-        var temporaryPassword = _temporaryPasswordGenerator.Generate();
-
+        // Sin contraseña: la define el propio nutricionista con el enlace de Keycloak. Hasta entonces no
+        // puede autenticarse, y ninguna credencial viaja por correo.
         var keycloakId = await _keycloakAdminClient
             .CreateUserAsync(request.Email, request.FullName, UserRoles.Nutritionist, requireEmailVerification: false, cancellationToken)
             .ConfigureAwait(false);
@@ -67,10 +67,6 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
         User user;
         try
         {
-            await _keycloakAdminClient
-                .SetTemporaryPasswordAsync(keycloakId, temporaryPassword, cancellationToken)
-                .ConfigureAwait(false);
-
             user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, request.Email, request.FullName, nutritionistRoleId);
             await _userRepository.AddAsync(user, cancellationToken).ConfigureAwait(false);
 
@@ -86,10 +82,6 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
                 cancellationToken: cancellationToken).ConfigureAwait(false);
 
             await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
-
-            await _emailSender
-                .SendNutritionistTemporaryCredentialsAsync(user.Email, user.FullName, temporaryPassword, cancellationToken)
-                .ConfigureAwait(false);
         }
         catch (Exception exception)
         {
@@ -100,9 +92,37 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
             throw;
         }
 
+        var activationEmailSent = await TrySendActivationEmailAsync(keycloakId, user.Id, cancellationToken)
+            .ConfigureAwait(false);
+
         _logger.LogInformation("Nutritionist {UserId} provisioned successfully.", user.Id);
 
-        return new CreateNutritionistResult(user.Id, user.Email, TemporaryCredentialsEmailSent: true);
+        return new CreateNutritionistResult(user.Id, user.Email, activationEmailSent);
+    }
+
+    /// <summary>
+    /// Pide a Keycloak el enlace para definir la contraseña. Es best-effort: la cuenta ya está confirmada y
+    /// un fallo del proveedor no debe deshacerla, solo quedar informado en el resultado.
+    /// </summary>
+    /// <param name="keycloakId">Identificador del usuario en Keycloak.</param>
+    /// <param name="userId">Identificador local del usuario, para la traza.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns><see langword="true"/> si Keycloak aceptó el envío.</returns>
+    private async Task<bool> TrySendActivationEmailAsync(string keycloakId, Guid userId, CancellationToken ct)
+    {
+        try
+        {
+            await _keycloakAdminClient.SendUpdatePasswordEmailAsync(keycloakId, ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Could not request the activation link for nutritionist {UserId}; it can be resent.",
+                userId);
+            return false;
+        }
     }
 
     private async Task CompensateKeycloakAsync(string keycloakId, CancellationToken ct)
