@@ -1,6 +1,8 @@
 using Cauce.Application.Common.Behaviors;
 using Cauce.Application.Common.Idempotency;
+using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
+using Cauce.Application.Identity.Services;
 using Cauce.Application.Patients.Services;
 using FluentValidation;
 using Mapster;
@@ -35,6 +37,10 @@ public static class DependencyInjection
             configuration.AddOpenBehavior(typeof(IdempotencyBehavior<,>));
             configuration.AddOpenBehavior(typeof(LoggingBehavior<,>));
             configuration.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            // La activación de nutricionistas confirma por su cuenta, así que tiene que correr antes de la
+            // auditoría: si fuera después, su SaveChanges persistiría la fila de intención de un comando
+            // cuyo handler todavía puede fallar (acta A51).
+            configuration.AddOpenBehavior(typeof(NutritionistActivationBehavior<,>));
             // La auditoría corre tras la validación (no audita peticiones inválidas) y antes del
             // handler, para las tablas sin trigger marcadas con IAuditableCommand (DEC-B5-01, acta A8).
             configuration.AddOpenBehavior(typeof(AuditingBehavior<,>));
@@ -48,6 +54,9 @@ public static class DependencyInjection
         // Vinculación paciente-nutricionista, compartida entre el registro, la creación de perfil y el
         // canje post-registro (acta A41).
         services.AddScoped<IPatientNutritionistAssignmentService, PatientNutritionistAssignmentService>();
+
+        // Regla única de activación de nutricionistas, compartida por el login y el behavior (acta A51).
+        services.AddScoped<INutritionistActivationService, NutritionistActivationService>();
 
         var typeAdapterConfig = TypeAdapterConfig.GlobalSettings;
         typeAdapterConfig.Scan(applicationAssembly);
