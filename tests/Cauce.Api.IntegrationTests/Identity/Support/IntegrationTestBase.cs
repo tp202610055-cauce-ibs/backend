@@ -133,7 +133,11 @@ public abstract class Prompt5IntegrationTestBase : IAsyncLifetime
     /// <summary>
     /// Siembra un nutricionista y devuelve su identificador local y de Keycloak.
     /// </summary>
-    protected async Task<(Guid Id, string KeycloakId, string Email)> SeedNutritionistAsync()
+    /// <param name="active">
+    /// Si se deja operativo. La fábrica lo crea pendiente de activación (acta A51), y casi todas las
+    /// pruebas necesitan uno que ya pueda atender, así que por defecto se activa.
+    /// </param>
+    protected async Task<(Guid Id, string KeycloakId, string Email)> SeedNutritionistAsync(bool active = true)
     {
         var (scope, db) = CreateDbScope();
         using var _ = scope;
@@ -141,6 +145,11 @@ public abstract class Prompt5IntegrationTestBase : IAsyncLifetime
         var keycloakId = Guid.NewGuid().ToString();
         var email = $"nutri-{Guid.NewGuid():N}@cauce.local";
         var user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, email, "Nutri", roleId);
+        if (active)
+        {
+            user.Activate();
+        }
+
         db.Users.Add(user);
         await db.SaveChangesAsync();
         return (user.Id, keycloakId, email);
