@@ -4,7 +4,9 @@ using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Identity.UseCases.RegisterPatient;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Identity.Enums;
 using Cauce.Domain.Identity.Exceptions;
+using Cauce.Domain.Patients.Exceptions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -111,5 +113,96 @@ public sealed class RegisterPatientCommandHandlerTests
 
         await act.Should().ThrowAsync<InvalidOperationException>();
         await _keycloakAdminClient.Received(1).DeleteUserAsync("kc-id", Arg.Any<CancellationToken>());
+    }
+
+    // ----- Estado del nutricionista dueño del código (acta A53) -----
+
+    private const string Code = "ABCDEFGH";
+    private const int NutritionistRoleId = 2;
+
+    private static RegisterPatientCommand CommandWithCode() => new(
+        "patient@cauce.local",
+        "Paciente Uno",
+        "Password1",
+        "1.0",
+        new string('a', 64),
+        "127.0.0.1",
+        Code);
+
+    private void GivenRegistrationCanProceed()
+    {
+        _consentService.VerifyHash(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _userRepository.ExistsByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+        _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(1);
+        _keycloakAdminClient
+            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, true, Arg.Any<CancellationToken>())
+            .Returns("kc-id");
+    }
+
+    private InvitationCode GivenInvitationOwnedBy(Guid nutritionistId, User? nutritionist)
+    {
+        var invitation = InvitationCode.Generate(Guid.NewGuid(), Code, nutritionistId, DateTime.UtcNow, InvitationCode.Validity);
+        _invitationCodeRepository.FindByCodeAsync(Code, Arg.Any<CancellationToken>()).Returns(invitation);
+        _userRepository.FindByIdAsync(nutritionistId, Arg.Any<CancellationToken>()).Returns(nutritionist);
+        return invitation;
+    }
+
+    private static User Nutritionist() =>
+        User.CreateNutritionist(Guid.NewGuid(), "kc-nutri", "n@cauce.local", "Nutri", NutritionistRoleId);
+
+    [Fact]
+    public async Task Handle_CodeOfActiveNutritionist_ConsumesTheCode()
+    {
+        GivenRegistrationCanProceed();
+        var nutritionist = Nutritionist();
+        nutritionist.Activate();
+        var invitation = GivenInvitationOwnedBy(nutritionist.Id, nutritionist);
+
+        await CreateHandler().Handle(CommandWithCode(), CancellationToken.None);
+
+        await _assignmentService.Received(1).ConsumeInvitationAsync(
+            Arg.Any<Guid>(), invitation, Arg.Any<DateTime>(), Arg.Any<LinkContext>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_CodeOfSuspendedNutritionist_ThrowsNotAvailableBeforeTouchingKeycloak()
+    {
+        GivenRegistrationCanProceed();
+        var nutritionist = Nutritionist();
+        nutritionist.Activate();
+        nutritionist.Suspend();
+        GivenInvitationOwnedBy(nutritionist.Id, nutritionist);
+
+        var act = () => CreateHandler().Handle(CommandWithCode(), CancellationToken.None);
+
+        (await act.Should().ThrowAsync<NutritionistNotAvailableException>()).Which.Reason.Should().Be("suspended");
+        // Nada que compensar: el rechazo ocurre antes de crear el usuario y de consumir el código.
+        await _keycloakAdminClient.DidNotReceiveWithAnyArgs().CreateUserAsync(default!, default!, default!, default, default);
+        await _assignmentService.DidNotReceiveWithAnyArgs().ConsumeInvitationAsync(default, default!, default, default, default);
+    }
+
+    [Fact]
+    public async Task Handle_CodeOfPendingNutritionist_ThrowsNotAvailable()
+    {
+        GivenRegistrationCanProceed();
+        var nutritionist = Nutritionist();
+        GivenInvitationOwnedBy(nutritionist.Id, nutritionist);
+
+        var act = () => CreateHandler().Handle(CommandWithCode(), CancellationToken.None);
+
+        (await act.Should().ThrowAsync<NutritionistNotAvailableException>())
+            .Which.Reason.Should().Be("pending_activation");
+    }
+
+    [Fact]
+    public async Task Handle_CodeOfMissingNutritionist_ThrowsInvalidInvitationCode()
+    {
+        GivenRegistrationCanProceed();
+        GivenInvitationOwnedBy(Guid.NewGuid(), nutritionist: null);
+
+        var act = () => CreateHandler().Handle(CommandWithCode(), CancellationToken.None);
+
+        // Inconsistencia de datos, no un problema del paciente: no se filtra el estado interno.
+        await act.Should().ThrowAsync<InvalidInvitationCodeException>();
     }
 }

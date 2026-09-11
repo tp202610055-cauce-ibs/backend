@@ -4,7 +4,9 @@ using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Identity.Enums;
 using Cauce.Domain.Identity.Exceptions;
+using Cauce.Domain.Patients.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -150,6 +152,26 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
             }
 
             throw new InvitationCodeAlreadyUsedException();
+        }
+
+        // El nutricionista dueño del código tiene que poder atender, igual que en el canje posterior al
+        // registro (acta A41, decisión D11). Se verifica antes de crear el usuario en Keycloak y de consumir
+        // el código, así que un rechazo no deja rastro y el código sigue disponible (acta A53).
+        var nutritionist = await _userRepository.FindByIdAsync(invitation.NutritionistId, ct).ConfigureAwait(false);
+        if (nutritionist is null)
+        {
+            // Código válido apuntando a una cuenta inexistente: inconsistencia de datos, no un problema del
+            // paciente. Se trata como código inválido para no filtrar el estado interno.
+            _logger.LogCritical(
+                "Invitation code {InvitationCodeId} references a missing nutritionist {NutritionistId}.",
+                invitation.Id,
+                invitation.NutritionistId);
+            throw new InvalidInvitationCodeException();
+        }
+
+        if (nutritionist.Status != UserStatus.Active)
+        {
+            throw new NutritionistNotAvailableException(nutritionist.Status);
         }
 
         return invitation;
