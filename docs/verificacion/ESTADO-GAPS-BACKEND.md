@@ -1,8 +1,9 @@
 # Estado de los Gaps de Backend — Pre-Mobile-1b
 
-> **Este documento cubre dos bloques.** La parte histórica, desde aquí hasta el final, es el diagnóstico
-> y cierre de los 8 gaps previos a Mobile-1b. El bloque **Backend-Fix-2** tiene su propia sección, más
-> abajo, y no altera nada de lo anterior. Ir a [Backend-Fix-2](#backend-fix-2).
+> **Este documento cubre tres bloques.** La primera parte, histórica, es el diagnóstico y cierre de los 8
+> gaps previos a Mobile-1b. Los bloques **Backend-Fix-2** y **Nutritionist-Activation-1** tienen su propia
+> sección, más abajo, y no alteran nada de lo anterior. Ir a [Backend-Fix-2](#backend-fix-2) o a
+> [Nutritionist-Activation-1](#nutritionist-activation-1).
 
 **Fecha de verificación:** 20 de agosto de 2026
 **Fecha de cierre:** 25 de agosto de 2026
@@ -215,3 +216,102 @@ que se ejecutan al crear la base en las pruebas y cuentan como cubiertas. Medido
 
 La cifra defendible es la segunda. Un bloque futuro debería excluir las migraciones del cálculo, además
 de instrumentar `Cauce.Api`, para que el número que se reporte signifique algo.
+
+> **Corrección del 2026-09-11.** Las dos cifras de esta tabla salieron de una fusión de los reportes que
+> contaba dos veces cada archivo de `Cauce.Domain`. Remedido este mismo tag con la fusión por ruta
+> absoluta, las cifras correctas son **79,8 %** de líneas sin migraciones y 91,8 % con migraciones, con
+> 60,1 % de ramas en las dos filas. Detalle en [Nutritionist-Activation-1](#nutritionist-activation-1).
+
+---
+
+## Nutritionist-Activation-1
+
+**Última actualización:** 2026-09-11
+**Backend al cerrar:** `feature/nutritionist-activation-1`
+**Alcance:** activación de las cuentas de nutricionista (acta A47), cierre del canje sin validar en el
+registro, y respuesta del endpoint admin de provisión (acta A49).
+
+### Actas del bloque
+
+| Acta | Tema | Estado |
+| --- | --- | --- |
+| [**A49**](../decisions/A49-admin-nutritionist-provisioning-response.md) | Respuesta de la provisión: `status`, `Location`, `activationEmailSent` y 502 declarado | Resuelta |
+| [**A51**](../decisions/A51-nutritionist-activation-mechanism.md) | Activación en la primera autenticación, por login o por el behavior del pipeline | Resuelta |
+| [**A52**](../decisions/A52-keycloak-activation-link-and-resend.md) | Enlace de Keycloak para definir la contraseña y su reenvío. Resuelve de paso la cuenta huérfana | Resuelta |
+| [**A53**](../decisions/A53-nutritionist-status-in-invitation-codes.md) | Estado del nutricionista al registrarse con un código y al generarlo | Resuelta |
+| [**A54**](../decisions/A54-nutritionist-operating-terms-deferred.md) | Términos operativos del nutricionista | Diferida |
+| [**A55**](../decisions/A55-suspension-session-enforcement-deferred.md) | La suspensión no corta sesiones ni tokens emitidos | Diferida |
+| [**A56**](../decisions/A56-invitation-revocation-on-suspension-deferred.md) | Los códigos de invitación no se revocan al suspender | Diferida |
+
+A47 queda resuelta en su parte de activación. A50 sigue reservada: el hallazgo menor del smoke de
+Backend-Fix-2 no tiene archivo propio.
+
+### Verificación
+
+- **Suite completa en secuencial:** 840 verdes, 0 omitidas (344 Domain, 203 Application, 85
+  Infrastructure, 208 integración).
+- **Smoke de punta a punta** contra el stack real (Keycloak 25.0.6, Mailpit, Postgres), sin pasos por SQL:
+
+  | Escenario | Resultado |
+  | --- | --- |
+  | Provisión | 201 `PendingActivation`, `Location` resuelve al `GET`, y ningún correo de credenciales del backend |
+  | Enlace de Keycloak | Llega "Actualiza tu cuenta"; tras definir la contraseña, la cuenta sigue pendiente hasta autenticarse |
+  | Token directo de Keycloak y `POST /invitations` | 201, la cuenta pasa a `Active` en la misma petición, auditada con `trigger: authenticated_request` |
+  | `POST /auth/login` | 200, la cuenta pasa a `Active`, auditada con `trigger: login` |
+  | Reenvío | 204 con segundo correo y auditoría a una cuenta pendiente; 409 `nutritionist_not_pending_activation` a una activa |
+  | Registro de paciente con el código | 201 y el código queda usado; reusarlo da 400 `invitation_code_already_used` |
+
+  Los usuarios del smoke (prefijo `smoke-na1-`) quedan en el entorno de desarrollo, en Keycloak y en la
+  base. Sus filas no se pueden borrar porque la bitácora inmutable las referencia, y dejar solo el lado de
+  Keycloak crearía cuentas locales sin identidad.
+
+- **Cobertura del código nuevo:**
+
+  | Pieza | Líneas |
+  | --- | --- |
+  | Behavior de activación, reenvío y `GET` admin | 100 % |
+  | Servicio de activación | 97,8 %; la única línea no cubierta es la rama por defecto de un `switch` exhaustivo |
+  | Excepciones `NutritionistNotAvailableException`, `NutritionistNotPendingActivationException` y `NutritionistNotFoundException` | 100 % |
+  | Métodos modificados (login, validación del código en el registro, generación, `SendUpdatePasswordEmailAsync`) | 100 % |
+  | `AdminController` / `InvitationsController` | 100 % / 84,6 %; la rama no cubierta es preexistente |
+
+### Corrección al hallazgo de instrumentación
+
+En la medición de este bloque, **`Cauce.Api` sí aparece instrumentado**: 82,2 % de líneas y 72,0 % de
+ramas. La ausencia de la sección anterior tampoco dependía del código: con el mismo comando, el tag
+`v0.8.0-backend-fix-2` también lo instrumenta (81,7 % de líneas). Vino de cómo se hizo aquella corrida,
+que no quedó registrada.
+
+| Medición (2026-09-11) | Líneas | Ramas |
+| --- | --- | --- |
+| Global sin migraciones ni `Cauce.Api` | **80,5 %** | 60,9 % |
+| Global sin migraciones, con `Cauce.Api` | 80,7 % | 62,7 % |
+| Global con migraciones | 91,5 % | 62,7 % |
+| Sin código generado ni `Cauce.Api` | 81,6 % | 62,8 % |
+
+La cifra principal sigue el criterio del bloque anterior: excluye las migraciones de EF Core y deja fuera
+`Cauce.Api`. La solución tiene otro código generado que ese criterio no excluye, el `RegexGenerator.g.cs`
+que el generador de expresiones regulares produce para `Cauce.Infrastructure`: 664 líneas, 59,6 %
+cubiertas. Sin él la cifra sube a 81,6 %, la de la última fila.
+
+El cálculo fusiona los cuatro `coverage.cobertura.xml` usando como clave la ruta absoluta del archivo y el
+número de línea. Una línea cuenta como cubierta si alguna de las cuatro corridas la ejecutó; para las
+ramas se toma, por línea, el mayor número de condiciones cubiertas.
+
+La ruta absoluta es necesaria porque coverlet registra cada archivo con un nombre relativo a la raíz de
+fuentes de su propio reporte, y esa raíz no es la misma en los cuatro: `Cauce.Domain.Tests` usa
+`src\Cauce.Domain\` y los otros tres usan `src\`. Fusionar por el nombre relativo parte en dos cada
+archivo de `Cauce.Domain`, que queda contado una vez cubierto y otra sin cubrir. Con ese defecto, esta
+misma corrida daba 76,8 % en lugar de 80,5 %.
+
+**El 76,1 % de Backend-Fix-2 tenía el mismo defecto.** Se remidió el tag `v0.8.0-backend-fix-2` con el
+mismo comando, con 776 pruebas verdes y 0 omitidas, y se fusionaron sus reportes de las dos maneras:
+
+| Tag `v0.8.0-backend-fix-2` | Fusión por nombre relativo | Fusión por ruta absoluta |
+| --- | --- | --- |
+| Sin migraciones ni `Cauce.Api` | 76,1 % | **79,8 %** |
+| Con migraciones, sin `Cauce.Api` | 89,6 % | 91,8 % |
+
+La fusión por nombre relativo reproduce exactamente las dos cifras publicadas en aquel bloque, así que fue
+el método de aquella medición. Con el mismo criterio, este bloque pasa de 79,8 % a 80,5 % de líneas y de
+60,1 % a 60,9 % de ramas; sin ningún código generado, de 81,0 % a 81,6 %.
