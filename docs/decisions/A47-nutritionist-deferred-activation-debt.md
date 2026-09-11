@@ -1,6 +1,7 @@
 # Acta A47: Deuda diferida — sin ciclo de vida de cuentas de nutricionista
 
-**Estado:** Aprobada, deuda diferida. Se resuelve en el bloque **Nutritionist-Activation-1**
+**Estado:** Aprobada. **Activación RESUELTA en Nutritionist-Activation-1** (actas A51 a A53); suspensión,
+reactivación y baja siguen diferidas (actas A55 y A56)
 **Fecha:** 2026-09-08
 **Aprobado por:** Flavio Eduardo Trigueros Chumacero
 **Aplicabilidad:** Backend, provisión y estados de las cuentas de nutricionista.
@@ -68,6 +69,15 @@ Sin comprometer el diseño, que es trabajo de ese bloque:
    `POST /admin/nutritionists`, o desde el portal web.
 3. Definir qué ocurre con los códigos vigentes y las asignaciones activas de un nutricionista suspendido.
 4. Verificar que las tres ramas de `nutritionist_not_available` quedan alcanzables end to end.
+
+## Resolución parcial en Nutritionist-Activation-1
+
+| Punto del alcance sugerido | Estado |
+| --- | --- |
+| 1. Provisionar en `PendingActivation` y activar en el primer acceso | **Resuelto.** Actas [A51](A51-nutritionist-activation-mechanism.md) y [A52](A52-keycloak-activation-link-and-resend.md) |
+| 2. Exponer suspensión y reactivación | **Diferido.** `Suspend` y `Reactivate` siguen sin llamador (acta [A55](A55-suspension-session-enforcement-deferred.md)) |
+| 3. Códigos vigentes y asignaciones de un suspendido | **Parcial.** El canje y la generación lo rechazan (acta [A53](A53-nutritionist-status-in-invitation-codes.md)); no hay revocación (acta [A56](A56-invitation-revocation-on-suspension-deferred.md)) |
+| 4. Las tres ramas de `nutritionist_not_available` alcanzables | `pending_activation` queda como defensa, porque A51 impide que un pendiente tenga códigos. `suspended` e `inactive` serán alcanzables cuando exista el flujo de suspensión |
 
 ## Referencias
 
