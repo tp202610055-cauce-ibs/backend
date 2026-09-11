@@ -376,6 +376,8 @@ public sealed class PatientsApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         var roleId = await db.UserRoles.Where(r => r.RoleName == UserRoles.Nutritionist).Select(r => r.RoleId).FirstAsync();
         var keycloakId = Guid.NewGuid().ToString();
         var user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, email, "Nutri Seed", roleId);
+        // La fábrica lo crea pendiente (acta A51); estas pruebas necesitan uno operativo.
+        user.Activate();
         db.Users.Add(user);
         await db.SaveChangesAsync();
         return (user.Id, keycloakId);
