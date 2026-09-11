@@ -124,5 +124,11 @@ public enum AuditActionType
     /// La tabla <c>users</c> no tiene trigger de auditoría, así que esta fila es el único rastro de la
     /// transición de estado. El contexto adicional indica cuál de los dos puntos de entrada la disparó.
     /// </summary>
-    AccountActivation
+    AccountActivation,
+
+    /// <summary>
+    /// Reenvío, por el endpoint administrativo, del enlace con el que un nutricionista pendiente define su
+    /// contraseña (acta A52). Se registra solo cuando Keycloak aceptó el envío.
+    /// </summary>
+    ActivationEmailResend
 }

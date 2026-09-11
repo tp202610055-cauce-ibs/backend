@@ -202,6 +202,11 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status409Conflict, "Paciente ya asignado", "patient_already_assigned", exception.Message),
             NutritionistNotAvailableException => (
                 StatusCodes.Status409Conflict, "Nutricionista no disponible", "nutritionist_not_available", exception.Message),
+            NutritionistNotFoundException => (
+                StatusCodes.Status404NotFound, "Nutricionista no encontrado", "nutritionist_not_found", exception.Message),
+            NutritionistNotPendingActivationException => (
+                StatusCodes.Status409Conflict, "Nutricionista no pendiente de activación", "nutritionist_not_pending_activation",
+                exception.Message),
             OnboardingAlreadyCompletedException => (
                 StatusCodes.Status409Conflict, "Onboarding ya completado", "onboarding_already_completed", exception.Message),
             PatientAccessNotAuthorizedException => (
