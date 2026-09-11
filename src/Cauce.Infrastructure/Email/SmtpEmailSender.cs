@@ -31,24 +31,6 @@ public sealed class SmtpEmailSender : IEmailSender
     }
 
     /// <inheritdoc />
-    public async Task SendNutritionistTemporaryCredentialsAsync(
-        string recipientEmail,
-        string fullName,
-        string temporaryPassword,
-        CancellationToken ct = default)
-    {
-        var textBody = EmailTemplates.BuildNutritionistCredentialsText(
-            fullName, recipientEmail, temporaryPassword, _options.PortalAppBaseUrl);
-        var htmlBody = EmailTemplates.BuildNutritionistCredentialsHtml(
-            fullName, recipientEmail, temporaryPassword, _options.PortalAppBaseUrl);
-
-        await _dispatcher
-            .SendAsync(recipientEmail, fullName, EmailTemplates.NutritionistCredentialsSubject, textBody, htmlBody, ct)
-            .ConfigureAwait(false);
-        _logger.LogInformation("Transactional email '{Subject}' sent.", EmailTemplates.NutritionistCredentialsSubject);
-    }
-
-    /// <inheritdoc />
     public async Task SendPasswordResetLinkAsync(
         string recipientEmail,
         string fullName,

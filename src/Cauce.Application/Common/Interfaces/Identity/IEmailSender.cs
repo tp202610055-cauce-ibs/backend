@@ -6,20 +6,6 @@ namespace Cauce.Application.Common.Interfaces.Identity;
 public interface IEmailSender
 {
     /// <summary>
-    /// Envía a un nutricionista recién provisionado sus credenciales temporales.
-    /// </summary>
-    /// <param name="recipientEmail">Correo del destinatario.</param>
-    /// <param name="fullName">Nombre completo del destinatario.</param>
-    /// <param name="temporaryPassword">Contraseña temporal asignada.</param>
-    /// <param name="ct">Token de cancelación.</param>
-    /// <returns>Tarea que representa la operación asíncrona.</returns>
-    Task SendNutritionistTemporaryCredentialsAsync(
-        string recipientEmail,
-        string fullName,
-        string temporaryPassword,
-        CancellationToken ct = default);
-
-    /// <summary>
     /// Envía el enlace de restablecimiento de contraseña.
     /// </summary>
     /// <param name="recipientEmail">Correo del destinatario.</param>

@@ -12,22 +12,18 @@ public sealed class FakeEmailSender : IEmailSender
     /// <summary>
     /// Representa un correo enviado.
     /// </summary>
-    /// <param name="Kind">Tipo de correo (<c>credentials</c> o <c>password-reset</c>).</param>
+    /// <param name="Kind">
+    /// Tipo de correo (<c>password-reset</c>, <c>report-ready</c>, <c>report-password</c> o
+    /// <c>account-deletion</c>).
+    /// </param>
     /// <param name="Recipient">Destinatario.</param>
-    /// <param name="Payload">Contenido relevante (contraseña temporal o enlace).</param>
+    /// <param name="Payload">Contenido relevante (enlace, contraseña del reporte o nombre).</param>
     public sealed record SentEmail(string Kind, string Recipient, string Payload);
 
     /// <summary>
     /// Correos enviados durante la prueba.
     /// </summary>
     public ConcurrentBag<SentEmail> SentEmails { get; } = [];
-
-    /// <inheritdoc />
-    public Task SendNutritionistTemporaryCredentialsAsync(string recipientEmail, string fullName, string temporaryPassword, CancellationToken ct = default)
-    {
-        SentEmails.Add(new SentEmail("credentials", recipientEmail, temporaryPassword));
-        return Task.CompletedTask;
-    }
 
     /// <inheritdoc />
     public Task SendPasswordResetLinkAsync(string recipientEmail, string fullName, string resetLink, CancellationToken ct = default)
