@@ -25,11 +25,12 @@ public sealed class LoginCommandHandlerEmailSyncTests
     private readonly IKeycloakTokenClient _tokenClient = Substitute.For<IKeycloakTokenClient>();
     private readonly IKeycloakAdminClient _adminClient = Substitute.For<IKeycloakAdminClient>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
+    private readonly INutritionistActivationService _activationService = Substitute.For<INutritionistActivationService>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<LoginCommandHandler> _logger = Substitute.For<ILogger<LoginCommandHandler>>();
 
     private LoginCommandHandler CreateHandler() =>
-        new(_tokenClient, _adminClient, _userRepository, _unitOfWork, _logger);
+        new(_tokenClient, _adminClient, _userRepository, _activationService, _unitOfWork, _logger);
 
     private static LoginCommand Command() => new(Email, Password, ClientId);
 
