@@ -18,7 +18,7 @@ namespace Cauce.Api.IntegrationTests.Auditing;
 /// origen <c>trigger</c>, y la inmutabilidad de <c>audit_logs</c>. Requieren Docker (PostgreSQL + Redis).
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class AuditTriggerTests : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+public sealed class AuditTriggerTests : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     /// <summary>
     /// Inicializa la prueba con los fixtures compartidos.

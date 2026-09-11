@@ -17,7 +17,7 @@ namespace Cauce.Api.IntegrationTests.Identity;
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class NutritionistActivationTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     private const string AssignedPatientsEndpoint = "/api/v1/nutritionists/me/patients";
 

@@ -17,7 +17,7 @@ namespace Cauce.Api.IntegrationTests.Identity;
 /// </remarks>
 [Trait("Category", "Integration")]
 public sealed class VerificationEmailResendApiTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     private const string Endpoint = "/api/v1/auth/verification-email/resend";
 

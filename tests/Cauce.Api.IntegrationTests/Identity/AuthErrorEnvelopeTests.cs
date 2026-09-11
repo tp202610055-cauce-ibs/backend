@@ -15,7 +15,7 @@ namespace Cauce.Api.IntegrationTests.Identity;
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class AuthErrorEnvelopeTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     private const string LoginUrl = "/api/v1/auth/login";
 

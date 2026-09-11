@@ -19,7 +19,7 @@ namespace Cauce.Api.IntegrationTests.Notifications;
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class NotificationDispatchTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>, IClassFixture<MailpitFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>, IClassFixture<MailpitFixture>
 {
     private readonly MailpitFixture _mailpit;
 

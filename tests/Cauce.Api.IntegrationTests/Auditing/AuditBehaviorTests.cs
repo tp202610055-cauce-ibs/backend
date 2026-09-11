@@ -12,7 +12,7 @@ namespace Cauce.Api.IntegrationTests.Auditing;
 /// no duplica con los triggers. Requieren Docker (PostgreSQL + Redis).
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class AuditBehaviorTests : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+public sealed class AuditBehaviorTests : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     /// <summary>
     /// Inicializa la prueba con los fixtures compartidos.

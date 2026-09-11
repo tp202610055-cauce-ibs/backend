@@ -13,12 +13,12 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Cauce.Api.IntegrationTests.Identity.Support;
 
 /// <summary>
-/// Base común de las pruebas de integración del Prompt 5. Levanta la fábrica contra los contenedores
+/// Base común de las pruebas de integración de la API. Levanta la fábrica contra los contenedores
 /// efímeros, aplica migraciones, siembra los catálogos una vez y resetea los datos transaccionales
 /// antes de cada test (con triggers desactivados, ver <see cref="DatabaseReset"/>). Ofrece helpers de
 /// siembra de usuarios, autenticación y consulta de la bitácora de auditoría.
 /// </summary>
-public abstract class Prompt5IntegrationTestBase : IAsyncLifetime
+public abstract class IntegrationTestBase : IAsyncLifetime
 {
     /// <summary>
     /// Fixture del contenedor PostgreSQL efímero.
@@ -40,7 +40,7 @@ public abstract class Prompt5IntegrationTestBase : IAsyncLifetime
     /// </summary>
     /// <param name="postgres">Fixture de PostgreSQL.</param>
     /// <param name="redis">Fixture de Redis.</param>
-    protected Prompt5IntegrationTestBase(PostgresFixture postgres, RedisFixture redis)
+    protected IntegrationTestBase(PostgresFixture postgres, RedisFixture redis)
     {
         Postgres = postgres;
         Redis = redis;

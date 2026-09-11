@@ -14,7 +14,7 @@ namespace Cauce.Api.IntegrationTests.Patients;
 /// Keycloak y bitácora de auditoría. Requieren Docker.
 /// </summary>
 [Trait("Category", "Integration")]
-public sealed class AccountDeletionApiTests : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
+public sealed class AccountDeletionApiTests : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>
 {
     /// <summary>
     /// Inicializa la prueba con los fixtures compartidos.

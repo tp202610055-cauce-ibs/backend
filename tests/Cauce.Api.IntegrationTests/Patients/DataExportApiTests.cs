@@ -20,7 +20,7 @@ namespace Cauce.Api.IntegrationTests.Patients;
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class DataExportApiTests
-    : Prompt5IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>, IClassFixture<MinioFixture>
+    : IntegrationTestBase, IClassFixture<PostgresFixture>, IClassFixture<RedisFixture>, IClassFixture<MinioFixture>
 {
     private static readonly string[] ExpectedCsvNames =
     [
