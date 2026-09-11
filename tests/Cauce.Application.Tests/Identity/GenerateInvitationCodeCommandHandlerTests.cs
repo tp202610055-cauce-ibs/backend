@@ -2,6 +2,7 @@ using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Identity.UseCases.GenerateInvitationCode;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Patients.Exceptions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -29,6 +30,8 @@ public sealed class GenerateInvitationCodeCommandHandlerTests
     public async Task Handle_Nutritionist_GeneratesAndPersistsCode()
     {
         var nutritionist = User.CreateNutritionist(Guid.NewGuid(), "kc-nutri", "n@cauce.local", "Nutri", 2);
+        // La fábrica lo crea pendiente (acta A51); generar códigos exige una cuenta activa (acta A53).
+        nutritionist.Activate();
         _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(nutritionist);
         _userRepository.GetRoleIdAsync(UserRoles.Nutritionist, Arg.Any<CancellationToken>()).Returns(2);
         _invitationCodeRepository.FindByCodeAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((InvitationCode?)null);
@@ -62,5 +65,21 @@ public sealed class GenerateInvitationCodeCommandHandlerTests
         var act = () => CreateHandler().Handle(new GenerateInvitationCodeCommand(Guid.NewGuid()), CancellationToken.None);
 
         await act.Should().ThrowAsync<UnauthorizedAccessException>();
+    }
+
+    [Fact]
+    public async Task Handle_SuspendedNutritionist_ThrowsNotAvailableWithoutPersisting()
+    {
+        var nutritionist = User.CreateNutritionist(Guid.NewGuid(), "kc-nutri", "n@cauce.local", "Nutri", 2);
+        nutritionist.Activate();
+        nutritionist.Suspend();
+        _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(nutritionist);
+        _userRepository.GetRoleIdAsync(UserRoles.Nutritionist, Arg.Any<CancellationToken>()).Returns(2);
+
+        var act = () => CreateHandler().Handle(new GenerateInvitationCodeCommand(Guid.NewGuid()), CancellationToken.None);
+
+        // Sus códigos serían rechazados al canjearse: no tiene sentido emitirlos (acta A53).
+        (await act.Should().ThrowAsync<NutritionistNotAvailableException>()).Which.Reason.Should().Be("suspended");
+        await _invitationCodeRepository.DidNotReceiveWithAnyArgs().AddAsync(default!, default);
     }
 }

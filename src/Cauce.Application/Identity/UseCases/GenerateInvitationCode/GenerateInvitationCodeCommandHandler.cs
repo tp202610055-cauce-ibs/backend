@@ -2,6 +2,8 @@ using System.Security.Cryptography;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Identity.Enums;
+using Cauce.Domain.Patients.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -9,8 +11,8 @@ namespace Cauce.Application.Identity.UseCases.GenerateInvitationCode;
 
 /// <summary>
 /// Handler de la generación de códigos de invitación. Verifica que el solicitante
-/// sea un nutricionista existente, genera un código alfanumérico sin caracteres
-/// ambiguos y lo persiste con vigencia de 72 horas.
+/// sea un nutricionista existente y activo, genera un código alfanumérico sin
+/// caracteres ambiguos y lo persiste con vigencia de 72 horas.
 /// </summary>
 public sealed class GenerateInvitationCodeCommandHandler
     : IRequestHandler<GenerateInvitationCodeCommand, GenerateInvitationCodeResult>
@@ -55,6 +57,14 @@ public sealed class GenerateInvitationCodeCommandHandler
         if (user is null || user.RoleId != nutritionistRoleId)
         {
             throw new UnauthorizedAccessException("Solo un nutricionista puede generar códigos de invitación.");
+        }
+
+        // Un nutricionista pendiente ya llega activado por el behavior del pipeline (acta A51). Lo que este
+        // chequeo frena de verdad es una cuenta suspendida o dada de baja que todavía tiene un token
+        // vigente: sus códigos serían rechazados al canjearse (acta A53).
+        if (user.Status != UserStatus.Active)
+        {
+            throw new NutritionistNotAvailableException(user.Status);
         }
 
         var utcNow = DateTime.UtcNow;
