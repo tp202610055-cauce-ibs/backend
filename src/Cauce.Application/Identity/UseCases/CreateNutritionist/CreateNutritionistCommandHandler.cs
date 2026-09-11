@@ -97,7 +97,7 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
 
         _logger.LogInformation("Nutritionist {UserId} provisioned successfully.", user.Id);
 
-        return new CreateNutritionistResult(user.Id, user.Email, activationEmailSent);
+        return new CreateNutritionistResult(user.Id, user.Email, user.Status, activationEmailSent);
     }
 
     /// <summary>

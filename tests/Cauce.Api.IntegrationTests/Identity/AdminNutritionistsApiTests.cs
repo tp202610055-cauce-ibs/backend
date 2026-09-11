@@ -142,6 +142,79 @@ public sealed class AdminNutritionistsApiTests
         response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
+    [SkippableFact]
+    public async Task Provision_ValidRequest_ReturnsTheStatusAndTheLocationOfTheNewAccount()
+    {
+        SkipIfUnavailable();
+
+        var response = await AdminClient().PostAsJsonAsync(ProvisionEndpoint, NewNutritionistBody());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Created);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var userId = document.RootElement.GetProperty("userId").GetGuid();
+        document.RootElement.GetProperty("status").GetString().Should().Be("PendingActivation");
+        response.Headers.Location!.AbsolutePath.Should().Be($"{ProvisionEndpoint}/{userId}");
+    }
+
+    [SkippableFact]
+    public async Task GetNutritionist_ProvisionedAccount_ReturnsTheSummaryAtTheLocation()
+    {
+        SkipIfUnavailable();
+        var client = AdminClient();
+        var created = await client.PostAsJsonAsync(ProvisionEndpoint, NewNutritionistBody("Nutri Consultada"));
+
+        var response = await client.GetAsync(created.Headers.Location);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = document.RootElement;
+        root.GetProperty("fullName").GetString().Should().Be("Nutri Consultada");
+        root.GetProperty("email").GetString().Should().EndWith("@cauce.local");
+        root.GetProperty("status").GetString().Should().Be("PendingActivation");
+        created.Headers.Location!.AbsolutePath.Should().EndWith(root.GetProperty("userId").GetGuid().ToString());
+    }
+
+    [SkippableFact]
+    public async Task GetNutritionist_UnknownIdentifier_Returns404()
+    {
+        SkipIfUnavailable();
+
+        var response = await AdminClient().GetAsync($"{ProvisionEndpoint}/{Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ErrorCodeAsync(response)).Should().Be("nutritionist_not_found");
+    }
+
+    [SkippableFact]
+    public async Task GetNutritionist_PatientIdentifier_Returns404()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+
+        var response = await AdminClient().GetAsync($"{ProvisionEndpoint}/{patient.Id}");
+
+        // Una cuenta de otro rol responde igual que una inexistente.
+        response.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await ErrorCodeAsync(response)).Should().Be("nutritionist_not_found");
+    }
+
+    [SkippableFact]
+    public async Task GetNutritionist_WithoutApiKey_Returns401()
+    {
+        SkipIfUnavailable();
+        var nutritionist = await SeedNutritionistAsync();
+
+        var response = await Factory.CreateClient().GetAsync($"{ProvisionEndpoint}/{nutritionist.Id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    private static object NewNutritionistBody(string fullName = "Nutri Admin") => new
+    {
+        email = $"nutri-{Guid.NewGuid():N}@cauce.local",
+        fullName
+    };
+
     private static string ResendEndpoint(Guid nutritionistId) =>
         $"{ProvisionEndpoint}/{nutritionistId}/activation-email";
 

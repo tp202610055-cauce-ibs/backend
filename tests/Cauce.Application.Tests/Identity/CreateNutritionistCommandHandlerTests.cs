@@ -53,6 +53,7 @@ public sealed class CreateNutritionistCommandHandlerTests
         var result = await CreateHandler().Handle(Command(), CancellationToken.None);
 
         result.Email.Should().Be("n@cauce.local");
+        result.Status.Should().Be(UserStatus.PendingActivation);
         await _userRepository.Received(1).AddAsync(
             Arg.Is<User>(user => user.Status == UserStatus.PendingActivation && user.KeycloakId == KeycloakId),
             Arg.Any<CancellationToken>());
