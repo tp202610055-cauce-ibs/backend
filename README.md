@@ -44,7 +44,7 @@ src/
 
 Si quieres entender por qué cada decisión está tomada de la forma que está, hay tres documentos que conviene leer en este orden:
 
-1. **`CLAUDE.md`** — guía de contexto del proyecto y mapeo de qué va dónde
+1. **`CLAUDE.md`** — guía de contexto del proyecto y mapeo de qué va dónde. **No viaja en el repo**: es un documento operativo local, excluido por `.gitignore` por decisión del equipo. Si no lo tienes en tu copia de trabajo, pídeselo a Trigo.
 2. **`CONVENTIONS.md`** — convenciones de código C# que aplican siempre
 3. **`../docs/decisions/DECISIONS-BLOCK-3.md`** — las nueve decisiones técnicas vinculantes (tokens, CORS, rate limiting, idempotency, auditoría, etc.)
 
@@ -131,7 +131,7 @@ dotnet test --filter Category=Integration
 ```
 backend/
 ├── Cauce.sln
-├── CLAUDE.md                  # Contexto del proyecto para herramientas de IA
+├── CLAUDE.md                  # Local, en .gitignore: NO se commitea
 ├── CONVENTIONS.md             # Convenciones de código (mandatorias)
 ├── README.md                  # Este archivo
 ├── .gitignore
