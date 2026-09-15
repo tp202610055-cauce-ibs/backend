@@ -37,7 +37,13 @@ public sealed class MinioFixture : IAsyncLifetime
     {
         try
         {
-            _container = new MinioBuilder().Build();
+            // Imagen fijada al fork comunitario pgsty/minio. La oficial minio/minio
+            // fue retirada del registry y el pull falla, lo que dejaba este fixture
+            // como no disponible y omitia en silencio las pruebas de MinIO. Tag
+            // explicito y nunca :latest, para que la suite sea reproducible.
+            _container = new MinioBuilder()
+                .WithImage("pgsty/minio:RELEASE.2026-08-04T00-00-00Z")
+                .Build();
             await _container.StartAsync();
 
             Endpoint = _container.GetConnectionString()
