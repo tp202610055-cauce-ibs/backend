@@ -239,6 +239,12 @@ if (app.Environment.IsDevelopment())
     await app.Services.RunDevelopmentSeedAsync();
 }
 
+// El documento de consentimiento se publica y verifica en todos los ambientes, no solo en
+// desarrollo: sin esa fila el comprobante en PDF no tiene texto que reproducir. Si el texto
+// de configuración divergió de la versión almacenada, deja una advertencia en el log y el
+// arranque continúa.
+await app.Services.EnsureConsentDocumentAsync();
+
 // 15. Ejecución.
 app.Run();
 
