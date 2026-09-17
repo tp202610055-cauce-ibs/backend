@@ -16,6 +16,7 @@ public sealed class GetMyConsentPdfQueryHandler : IRequestHandler<GetMyConsentPd
     private readonly IUserRepository _userRepository;
     private readonly IConsentRecordRepository _consentRecordRepository;
     private readonly IConsentPdfRenderer _consentPdfRenderer;
+    private readonly IConsentDocumentRepository _consentDocumentRepository;
 
     /// <summary>
     /// Inicializa el handler con sus dependencias.
@@ -24,12 +25,14 @@ public sealed class GetMyConsentPdfQueryHandler : IRequestHandler<GetMyConsentPd
         ICurrentUserService currentUserService,
         IUserRepository userRepository,
         IConsentRecordRepository consentRecordRepository,
-        IConsentPdfRenderer consentPdfRenderer)
+        IConsentPdfRenderer consentPdfRenderer,
+        IConsentDocumentRepository consentDocumentRepository)
     {
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _consentRecordRepository = consentRecordRepository;
         _consentPdfRenderer = consentPdfRenderer;
+        _consentDocumentRepository = consentDocumentRepository;
     }
 
     /// <inheritdoc />
@@ -52,7 +55,15 @@ public sealed class GetMyConsentPdfQueryHandler : IRequestHandler<GetMyConsentPd
             consent.ConsentTextHash,
             consent.IpAddress);
 
-        var pdf = _consentPdfRenderer.Render(content);
+        // El texto sale de la version que el paciente acepto, no de la vigente. Si ambas
+        // difieren y se usara la vigente, el PDF mostraria el hash de una version junto al
+        // texto de otra: un documento internamente inconsistente (CP004 paso 7).
+        var document = await _consentDocumentRepository
+            .FindByVersionAsync(consent.DocumentVersion, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new ConsentRecordNotFoundException();
+
+        var pdf = _consentPdfRenderer.Render(content, document.Text);
         var fileName = $"consentimiento-{consent.DocumentVersion}.pdf";
 
         return new ConsentPdfResult(pdf, fileName);
