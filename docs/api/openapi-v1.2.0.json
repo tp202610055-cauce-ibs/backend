@@ -1,5 +1,5 @@
 {
-  "openapi": "3.0.1",
+  "openapi": "3.0.4",
   "info": {
     "title": "Cauce API",
     "description": "API del sistema de recomendaciones dietéticas para pacientes con SII.",
@@ -7148,6 +7148,117 @@
         }
       }
     },
+    "/api/v1/patients/me/consent": {
+      "get": {
+        "tags": [
+          "Patients"
+        ],
+        "summary": "Devuelve los datos del consentimiento informado aceptado por el paciente autenticado\r\n(HU0001 escenario 4): versión, momento de aceptación y hash del texto.",
+        "description": "Complementa a `me/consent/pdf`. La sección de privacidad necesita mostrar versión y\r\nfecha sin obligar al paciente a descargar el documento binario para verlas.",
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyConsentResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyConsentResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyConsentResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/patients/me/consent/pdf": {
       "get": {
         "tags": [
@@ -10212,6 +10323,27 @@
         },
         "additionalProperties": false,
         "description": "Cuerpo de la petición de aprobación con modificación de una recomendación (US17 CA03)."
+      },
+      "MyConsentResult": {
+        "type": "object",
+        "properties": {
+          "documentVersion": {
+            "type": "string",
+            "nullable": true
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "consentTextHash": {
+            "type": "string",
+            "nullable": true
+          },
+          "textAvailable": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
       },
       "MyProfileClinicalInfo": {
         "type": "object",

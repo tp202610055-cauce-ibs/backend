@@ -59,6 +59,11 @@ public sealed class CauceDbContext : DbContext
     public DbSet<ConsentRecord> ConsentRecords => Set<ConsentRecord>();
 
     /// <summary>
+    /// Versiones del documento de consentimiento informado, con su texto íntegro.
+    /// </summary>
+    public DbSet<ConsentDocument> ConsentDocuments => Set<ConsentDocument>();
+
+    /// <summary>
     /// Perfiles clínicos de pacientes.
     /// </summary>
     public DbSet<PatientProfile> PatientProfiles => Set<PatientProfile>();

@@ -120,6 +120,7 @@ public static class DependencyInjection
         services.AddScoped<IInvitationCodeRepository, InvitationCodeRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IConsentRecordRepository, ConsentRecordRepository>();
+        services.AddScoped<IConsentDocumentRepository, ConsentDocumentRepository>();
 
         // Repositorios del módulo de pacientes.
         services.AddScoped<IPatientProfileRepository, PatientProfileRepository>();
@@ -212,6 +213,7 @@ public static class DependencyInjection
         // Seeders.
         services.AddScoped<UserRolesSeeder>();
         services.AddScoped<AllergiesSeeder>();
+        services.AddScoped<ConsentDocumentsSeeder>();
         services.AddScoped<FoodItemsSeeder>();
         services.AddScoped<GlossaryTermsSeeder>();
         services.AddScoped<DevAdminSeeder>();

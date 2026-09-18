@@ -10,8 +10,13 @@ public interface IConsentPdfRenderer
     /// Renderiza el comprobante de consentimiento en PDF.
     /// </summary>
     /// <param name="content">Datos del encabezado y del consentimiento aceptado.</param>
+    /// <param name="consentText">
+    /// Texto íntegro de la versión que el paciente aceptó. Lo resuelve el handler contra
+    /// <c>consent_documents</c>: el renderer no debe ir a buscar el texto vigente, porque no
+    /// tiene por qué ser el mismo (HU0001 escenario 4, CP004 paso 7).
+    /// </param>
     /// <returns>El contenido binario del PDF.</returns>
-    byte[] Render(ConsentPdfContent content);
+    byte[] Render(ConsentPdfContent content, string consentText);
 }
 
 /// <summary>

@@ -1,4 +1,5 @@
 using Cauce.Api.Contracts.Patients;
+using Cauce.Application.Identity.UseCases.GetMyConsent;
 using Cauce.Application.Identity.UseCases.GetMyConsentPdf;
 using Cauce.Application.Patients.Dtos;
 using Cauce.Application.Patients.UseCases.AssignNutritionist;
@@ -158,6 +159,25 @@ public sealed class PatientsController : BaseApiController
     public async Task<IActionResult> ExportMyData(CancellationToken ct)
     {
         var result = await _mediator.Send(new ExportMyDataCommand(), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Devuelve los datos del consentimiento informado aceptado por el paciente autenticado
+    /// (HU0001 escenario 4): versión, momento de aceptación y hash del texto.
+    /// </summary>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Los datos del consentimiento aceptado, o 404 si no hay ninguno vigente.</returns>
+    /// <remarks>
+    /// Complementa a <c>me/consent/pdf</c>. La sección de privacidad necesita mostrar versión y
+    /// fecha sin obligar al paciente a descargar el documento binario para verlas.
+    /// </remarks>
+    [HttpGet("me/consent")]
+    [ProducesResponseType(typeof(MyConsentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetMyConsent(CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetMyConsentQuery(), ct);
         return Ok(result);
     }
 
