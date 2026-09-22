@@ -22,6 +22,7 @@ public sealed class GetUnifiedHistoryQueryHandler : IRequestHandler<GetUnifiedHi
     private readonly IMealRepository _mealRepository;
     private readonly ISymptomRepository _symptomRepository;
     private readonly IClinicalNoteRepository _clinicalNoteRepository;
+    private readonly IMealFodmapResolver _fodmapResolver;
 
     /// <summary>
     /// Inicializa el handler con sus dependencias.
@@ -31,13 +32,15 @@ public sealed class GetUnifiedHistoryQueryHandler : IRequestHandler<GetUnifiedHi
         IUserRepository userRepository,
         IMealRepository mealRepository,
         ISymptomRepository symptomRepository,
-        IClinicalNoteRepository clinicalNoteRepository)
+        IClinicalNoteRepository clinicalNoteRepository,
+        IMealFodmapResolver fodmapResolver)
     {
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _mealRepository = mealRepository;
         _symptomRepository = symptomRepository;
         _clinicalNoteRepository = clinicalNoteRepository;
+        _fodmapResolver = fodmapResolver;
     }
 
     /// <inheritdoc />
@@ -58,7 +61,12 @@ public sealed class GetUnifiedHistoryQueryHandler : IRequestHandler<GetUnifiedHi
             .ConfigureAwait(false);
 
         var events = new List<HistoryEvent>(meals.Count + symptoms.Count + notes.Count);
-        events.AddRange(meals.Select(meal => new MealHistoryEvent(meal.ConsumedAt, ClinicalRegistryMappings.ToHistoryItem(meal))));
+        var fodmapByMeal = await _fodmapResolver.ResolveAsync(meals, cancellationToken).ConfigureAwait(false);
+        events.AddRange(meals.Select(meal => new MealHistoryEvent(
+            meal.ConsumedAt,
+            ClinicalRegistryMappings.ToHistoryItem(
+                meal,
+                fodmapByMeal.TryGetValue(meal.Id, out var level) ? level : null))));
         events.AddRange(symptoms.Select(symptom => new SymptomHistoryEvent(symptom.OccurredAt, ClinicalRegistryMappings.ToHistoryItem(symptom))));
         events.AddRange(notes.Select(note => new ClinicalNoteHistoryEvent(note.CreatedAt, ClinicalRegistryMappings.ToSummary(note))));
 

@@ -58,6 +58,22 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
         var utcNow = DateTime.UtcNow;
         var patientId = await ResolveCurrentPatientIdAsync(cancellationToken).ConfigureAwait(false);
 
+        // El cierre del onboarding es un segundo SaveChanges, en otro handler. Sin transacción
+        // explícita, un fallo en ese paso dejaba la línea base ya confirmada y el perfil sin cerrar:
+        // el paciente quedaba con una evaluación de línea base y el onboarding abierto, un estado que
+        // ningún flujo posterior repara porque la línea base ya no puede repetirse. La transacción
+        // abarca los dos guardados.
+        return await _unitOfWork
+            .ExecuteInTransactionAsync(ct => SubmitAsync(request, patientId, utcNow, ct), cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private async Task<CreateIbsSssAssessmentResult> SubmitAsync(
+        CreateIbsSssAssessmentCommand request,
+        Guid patientId,
+        DateTime utcNow,
+        CancellationToken cancellationToken)
+    {
         int cycleNumber;
         if (request.AssessmentType == AssessmentType.Baseline)
         {
@@ -72,6 +88,18 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
         else
         {
             cycleNumber = await _assessmentRepository.GetNextCycleNumberAsync(patientId, cancellationToken).ConfigureAwait(false);
+        }
+
+        // US12: el ciclo del protocolo es de 14 días. Una evaluación periódica enviada antes de tiempo
+        // no se rechaza por capricho: aceptarla acortaría el intervalo y dejaría dos mediciones
+        // demasiado próximas como para compararlas. La agenda vigente es la fuente de la fecha
+        // esperada; si el paciente no tiene ninguna abierta, no hay nada que adelantar.
+        var openSchedule = await _scheduleRepository.FindOpenByPatientAsync(patientId, cancellationToken).ConfigureAwait(false);
+        if (request.AssessmentType == AssessmentType.Periodic
+            && openSchedule is not null
+            && openSchedule.IsTooEarlyFor(utcNow))
+        {
+            throw new IbsSssAssessmentTooEarlyException(openSchedule.DueDate, openSchedule.AcceptedFrom);
         }
 
         var assessment = IbsSssAssessment.Submit(
@@ -90,7 +118,6 @@ public sealed class CreateIbsSssAssessmentCommandHandler : IRequestHandler<Creat
 
         // US12 CA02: cerrar la agenda vigente (si el paciente tenía una pendiente) y agendar la próxima
         // evaluación con vencimiento a los 14 días. Todo en la misma transacción que la evaluación.
-        var openSchedule = await _scheduleRepository.FindOpenByPatientAsync(patientId, cancellationToken).ConfigureAwait(false);
         openSchedule?.MarkCompleted(utcNow);
 
         if (assessment.NextAssessmentDate is { } nextDate)

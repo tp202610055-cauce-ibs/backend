@@ -42,13 +42,39 @@ public sealed class FoodItemRepository : IFoodItemRepository
     /// <inheritdoc />
     public async Task<IReadOnlyList<FoodItem>> SearchByNameAsync(string query, int take, CancellationToken ct = default)
     {
+        // unaccent + ILIKE, igual que el glosario (US27): el catálogo TPCA-CENAN tiene nombres con
+        // tildes ("plátano", "maíz", "níspero") y el paciente los escribe sin ellas en el teclado del
+        // celular. Sin unaccent, buscar "platano" no devuelve nada.
+        var pattern = $"%{query}%";
+
         return await _context.Set<FoodItem>()
             .AsNoTracking()
-            .Where(x => x.IsActive && EF.Functions.ILike(x.Name, $"%{query}%"))
+            .Where(x => x.IsActive && EF.Functions.ILike(EF.Functions.Unaccent(x.Name), EF.Functions.Unaccent(pattern)))
             .OrderBy(x => x.Name)
             .Take(take)
             .ToListAsync(ct)
             .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, FodmapLevel>> GetFodmapLevelsAsync(
+        IReadOnlyCollection<Guid> foodIds,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(foodIds);
+        if (foodIds.Count == 0)
+        {
+            return new Dictionary<Guid, FodmapLevel>();
+        }
+
+        var rows = await _context.Set<FoodItem>()
+            .AsNoTracking()
+            .Where(x => foodIds.Contains(x.Id))
+            .Select(x => new { x.Id, x.FodmapLevel })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return rows.ToDictionary(row => row.Id, row => row.FodmapLevel);
     }
 
     /// <inheritdoc />
