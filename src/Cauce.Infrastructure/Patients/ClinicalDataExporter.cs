@@ -1,4 +1,5 @@
 using Cauce.Application.Common.Interfaces.Patients;
+using Cauce.Domain.Identity.Exceptions;
 using Cauce.Application.Common.Interfaces.Storage;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Storage;
@@ -14,12 +15,10 @@ namespace Cauce.Infrastructure.Patients;
 /// </summary>
 public sealed class ClinicalDataExporter : IClinicalDataExporter
 {
-    // Vigencia de la URL prefirmada: 7 días, el máximo admitido por el esquema de firma S3/MinIO.
-    private static readonly TimeSpan UrlValidity = TimeSpan.FromDays(7);
-
     private readonly CauceDbContext _context;
     private readonly IObjectStorage _objectStorage;
     private readonly MinioOptions _options;
+    private readonly DataExportOptions _exportOptions;
 
     /// <summary>
     /// Inicializa el exportador con sus dependencias.
@@ -27,19 +26,23 @@ public sealed class ClinicalDataExporter : IClinicalDataExporter
     /// <param name="context">Contexto de base de datos.</param>
     /// <param name="objectStorage">Almacenamiento de objetos.</param>
     /// <param name="options">Opciones de MinIO (bucket de exportaciones).</param>
+    /// <param name="exportOptions">Opciones de la exportación (vigencia de la URL prefirmada).</param>
     public ClinicalDataExporter(
         CauceDbContext context,
         IObjectStorage objectStorage,
-        IOptions<MinioOptions> options)
+        IOptions<MinioOptions> options,
+        IOptions<DataExportOptions> exportOptions)
     {
         _context = context;
         _objectStorage = objectStorage;
         _options = options.Value;
+        _exportOptions = exportOptions.Value;
     }
 
     /// <inheritdoc />
     public async Task<ClinicalDataExport> ExportAsync(Guid patientUserId, CancellationToken ct = default)
     {
+        var urlValidity = TimeSpan.FromMinutes(_exportOptions.PresignedUrlValidityMinutes);
         var dataSet = await LoadAsync(patientUserId, ct).ConfigureAwait(false);
         var archive = ClinicalDataArchiveBuilder.Build(dataSet);
 
@@ -54,14 +57,25 @@ public sealed class ClinicalDataExporter : IClinicalDataExporter
         }
 
         var url = await _objectStorage
-            .GetPresignedUrlAsync(_options.ExportsBucket, objectKey, UrlValidity, ct)
+            .GetPresignedUrlAsync(_options.ExportsBucket, objectKey, urlValidity, ct)
             .ConfigureAwait(false);
 
-        return new ClinicalDataExport(url, DateTime.UtcNow + UrlValidity, archive.Counts);
+        return new ClinicalDataExport(url, DateTime.UtcNow + urlValidity, archive.Counts);
     }
 
     private async Task<ClinicalDataSet> LoadAsync(Guid patientUserId, CancellationToken ct)
     {
+        // El paciente viaja en el ZIP por su código legible (G1), nunca por su GUID ni por su nombre:
+        // el archivo está pensado para investigación y un identificador técnico ahí no aporta nada y
+        // sí reidentifica.
+        var patientCode = await _context.Users
+            .AsNoTracking()
+            .Where(user => user.Id == patientUserId)
+            .Select(user => user.PatientCode)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false)
+            ?? throw new InvalidPatientCodeException(null);
+
         var profile = await _context.PatientProfiles
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.UserId == patientUserId, ct)
@@ -126,6 +140,6 @@ public sealed class ClinicalDataExporter : IClinicalDataExporter
             .ConfigureAwait(false);
 
         return new ClinicalDataSet(
-            profile, allergies, meals, symptoms, assessments, recommendations, feedback, consentRecords, auditLogs);
+            patientCode, profile, allergies, meals, symptoms, assessments, recommendations, feedback, consentRecords, auditLogs);
     }
 }

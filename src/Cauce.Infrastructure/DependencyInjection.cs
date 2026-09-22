@@ -1,3 +1,4 @@
+using Cauce.Application.ClinicalRegistry.Services;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
@@ -76,6 +77,7 @@ public static class DependencyInjection
         services.Configure<KeyDbOptions>(configuration.GetSection(KeyDbOptions.SectionName));
         services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
         services.Configure<MinioOptions>(configuration.GetSection(MinioOptions.SectionName));
+        services.Configure<DataExportOptions>(configuration.GetSection(DataExportOptions.SectionName));
         services.Configure<ReportOptions>(configuration.GetSection(ReportOptions.SectionName));
 
         // Servicios transversales.
@@ -102,6 +104,7 @@ public static class DependencyInjection
 
         // Servicios del módulo de registro clínico.
         services.AddSingleton<IFodmapAggregator, FodmapAggregator>();
+        services.AddScoped<IMealFodmapResolver, MealFodmapResolver>();
         services.AddSingleton<IIbsSssScorer, IbsSssScorer>();
 
         // Almacén de idempotencia respaldado por KeyDB. AbortOnConnectFail=false evita que
@@ -117,6 +120,7 @@ public static class DependencyInjection
 
         // Repositorios del módulo de identidad.
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IPatientCodeGenerator, PatientCodeGenerator>();
         services.AddScoped<IInvitationCodeRepository, InvitationCodeRepository>();
         services.AddScoped<IPasswordResetTokenRepository, PasswordResetTokenRepository>();
         services.AddScoped<IConsentRecordRepository, ConsentRecordRepository>();
@@ -197,12 +201,23 @@ public static class DependencyInjection
         services.AddSingleton<IMinioClient>(serviceProvider =>
         {
             var minioOptions = serviceProvider.GetRequiredService<IOptions<MinioOptions>>().Value;
-            return new MinioClient()
-                .WithEndpoint(minioOptions.Endpoint)
-                .WithCredentials(minioOptions.AccessKey, minioOptions.SecretKey)
-                .WithSSL(minioOptions.UseSsl)
-                .Build();
+            return BuildMinioClient(minioOptions.Endpoint, minioOptions.UseSsl, minioOptions);
         });
+
+        // Cliente de firma: mismo MinIO, endpoint distinto. Si no hay endpoint público configurado se
+        // reutiliza el cliente de conexión y nada cambia respecto del comportamiento previo.
+        services.AddSingleton(serviceProvider =>
+        {
+            var minioOptions = serviceProvider.GetRequiredService<IOptions<MinioOptions>>().Value;
+            if (!minioOptions.HasSeparatePublicEndpoint)
+            {
+                return new MinioPresignClient(serviceProvider.GetRequiredService<IMinioClient>());
+            }
+
+            return new MinioPresignClient(
+                BuildMinioClient(minioOptions.PublicEndpoint!, minioOptions.PublicUseSsl, minioOptions));
+        });
+
         services.AddScoped<IObjectStorage, MinioObjectStorage>();
         services.AddScoped<IClinicalReportDataReader, ClinicalReportDataReader>();
         services.AddScoped<IClinicalReportMetadataRepository, ClinicalReportMetadataRepository>();
@@ -262,5 +277,21 @@ public static class DependencyInjection
             return FirebaseMessaging.GetMessaging(app);
         });
         services.AddScoped<INotificationSender, FirebaseCloudMessagingSender>();
+    }
+
+    /// <summary>
+    /// Construye un cliente de MinIO contra el endpoint indicado, con las credenciales comunes.
+    /// </summary>
+    /// <param name="endpoint">Endpoint del servidor, sin esquema.</param>
+    /// <param name="useSsl">Indica si la conexión usa TLS.</param>
+    /// <param name="options">Opciones de MinIO, de donde salen las credenciales.</param>
+    /// <returns>El cliente de MinIO.</returns>
+    private static IMinioClient BuildMinioClient(string endpoint, bool useSsl, MinioOptions options)
+    {
+        return new MinioClient()
+            .WithEndpoint(endpoint)
+            .WithCredentials(options.AccessKey, options.SecretKey)
+            .WithSSL(useSsl)
+            .Build();
     }
 }
