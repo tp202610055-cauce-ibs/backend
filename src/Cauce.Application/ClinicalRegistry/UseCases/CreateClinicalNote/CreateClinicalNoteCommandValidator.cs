@@ -14,6 +14,9 @@ public sealed class CreateClinicalNoteCommandValidator : AbstractValidator<Creat
     /// </summary>
     public CreateClinicalNoteCommandValidator()
     {
+        RuleFor(x => x.ClientGuid)
+            .NotEmpty().WithMessage("El client_guid (o el encabezado Idempotency-Key) es obligatorio.");
+
         RuleFor(x => x.Content)
             .NotEmpty().WithMessage("El contenido de la nota es obligatorio.")
             .MaximumLength(500);

@@ -57,7 +57,8 @@ public sealed class CreateClinicalNoteCommandHandler : IRequestHandler<CreateCli
 
         await EnsureAssociationOwnedByPatientAsync(request, patientId, cancellationToken).ConfigureAwait(false);
 
-        var note = ClinicalNote.Attach(Guid.NewGuid(), patientId, request.MealId, request.SymptomId, request.Content, utcNow);
+        var note = ClinicalNote.Attach(
+            Guid.NewGuid(), request.ClientGuid, patientId, request.MealId, request.SymptomId, request.Content, utcNow);
 
         await _clinicalNoteRepository.AddAsync(note, cancellationToken).ConfigureAwait(false);
 

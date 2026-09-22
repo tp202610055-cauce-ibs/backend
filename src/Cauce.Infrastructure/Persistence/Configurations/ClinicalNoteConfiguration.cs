@@ -23,6 +23,7 @@ public sealed class ClinicalNoteConfiguration : IEntityTypeConfiguration<Clinica
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("note_id");
 
+        builder.Property(x => x.ClientGuid).HasColumnName("client_guid").IsRequired();
         builder.Property(x => x.PatientId).HasColumnName("patient_id").IsRequired();
         builder.Property(x => x.MealId).HasColumnName("meal_id");
         builder.Property(x => x.SymptomId).HasColumnName("symptom_id");
@@ -35,6 +36,13 @@ public sealed class ClinicalNoteConfiguration : IEntityTypeConfiguration<Clinica
         builder.Property(x => x.CreatedAt).HasColumnName("created_at").IsRequired();
 
         builder.HasIndex(x => x.PatientId).HasDatabaseName("ix_clinical_notes_patient_id");
+
+        // Red de seguridad de la idempotencia: si KeyDB no está disponible el behavior degrada a
+        // fail-open, y esta restricción es lo que impide el duplicado (mismo patrón que meals y
+        // symptoms).
+        builder.HasIndex(x => new { x.PatientId, x.ClientGuid })
+            .IsUnique()
+            .HasDatabaseName("ux_clinical_notes_patient_client_guid");
 
         builder.HasOne<User>()
             .WithMany()

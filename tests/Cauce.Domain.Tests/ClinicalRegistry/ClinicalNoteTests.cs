@@ -15,7 +15,7 @@ public sealed class ClinicalNoteTests
     [Fact]
     public void Attach_WithMealId_CreatesNote()
     {
-        var note = ClinicalNote.Attach(Guid.NewGuid(), PatientId, Guid.NewGuid(), null, "Dolor leve", Now);
+        var note = ClinicalNote.Attach(Guid.NewGuid(), Guid.NewGuid(), PatientId, Guid.NewGuid(), null, "Dolor leve", Now);
 
         note.MealId.Should().NotBeNull();
         note.SymptomId.Should().BeNull();
@@ -24,7 +24,7 @@ public sealed class ClinicalNoteTests
     [Fact]
     public void Attach_WithSymptomId_CreatesNote()
     {
-        var note = ClinicalNote.Attach(Guid.NewGuid(), PatientId, null, Guid.NewGuid(), "Comentario", Now);
+        var note = ClinicalNote.Attach(Guid.NewGuid(), Guid.NewGuid(), PatientId, null, Guid.NewGuid(), "Comentario", Now);
 
         note.SymptomId.Should().NotBeNull();
         note.MealId.Should().BeNull();
@@ -33,7 +33,7 @@ public sealed class ClinicalNoteTests
     [Fact]
     public void Attach_WithBothAssociations_Throws()
     {
-        var act = () => ClinicalNote.Attach(Guid.NewGuid(), PatientId, Guid.NewGuid(), Guid.NewGuid(), "x", Now);
+        var act = () => ClinicalNote.Attach(Guid.NewGuid(), Guid.NewGuid(), PatientId, Guid.NewGuid(), Guid.NewGuid(), "x", Now);
 
         act.Should().Throw<InvalidClinicalNoteAssociationException>();
     }
@@ -41,7 +41,7 @@ public sealed class ClinicalNoteTests
     [Fact]
     public void Attach_WithNoAssociation_Throws()
     {
-        var act = () => ClinicalNote.Attach(Guid.NewGuid(), PatientId, null, null, "x", Now);
+        var act = () => ClinicalNote.Attach(Guid.NewGuid(), Guid.NewGuid(), PatientId, null, null, "x", Now);
 
         act.Should().Throw<InvalidClinicalNoteAssociationException>();
     }
@@ -49,7 +49,7 @@ public sealed class ClinicalNoteTests
     [Fact]
     public void Attach_EmptyContent_Throws()
     {
-        var act = () => ClinicalNote.Attach(Guid.NewGuid(), PatientId, Guid.NewGuid(), null, "  ", Now);
+        var act = () => ClinicalNote.Attach(Guid.NewGuid(), Guid.NewGuid(), PatientId, Guid.NewGuid(), null, "  ", Now);
 
         act.Should().Throw<ArgumentException>();
     }
@@ -58,7 +58,7 @@ public sealed class ClinicalNoteTests
     public void Attach_ContentTooLong_Throws()
     {
         var content = new string('a', 501);
-        var act = () => ClinicalNote.Attach(Guid.NewGuid(), PatientId, Guid.NewGuid(), null, content, Now);
+        var act = () => ClinicalNote.Attach(Guid.NewGuid(), Guid.NewGuid(), PatientId, Guid.NewGuid(), null, content, Now);
 
         act.Should().Throw<ArgumentException>();
     }

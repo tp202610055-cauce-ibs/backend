@@ -5,8 +5,6 @@ using Cauce.Application.ClinicalRegistry.UseCases.CreateSymptom;
 using Cauce.Application.ClinicalRegistry.UseCases.GetSymptomHistory;
 using Cauce.Application.Common.Idempotency;
 using Cauce.Application.Common.Models;
-using FluentValidation;
-using FluentValidation.Results;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -84,25 +82,5 @@ public sealed class SymptomsController : BaseApiController
     {
         var result = await _mediator.Send(new GetSymptomHistoryQuery(from, to, page, pageSize), ct);
         return Ok(result);
-    }
-
-    private Guid ResolveClientGuid(Guid? bodyClientGuid)
-    {
-        Guid? headerGuid = null;
-        if (Request.Headers.TryGetValue("Idempotency-Key", out var headerValues)
-            && Guid.TryParse(headerValues.ToString(), out var parsed))
-        {
-            headerGuid = parsed;
-        }
-
-        if (bodyClientGuid.HasValue && headerGuid.HasValue && bodyClientGuid.Value != headerGuid.Value)
-        {
-            throw new ValidationException(new[]
-            {
-                new ValidationFailure("clientGuid", "El Idempotency-Key no coincide con el client_guid del cuerpo.")
-            });
-        }
-
-        return bodyClientGuid ?? headerGuid ?? Guid.Empty;
     }
 }
