@@ -23,7 +23,7 @@ public sealed class UpdateFcmTokenCommandHandlerTests
     private readonly ILogger<UpdateFcmTokenCommandHandler> _logger =
         Substitute.For<ILogger<UpdateFcmTokenCommandHandler>>();
 
-    private readonly User _user = User.CreatePatient(Guid.NewGuid(), "kc", "p@cauce.local", "Paciente", PatientRoleId);
+    private readonly User _user = User.CreatePatient(Guid.NewGuid(), "kc", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
 
     public UpdateFcmTokenCommandHandlerTests()
     {

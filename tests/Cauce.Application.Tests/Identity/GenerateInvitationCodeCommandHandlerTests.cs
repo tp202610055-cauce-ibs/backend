@@ -58,7 +58,7 @@ public sealed class GenerateInvitationCodeCommandHandlerTests
     [Fact]
     public async Task Handle_NonNutritionistRole_ThrowsUnauthorized()
     {
-        var patient = User.CreatePatient(Guid.NewGuid(), "kc-pat", "p@cauce.local", "Paciente", 1);
+        var patient = User.CreatePatient(Guid.NewGuid(), "kc-pat", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
         _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(patient);
         _userRepository.GetRoleIdAsync(UserRoles.Nutritionist, Arg.Any<CancellationToken>()).Returns(2);
 

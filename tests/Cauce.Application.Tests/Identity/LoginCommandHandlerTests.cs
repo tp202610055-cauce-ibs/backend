@@ -39,7 +39,7 @@ public sealed class LoginCommandHandlerTests
     public async Task Handle_ValidCredentials_ReturnsTokensAndUser()
     {
         GivenKeycloakAuthenticates();
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-sub-1", Email, "Paciente Demo", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-sub-1", Email, "Paciente Demo", PatientRoleId, PatientCode.FromCorrelative(1));
         _userRepository.FindByEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(user);
         _userRepository.GetRoleNameAsync(PatientRoleId, Arg.Any<CancellationToken>()).Returns(UserRoles.Patient);
 
@@ -62,7 +62,7 @@ public sealed class LoginCommandHandlerTests
     public async Task Handle_ValidCredentials_RegistersSuccessfulLoginAndPersists()
     {
         GivenKeycloakAuthenticates();
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-sub-1", Email, "Paciente Demo", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-sub-1", Email, "Paciente Demo", PatientRoleId, PatientCode.FromCorrelative(1));
         _userRepository.FindByEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(user);
         _userRepository.GetRoleNameAsync(PatientRoleId, Arg.Any<CancellationToken>()).Returns(UserRoles.Patient);
 

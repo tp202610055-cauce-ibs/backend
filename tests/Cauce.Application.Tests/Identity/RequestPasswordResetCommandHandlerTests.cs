@@ -35,7 +35,7 @@ public sealed class RequestPasswordResetCommandHandlerTests
     [Fact]
     public async Task Handle_ExistingEmail_CreatesTokenAndSendsEmail()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
         _userRepository.FindByEmailAsync("p@cauce.local", Arg.Any<CancellationToken>()).Returns(user);
         _tokenGenerator.GeneratePair().Returns(("plain", "hash"));
         _clientUrlProvider.BuildPasswordResetLink("plain", OidcClients.Mobile).Returns("cauce://auth/password-reset?token=plain");
@@ -62,7 +62,7 @@ public sealed class RequestPasswordResetCommandHandlerTests
     [Fact]
     public async Task Handle_WithoutClientId_UsesMobileAsDefault()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
         _userRepository.FindByEmailAsync("p@cauce.local", Arg.Any<CancellationToken>()).Returns(user);
         _tokenGenerator.GeneratePair().Returns(("plain", "hash"));
 
@@ -75,7 +75,7 @@ public sealed class RequestPasswordResetCommandHandlerTests
     [Fact]
     public async Task Handle_WithPortalClientId_PropagatesItToTheUrlProvider()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
         _userRepository.FindByEmailAsync("p@cauce.local", Arg.Any<CancellationToken>()).Returns(user);
         _tokenGenerator.GeneratePair().Returns(("plain", "hash"));
 

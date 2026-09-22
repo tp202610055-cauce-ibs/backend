@@ -45,6 +45,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     private readonly int? _smtpPort;
     private readonly string? _engineKind;
     private readonly string? _onnxModelPath;
+    private readonly string? _minioPublicEndpoint;
+    private readonly bool _rateLimitingEnabled;
 
     /// <summary>
     /// Inicializa la fábrica con las cadenas de conexión de los contenedores.
@@ -59,6 +61,12 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     /// <param name="smtpPort">Puerto SMTP (Mailpit), opcional.</param>
     /// <param name="engineKind">Tipo de motor de recomendaciones ("Rule" u "Onnx"), opcional.</param>
     /// <param name="onnxModelPath">Ruta al modelo ONNX, opcional.</param>
+    /// <param name="minioPublicEndpoint">Endpoint público con el que se firman las URLs, opcional.</param>
+    /// <param name="rateLimitingEnabled">
+    /// Mantiene activo el limitador de tasa. Por omisión sigue activo, para que las pruebas del
+    /// contrato de 429 sigan valiendo; se apaga solo en las pruebas que necesitan emitir más
+    /// peticiones de las que la política permite y que no están probando la política.
+    /// </param>
     public CustomWebApplicationFactory(
         string connectionString,
         string? redisConnectionString = null,
@@ -69,7 +77,9 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         string? smtpHost = null,
         int? smtpPort = null,
         string? engineKind = null,
-        string? onnxModelPath = null)
+        string? onnxModelPath = null,
+        string? minioPublicEndpoint = null,
+        bool rateLimitingEnabled = true)
     {
         _connectionString = connectionString;
         _redisConnectionString = redisConnectionString ?? "localhost:6379";
@@ -81,6 +91,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         _smtpPort = smtpPort;
         _engineKind = engineKind;
         _onnxModelPath = onnxModelPath;
+        _minioPublicEndpoint = minioPublicEndpoint;
+        _rateLimitingEnabled = rateLimitingEnabled;
     }
 
     /// <summary>
@@ -141,7 +153,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 ["Workers:OutboxRetention:Enabled"] = "false",
                 ["Workers:WeeklyReminder:Enabled"] = "false",
                 ["Workers:IbsSssReminder:Enabled"] = "false",
-                ["Notifications:Fcm:UseFake"] = "true"
+                ["Notifications:Fcm:UseFake"] = "true",
+                ["RateLimiting:Enabled"] = _rateLimitingEnabled ? "true" : "false"
             };
 
             if (_ollamaEndpoint is not null)
@@ -167,6 +180,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 settings["Storage:Minio:SecretKey"] = _minioSecretKey;
                 settings["Storage:Minio:UseSsl"] = "false";
                 settings["Storage:Minio:ReportsBucket"] = "clinical-reports";
+                settings["Storage:Minio:PublicEndpoint"] = _minioPublicEndpoint ?? string.Empty;
+                settings["Storage:Minio:PublicUseSsl"] = "false";
             }
 
             if (_smtpHost is not null)

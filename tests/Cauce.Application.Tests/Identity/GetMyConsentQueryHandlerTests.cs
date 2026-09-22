@@ -37,7 +37,7 @@ public sealed class GetMyConsentQueryHandlerTests
     private User ArrangePatient(string acceptedVersion, string acceptedHash, DateTime acceptedAt)
     {
         var keycloakId = Guid.NewGuid();
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId.ToString(), "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), keycloakId.ToString(), "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
 
         _currentUserService.UserId.Returns(keycloakId);
         _userRepository.FindByKeycloakIdAsync(keycloakId.ToString(), Arg.Any<CancellationToken>())
@@ -98,7 +98,7 @@ public sealed class GetMyConsentQueryHandlerTests
     public async Task Handle_WithoutConsentRecord_Throws()
     {
         var keycloakId = Guid.NewGuid();
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId.ToString(), "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), keycloakId.ToString(), "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         _currentUserService.UserId.Returns(keycloakId);
         _userRepository.FindByKeycloakIdAsync(keycloakId.ToString(), Arg.Any<CancellationToken>())
             .Returns(user);

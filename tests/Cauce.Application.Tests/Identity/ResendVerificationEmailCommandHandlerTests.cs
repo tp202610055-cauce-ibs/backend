@@ -31,7 +31,7 @@ public sealed class ResendVerificationEmailCommandHandlerTests
 
     private User GivenLocalUser(bool emailVerified)
     {
-        var user = User.CreatePatient(Guid.NewGuid(), KeycloakId, Email, "Paciente Demo", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), KeycloakId, Email, "Paciente Demo", PatientRoleId, PatientCode.FromCorrelative(1));
         if (emailVerified)
         {
             user.VerifyEmail();

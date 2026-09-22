@@ -88,7 +88,7 @@ public sealed class NutritionistActivationServiceTests
     [Fact]
     public async Task ActivateIfPendingAsync_PendingPatient_LeavesItPending()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
 
         var activated = await CreateService()
             .ActivateIfPendingAsync(user, NutritionistActivationTrigger.Login, CancellationToken.None);
@@ -105,7 +105,7 @@ public sealed class NutritionistActivationServiceTests
     {
         // La fábrica de nutricionista siempre da el correo por verificado, así que este estado solo se
         // alcanza con la de paciente apuntando al rol nutricionista. Cubre la rama defensiva.
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-nutri", "n@cauce.local", "Nutri Demo", NutritionistRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-nutri", "n@cauce.local", "Nutri Demo", NutritionistRoleId, PatientCode.FromCorrelative(1));
 
         var activated = await CreateService()
             .ActivateIfPendingAsync(user, NutritionistActivationTrigger.Login, CancellationToken.None);

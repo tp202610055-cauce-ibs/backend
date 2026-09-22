@@ -79,6 +79,14 @@ public sealed class User : Entity, IAggregateRoot
     public string? FcmToken { get; private set; }
 
     /// <summary>
+    /// Código correlativo legible del paciente (<c>PAC-0042</c>), asignado al alta y nunca reasignado.
+    /// Es <see langword="null"/> en las cuentas que no son de paciente. Es el seudónimo con el que el
+    /// paciente aparece en exportaciones y reportes de investigación; no reemplaza a
+    /// <see cref="Entity.Id"/>, que sigue siendo el identificador técnico.
+    /// </summary>
+    public string? PatientCode { get; private set; }
+
+    /// <summary>
     /// Indica si la cuenta pertenece a un paciente inscrito en el piloto clínico activo. Es un dato
     /// de estado de la cuenta (no clínico). En este release solo se activa manualmente por el equipo
     /// clínico Kaelín (DB directa o endpoint admin futuro); no hay mecanismo automático (acta A16).
@@ -91,7 +99,15 @@ public sealed class User : Entity, IAggregateRoot
     {
     }
 
-    private User(Guid id, string keycloakId, string email, string fullName, int roleId, UserStatus status, bool emailVerified)
+    private User(
+        Guid id,
+        string keycloakId,
+        string email,
+        string fullName,
+        int roleId,
+        UserStatus status,
+        bool emailVerified,
+        PatientCode? patientCode)
         : base(id)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(keycloakId);
@@ -105,6 +121,7 @@ public sealed class User : Entity, IAggregateRoot
         RoleId = roleId;
         Status = status;
         EmailVerified = emailVerified;
+        PatientCode = patientCode?.Value;
         CreatedAt = DateTime.UtcNow;
         UpdatedAt = CreatedAt;
     }
@@ -118,10 +135,22 @@ public sealed class User : Entity, IAggregateRoot
     /// <param name="email">Correo electrónico.</param>
     /// <param name="fullName">Nombre completo.</param>
     /// <param name="patientRoleId">Identificador del rol paciente en el catálogo.</param>
+    /// <param name="patientCode">
+    /// Código correlativo legible del paciente. Es obligatorio en el alta: el parámetro no admite
+    /// omisión justamente para que ningún camino de creación pueda dejar un paciente sin código.
+    /// </param>
     /// <returns>La nueva cuenta de paciente.</returns>
-    public static User CreatePatient(Guid id, string keycloakId, string email, string fullName, int patientRoleId)
+    /// <exception cref="ArgumentNullException">Si no se provee el código de paciente.</exception>
+    public static User CreatePatient(
+        Guid id,
+        string keycloakId,
+        string email,
+        string fullName,
+        int patientRoleId,
+        PatientCode patientCode)
     {
-        return new User(id, keycloakId, email, fullName, patientRoleId, UserStatus.PendingActivation, emailVerified: false);
+        ArgumentNullException.ThrowIfNull(patientCode);
+        return new User(id, keycloakId, email, fullName, patientRoleId, UserStatus.PendingActivation, emailVerified: false, patientCode);
     }
 
     /// <summary>
@@ -138,7 +167,7 @@ public sealed class User : Entity, IAggregateRoot
     /// <returns>La nueva cuenta de nutricionista.</returns>
     public static User CreateNutritionist(Guid id, string keycloakId, string email, string fullName, int nutritionistRoleId)
     {
-        return new User(id, keycloakId, email, fullName, nutritionistRoleId, UserStatus.PendingActivation, emailVerified: true);
+        return new User(id, keycloakId, email, fullName, nutritionistRoleId, UserStatus.PendingActivation, emailVerified: true, patientCode: null);
     }
 
     /// <summary>
@@ -291,6 +320,10 @@ public sealed class User : Entity, IAggregateRoot
     /// un borrado físico: reemplaza los datos personales por marcadores no reversibles, desvincula el
     /// token de dispositivo y desactiva la cuenta, preservando la clave primaria para mantener la
     /// trazabilidad de auditoría y la integridad referencial de las filas clínicas.
+    ///
+    /// <para>El código de paciente (<see cref="PatientCode"/>) <b>no</b> se borra: es un seudónimo, no
+    /// un dato personal, y conservarlo es lo que permite que los datos ya exportados al estudio sigan
+    /// siendo interpretables después de la baja.</para>
     /// </summary>
     /// <param name="patientRoleId">Identificador del rol paciente en el catálogo, para validar que la
     /// operación solo se aplique a pacientes.</param>

@@ -6,6 +6,7 @@ using Cauce.Domain.Outbox;
 using Cauce.Domain.Patients;
 using Cauce.Domain.Recommendations;
 using Cauce.Domain.Reports;
+using Cauce.Infrastructure.Identity;
 using Cauce.Infrastructure.Persistence.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -175,6 +176,13 @@ public sealed class CauceDbContext : DbContext
         // postgres:16-alpine; se crea en la migración. Si en algún entorno no estuviera, la búsqueda del
         // glosario debería degradar a ILIKE simple (acta A27).
         modelBuilder.HasPostgresExtension("unaccent");
+
+        // Secuencia del código correlativo de paciente (G1). Vive en la base porque nextval es la
+        // única forma de que dos altas concurrentes obtengan números distintos sin coordinar en la
+        // aplicación. No se usa como valor por defecto de la columna: el correlativo se reserva en el
+        // handler de alta para poder construir el value object y validarlo antes de persistir.
+        modelBuilder.HasSequence<long>(PatientCodeGenerator.SequenceName).StartsAt(1).IncrementsBy(1);
+
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CauceDbContext).Assembly);
         base.OnModelCreating(modelBuilder);
     }

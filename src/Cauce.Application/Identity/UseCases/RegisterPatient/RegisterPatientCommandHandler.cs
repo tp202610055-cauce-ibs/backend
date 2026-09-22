@@ -25,6 +25,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
     private readonly IConsentRecordRepository _consentRecordRepository;
     private readonly IKeycloakAdminClient _keycloakAdminClient;
     private readonly IPatientNutritionistAssignmentService _assignmentService;
+    private readonly IPatientCodeGenerator _patientCodeGenerator;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditLogger _auditLogger;
     private readonly ILogger<RegisterPatientCommandHandler> _logger;
@@ -39,6 +40,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
         IConsentRecordRepository consentRecordRepository,
         IKeycloakAdminClient keycloakAdminClient,
         IPatientNutritionistAssignmentService assignmentService,
+        IPatientCodeGenerator patientCodeGenerator,
         IUnitOfWork unitOfWork,
         IAuditLogger auditLogger,
         ILogger<RegisterPatientCommandHandler> logger)
@@ -49,6 +51,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
         _consentRecordRepository = consentRecordRepository;
         _keycloakAdminClient = keycloakAdminClient;
         _assignmentService = assignmentService;
+        _patientCodeGenerator = patientCodeGenerator;
         _unitOfWork = unitOfWork;
         _auditLogger = auditLogger;
         _logger = logger;
@@ -82,7 +85,12 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
         {
             await _keycloakAdminClient.ResetPasswordAsync(keycloakId, request.Password, cancellationToken).ConfigureAwait(false);
 
-            user = User.CreatePatient(Guid.NewGuid(), keycloakId, request.Email, request.FullName, patientRoleId);
+            // El correlativo lo entrega la secuencia de la base (G1): se reserva dentro del try para
+            // que un fallo posterior también dispare la compensación en Keycloak. Un hueco en la
+            // numeración es aceptable; un código repetido no lo sería.
+            var patientCode = await _patientCodeGenerator.NextAsync(cancellationToken).ConfigureAwait(false);
+
+            user = User.CreatePatient(Guid.NewGuid(), keycloakId, request.Email, request.FullName, patientRoleId, patientCode);
             await _userRepository.AddAsync(user, cancellationToken).ConfigureAwait(false);
 
             var consent = ConsentRecord.Capture(

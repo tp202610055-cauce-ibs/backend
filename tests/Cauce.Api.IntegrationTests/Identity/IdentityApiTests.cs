@@ -359,7 +359,7 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
         var roleId = await db.UserRoles.Where(r => r.RoleName == UserRoles.Patient).Select(r => r.RoleId).FirstAsync();
         var keycloakId = Guid.NewGuid().ToString();
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, email, "Paciente Seed", roleId);
+        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, email, "Paciente Seed", roleId, TestPatientCodes.Next());
         db.Users.Add(user);
         await db.SaveChangesAsync();
         return (user.Id, keycloakId);

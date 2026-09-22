@@ -480,7 +480,7 @@ public sealed class ClinicalRegistryApiTests : IClassFixture<PostgresFixture>, I
         var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
         var roleId = await db.UserRoles.Where(r => r.RoleName == UserRoles.Patient).Select(r => r.RoleId).FirstAsync();
         var keycloakId = Guid.NewGuid().ToString();
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, $"user-{Guid.NewGuid():N}@cauce.local", "Paciente", roleId);
+        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, $"user-{Guid.NewGuid():N}@cauce.local", "Paciente", roleId, TestPatientCodes.Next());
         db.Users.Add(user);
         await db.SaveChangesAsync();
         return (user.Id, keycloakId);

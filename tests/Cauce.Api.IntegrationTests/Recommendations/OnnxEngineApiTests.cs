@@ -102,7 +102,7 @@ public sealed class OnnxEngineApiTests : IClassFixture<PostgresFixture>, IClassF
 
         var roleId = await db.UserRoles.Where(r => r.RoleName == UserRoles.Patient).Select(r => r.RoleId).FirstAsync();
         var keycloakId = Guid.NewGuid().ToString();
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, $"user-{Guid.NewGuid():N}@cauce.local", "Paciente", roleId);
+        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, $"user-{Guid.NewGuid():N}@cauce.local", "Paciente", roleId, TestPatientCodes.Next());
         db.Users.Add(user);
 
         var dob = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-30);

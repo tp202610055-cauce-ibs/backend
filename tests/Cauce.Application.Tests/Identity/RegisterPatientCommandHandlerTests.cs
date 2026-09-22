@@ -26,9 +26,20 @@ public sealed class RegisterPatientCommandHandlerTests
     private readonly IKeycloakAdminClient _keycloakAdminClient = Substitute.For<IKeycloakAdminClient>();
     private readonly IPatientNutritionistAssignmentService _assignmentService =
         Substitute.For<IPatientNutritionistAssignmentService>();
+    private readonly IPatientCodeGenerator _patientCodeGenerator = Substitute.For<IPatientCodeGenerator>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly ILogger<RegisterPatientCommandHandler> _logger = Substitute.For<ILogger<RegisterPatientCommandHandler>>();
+
+    /// <summary>
+    /// Inicializa la prueba con el generador de códigos devolviendo uno válido: todo alta de paciente
+    /// necesita un código, así que el valor por defecto del sustituto (null) haría fallar cualquier
+    /// escenario por una razón ajena a lo que se está probando.
+    /// </summary>
+    public RegisterPatientCommandHandlerTests()
+    {
+        _patientCodeGenerator.NextAsync(Arg.Any<CancellationToken>()).Returns(PatientCode.FromCorrelative(42));
+    }
 
     private RegisterPatientCommandHandler CreateHandler() => new(
         _consentService,
@@ -37,6 +48,7 @@ public sealed class RegisterPatientCommandHandlerTests
         _consentRecordRepository,
         _keycloakAdminClient,
         _assignmentService,
+        _patientCodeGenerator,
         _unitOfWork,
         _auditLogger,
         _logger);

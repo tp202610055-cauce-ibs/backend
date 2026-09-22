@@ -16,7 +16,7 @@ public sealed class UserTests
     [Fact]
     public void CreatePatient_ValidValues_CreatesPendingUnverifiedUser()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente Uno", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente Uno", PatientRoleId, PatientCode.FromCorrelative(1));
 
         user.Status.Should().Be(UserStatus.PendingActivation);
         user.EmailVerified.Should().BeFalse();
@@ -57,7 +57,7 @@ public sealed class UserTests
     [Fact]
     public void CreatePatient_EmptyEmail_ThrowsArgumentException()
     {
-        var act = () => User.CreatePatient(Guid.NewGuid(), "kc-1", "", "Paciente", PatientRoleId);
+        var act = () => User.CreatePatient(Guid.NewGuid(), "kc-1", "", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
 
         act.Should().Throw<ArgumentException>();
     }
@@ -65,7 +65,7 @@ public sealed class UserTests
     [Fact]
     public void VerifyEmail_PendingUser_ActivatesAndVerifies()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
 
         user.VerifyEmail();
 
@@ -76,7 +76,7 @@ public sealed class UserTests
     [Fact]
     public void Activate_WithoutVerifiedEmail_ThrowsInvalidOperation()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
 
         var act = user.Activate;
 
@@ -86,7 +86,7 @@ public sealed class UserTests
     [Fact]
     public void RegisterFailedLogin_FifthAttempt_LocksAccount()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         var now = DateTime.UtcNow;
 
         for (var i = 0; i < 5; i++)
@@ -101,7 +101,7 @@ public sealed class UserTests
     [Fact]
     public void RegisterSuccessfulLogin_AfterFailures_ResetsCounterAndUnlocks()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         var now = DateTime.UtcNow;
         for (var i = 0; i < 5; i++)
         {
@@ -141,7 +141,7 @@ public sealed class UserTests
     public void Anonymize_PatientAccount_ReplacesPersonalDataAndDeactivates()
     {
         var id = Guid.NewGuid();
-        var user = User.CreatePatient(id, "kc-1", "real@cauce.local", "Nombre Real", PatientRoleId);
+        var user = User.CreatePatient(id, "kc-1", "real@cauce.local", "Nombre Real", PatientRoleId, PatientCode.FromCorrelative(1));
 
         user.Anonymize(PatientRoleId);
 
@@ -164,7 +164,7 @@ public sealed class UserTests
     [Fact]
     public void EnrollInActivePilot_SetsFlagTrue()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         user.IsInActivePilot.Should().BeFalse();
 
         user.EnrollInActivePilot();

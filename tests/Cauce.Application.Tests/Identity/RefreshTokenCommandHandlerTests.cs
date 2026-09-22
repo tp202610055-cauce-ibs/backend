@@ -40,7 +40,7 @@ public sealed class RefreshTokenCommandHandlerTests
 
     private User GivenLocalUser()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), Subject, "p@cauce.local", "Paciente Demo", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), Subject, "p@cauce.local", "Paciente Demo", PatientRoleId, PatientCode.FromCorrelative(1));
         _userRepository.FindByKeycloakIdAsync(Subject, Arg.Any<CancellationToken>()).Returns(user);
         _userRepository.GetRoleNameAsync(PatientRoleId, Arg.Any<CancellationToken>()).Returns(UserRoles.Patient);
         return user;

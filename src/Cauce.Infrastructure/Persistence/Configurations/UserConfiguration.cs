@@ -71,6 +71,10 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("fcm_token")
             .HasMaxLength(500);
 
+        builder.Property(x => x.PatientCode)
+            .HasColumnName("patient_code")
+            .HasMaxLength(20);
+
         builder.Property(x => x.IsInActivePilot)
             .HasColumnName("is_in_active_pilot")
             .HasDefaultValue(false)
@@ -83,6 +87,13 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(x => x.Email)
             .IsUnique()
             .HasDatabaseName("ux_users_email");
+
+        // Índice único filtrado: solo los pacientes tienen código, y las cuentas de nutricionista
+        // (con patient_code NULL) no deben competir por la unicidad.
+        builder.HasIndex(x => x.PatientCode)
+            .IsUnique()
+            .HasFilter("patient_code IS NOT NULL")
+            .HasDatabaseName("ux_users_patient_code");
 
         builder.HasIndex(x => x.RoleId)
             .HasDatabaseName("ix_users_role_id");

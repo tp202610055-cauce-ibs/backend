@@ -36,6 +36,7 @@ public sealed class DemoPatientSeeder
     private readonly CauceDbContext _context;
     private readonly IUserRepository _userRepository;
     private readonly IKeycloakAdminClient _keycloakAdminClient;
+    private readonly IPatientCodeGenerator _patientCodeGenerator;
     private readonly IOptions<DemoPatientOptions> _options;
     private readonly ILogger<DemoPatientSeeder> _logger;
 
@@ -46,12 +47,14 @@ public sealed class DemoPatientSeeder
         CauceDbContext context,
         IUserRepository userRepository,
         IKeycloakAdminClient keycloakAdminClient,
+        IPatientCodeGenerator patientCodeGenerator,
         IOptions<DemoPatientOptions> options,
         ILogger<DemoPatientSeeder> logger)
     {
         _context = context;
         _userRepository = userRepository;
         _keycloakAdminClient = keycloakAdminClient;
+        _patientCodeGenerator = patientCodeGenerator;
         _options = options;
         _logger = logger;
     }
@@ -90,7 +93,8 @@ public sealed class DemoPatientSeeder
         await _keycloakAdminClient.ResetPasswordAsync(keycloakId, options.Password, ct).ConfigureAwait(false);
 
         // Cuenta local: verificada, activa e inscrita en el piloto activo (US26 CA02 comprobable).
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, options.Email, options.FullName, patientRoleId);
+        var patientCode = await _patientCodeGenerator.NextAsync(ct).ConfigureAwait(false);
+        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, options.Email, options.FullName, patientRoleId, patientCode);
         user.VerifyEmail();
         user.EnrollInActivePilot();
         await _userRepository.AddAsync(user, ct).ConfigureAwait(false);
@@ -202,7 +206,7 @@ public sealed class DemoPatientSeeder
         // Nota clínica del paciente (el dominio no modela notas del nutricionista): asociada a un síntoma,
         // con timestamp coherente (poco después del síntoma).
         _context.Add(ClinicalNote.Attach(
-            Guid.NewGuid(), user.Id, mealId: null, symptomId: bloating.Id,
+            Guid.NewGuid(), Guid.NewGuid(), user.Id, mealId: null, symptomId: bloating.Id,
             "Distensión leve tras la cena; la registro para seguimiento del piloto.",
             now.AddDays(-3).Date.AddHours(20)));
 
