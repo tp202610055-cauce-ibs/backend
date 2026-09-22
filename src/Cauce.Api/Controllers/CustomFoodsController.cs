@@ -68,7 +68,9 @@ public sealed class CustomFoodsController : BaseApiController
     }
 
     /// <summary>
-    /// Actualiza un alimento personalizado del paciente autenticado.
+    /// Actualiza un alimento personalizado del paciente autenticado. Igual que en la creación, si los
+    /// ingredientes coinciden con alergias declaradas y el paciente no lo confirmó, responde 409
+    /// <c>unconfirmed_allergens</c> con el detalle (US10 CA03).
     /// </summary>
     /// <param name="customFoodId">Identificador del alimento personalizado.</param>
     /// <param name="request">Campos a actualizar.</param>
@@ -81,7 +83,8 @@ public sealed class CustomFoodsController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Update(Guid customFoodId, [FromBody] UpdateCustomFoodRequest request, CancellationToken ct)
     {
-        var command = new UpdateCustomFoodCommand(customFoodId, request.Name, request.PortionSizeGrams, request.Ingredients);
+        var command = new UpdateCustomFoodCommand(
+            customFoodId, request.Name, request.PortionSizeGrams, request.Ingredients, request.ConfirmedAllergens);
         var result = await _mediator.Send(command, ct);
         return Ok(result);
     }

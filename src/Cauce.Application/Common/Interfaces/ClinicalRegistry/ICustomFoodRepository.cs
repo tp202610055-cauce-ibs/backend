@@ -57,6 +57,19 @@ public interface ICustomFoodRepository
     Task AddAsync(CustomFood customFood, CancellationToken ct = default);
 
     /// <summary>
+    /// Registra en el contexto de persistencia los cambios hechos sobre un alimento personalizado ya
+    /// cargado, incluidos los altas y bajas de su colección de ingredientes.
+    ///
+    /// <para>Hace falta un método explícito porque el identificador de cada ingrediente lo asigna el
+    /// dominio, no la base: un ingrediente recién agregado a un agregado <b>ya rastreado</b> llega al
+    /// proveedor con su clave puesta, y este lo interpreta como una fila preexistente que hay que
+    /// actualizar en vez de una que hay que insertar. El repositorio es el único lugar que puede
+    /// deshacer esa ambigüedad sin filtrar detalles de persistencia a la capa de aplicación.</para>
+    /// </summary>
+    /// <param name="customFood">Alimento personalizado modificado.</param>
+    void Update(CustomFood customFood);
+
+    /// <summary>
     /// Marca un alimento personalizado para eliminación.
     /// </summary>
     /// <param name="customFood">Alimento personalizado a eliminar.</param>
