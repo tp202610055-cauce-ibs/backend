@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.4.0 · **Actualizado:** 2026-09-22 · **Contrato:** [`openapi-v1.3.0.json`](openapi-v1.3.0.json) (327 KB, 64 operaciones, 56 paths)
+**Versión:** 1.5.0 · **Actualizado:** 2026-09-23 · **Contrato:** [`openapi-v1.4.0.json`](openapi-v1.4.0.json) (328 KB, 64 operaciones, 56 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -11,6 +11,12 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los siete endpoints de identidad, la fuente autoritativa versionada es
 > [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.3.
+
+**Novedades de la v1.5.0.** `GET /patients/me/summary` suma dos campos, sin operaciones ni esquemas
+nuevos: `patient.patientCode` con el código correlativo del paciente (`PAC-0042`), y
+`clinical.allergies` con las alergias declaradas, en la **misma forma** (`PatientAllergySummary`) que
+`GET /patients/allergies` y `GET /patients/profile`. La lista es vacía, nunca `null`. Desbloquea
+HU0028 / CP070 (acta A66).
 
 **Novedades de la v1.4.0 (bloque Backend-Pilot-Readiness).**
 - `POST /clinical-notes` **exige ahora clave de idempotencia** (`clientGuid` en el cuerpo o encabezado
@@ -52,7 +58,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
   [CLAUDE.md → Enums](../../CLAUDE.md#enums-y-valores-controlados).
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
   `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.3.0.json` bajo
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.4.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -396,12 +402,18 @@ la respuesta sigue siendo 200.
 ### `GET /api/v1/patients/me/summary`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Perfil agregado: identificación, perfil clínico, fecha de inicio en piloto, nutricionista, IBS-SSS resumido. |
+| Resumen | Perfil agregado: identificación (con el código `PAC-0042`), perfil clínico, alergias declaradas, fecha de inicio en piloto, nutricionista, IBS-SSS resumido. |
 | US/TS | US28 |
 | Request body | — |
 | Idempotencia | — |
 | Rate limit | — |
 | Respuestas | **200** `MyProfileSummaryResult` · 404 `patient_profile_not_found` · 401 · 403 · 500 |
+
+> **Campos de la v1.5.0.** `patient.patientCode` trae el código correlativo legible del paciente
+> (`PAC-0042`, acta A59); es el identificador con el que figura en el estudio y **no** reemplaza al
+> `patientId` en ninguna ruta ni cuerpo. `clinical.allergies` trae las alergias declaradas con la
+> misma forma que `GET /patients/allergies` (`PatientAllergySummary[]`), para que el cliente no
+> mantenga dos modelos del mismo dato; es una lista vacía, nunca `null`.
 
 ### `POST /api/v1/patients/me/nutritionist-assignment`
 | Campo | Valor |

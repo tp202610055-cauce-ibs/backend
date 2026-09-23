@@ -9,8 +9,9 @@ Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y 
 > **v1.3.1 (Backend-Pilot-Readiness).** Sin cambios de contrato en los nueve endpoints de identidad. Se
 > actualizan las citas `archivo:línea` de `RegisterPatientCommandHandler.cs`, desplazadas siete líneas al
 > inyectar el generador del código de paciente (acta A59). El registro ahora asigna un `patient_code`
-> (`PAC-0042`) a la cuenta, pero **no viaja en la respuesta 201**: solo aparece en la exportación de datos
-> y en el PDF del reporte clínico.
+> (`PAC-0042`) a la cuenta, pero **no viaja en la respuesta 201**. El cliente lo obtiene de
+> `GET /patients/me/summary` (acta A66); además aparece en la exportación de datos y en el PDF del
+> reporte clínico.
 
 **Decisión de arquitectura vigente:** el móvil autentica contra `POST /api/v1/auth/login` del backend
 (passthrough a Keycloak). No usa Authorization Code + PKCE directo contra Keycloak. Motivo: el

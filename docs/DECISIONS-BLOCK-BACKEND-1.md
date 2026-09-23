@@ -3,8 +3,9 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A65, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
-trabajo posterior sobre el consentimiento y Backend-Pilot-Readiness. Las actas A1 a A37 y las
+**Alcance:** actas A38 a A66, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+trabajo posterior sobre el consentimiento, Backend-Pilot-Readiness y los bloques pequeños
+posteriores. Las actas A1 a A37 y las
 decisiones DEC-B3 a DEC-B7B no tienen archivo en ningún repo: solo sobreviven resumidas en el
 `CLAUDE.md` local.
 **Numeración:** la serie es global entre repos, con prefijo `M` para mobile y `A` para backend.
@@ -45,6 +46,7 @@ las actas A59 a A65.
 | [A63](#acta-a63-defecto-en-put-custom-foods-y-el-rastreo-de-hijos-nuevos-de-un-agregado-ya-cargado) | Defecto en PUT /custom-foods y el rastreo de hijos nuevos de un agregado ya cargado | Aprobada, defecto preexistente RESUELTO en Backend-Pilot-Readiness |
 | [A64](#acta-a64-cambios-de-contrato-menores-del-bloque) | Cambios de contrato menores del bloque | Aprobada, implementada en Backend-Pilot-Readiness |
 | [A65](#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron) | Diagnósticos del bloque que no se implementaron | Documentada. Cuatro puntos abiertos: ancla de la ventana de 4 h, `isInActivePilot`, categorías IBS-SSS y conversión de unidades |
+| [A66](#acta-a66-el-código-de-paciente-y-las-alergias-declaradas-viajan-en-el-resumen-de-perfil) | El código de paciente y las alergias declaradas viajan en el resumen de perfil | Aprobada, implementada. Resuelve el punto abierto de A59 |
 
 ---
 
@@ -1493,8 +1495,10 @@ en `NULL` y sin identificación en las exportaciones.
 `perfil_clinico.csv` cambia su primera columna de `user_id` a `patient_code`. Es un cambio de contrato
 del archivo de exportación, deliberado y el punto central de G1.
 
-Queda pendiente decidir si el código debe exponerse al propio paciente en la app. Hoy no viaja en
-ninguna respuesta de la API: solo aparece dentro del ZIP y del PDF.
+Quedó pendiente decidir si el código debe exponerse al propio paciente en la app. Al cerrar este
+bloque no viajaba en ninguna respuesta de la API: solo aparecía dentro del ZIP y del PDF.
+**Resuelto en el acta [A66](#acta-a66-el-código-de-paciente-y-las-alergias-declaradas-viajan-en-el-resumen-de-perfil):** sí se expone, en
+`GET /patients/me/summary`.
 
 ### Referencias
 
@@ -2054,5 +2058,80 @@ La conversión depende del alimento y es decisión de Mirian.
 - `src/Cauce.Infrastructure/ClinicalRegistry/FodmapAggregator.cs`
 - Acta [A38](#acta-a38-deuda-diferida--isinactivepilot-hardcodeado), deuda de origen de `isInActivePilot`.
 - DEC-B3-06, sobre la ventana de 4 h; Francis et al. (1997), *Aliment Pharmacol Ther*, para las bandas del IBS-SSS.
+
+---
+
+## Acta A66: El código de paciente y las alergias declaradas viajan en el resumen de perfil
+
+**Estado:** Aprobada, implementada. Resuelve el punto abierto que dejó el acta A59
+**Fecha:** 2026-09-23
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, `GET /api/v1/patients/me/summary` (US28).
+
+---
+
+### Contexto
+
+El acta [A59](#acta-a59-código-correlativo-de-paciente-para-exportaciones-y-reportes) introdujo el código
+`PAC-0042` y lo dejó fuera de la API a propósito: aparecía solo dentro del ZIP de exportación y del PDF
+del reporte. Su última línea dejaba el punto abierto.
+
+Mobile-4 Bloque 1 construyó la pantalla de Perfil sobre `GET /patients/me/summary`. Su caso de prueba
+formal, CP070, exige mostrar el código del paciente y sus alergias declaradas. `MyProfileSummaryResult`
+no exponía ninguno de los dos, así que Mobile dejó ambos fuera y lo reportó en lugar de encadenar
+llamadas por su cuenta. **CP070 no pasaba por esto, no por un defecto de Mobile.**
+
+### Decisión
+
+`MyProfilePatientInfo` gana `PatientCode` y `MyProfileClinicalInfo` gana `Allergies`.
+
+Es un cambio **aditivo** al contrato: 56 paths y 64 operaciones antes y después, sin esquemas nuevos.
+Solo cambian los dos registros. Ningún cliente existente se rompe.
+
+### Por qué el código sí puede exponerse al paciente
+
+El reparo de A59 era no filtrar el identificador técnico. El código es lo contrario: un seudónimo
+pensado para que una persona pueda referirse al sujeto sin usar su nombre. Mostrárselo a su dueño no
+revela nada que él no sepa, y le da la referencia con la que aparece en el estudio si tiene que
+mencionarla en una consulta.
+
+La regla de A59 que **sigue en pie** es la otra: el código no reemplaza a `PatientId` en ninguna ruta
+ni en ningún cuerpo de petición. Acá viaja como dato de presentación, nada más.
+
+### Las alergias reutilizan la forma que ya existía
+
+`GET /patients/allergies` y `GET /patients/profile` ya devolvían `PatientAllergySummary`, y el mapeo
+vive en `PatientAllergyMapper`. El resumen lo reutiliza tal cual en lugar de proyectar una tercera
+forma del mismo dato, que obligaría al cliente a mantener dos modelos para lo mismo. Una prueba de
+integración compara el JSON crudo de las dos respuestas para que no puedan divergir sin que algo falle.
+
+La lista es **vacía, nunca `null`**, cuando el paciente no declaró alergias.
+
+### Dos detalles que conviene saber al leer el handler
+
+**El fallback del código.** `User.PatientCode` es `string?` porque las cuentas de nutricionista no
+tienen código, y el handler lo expone como `string` con `?? string.Empty`. Para un paciente nunca falta
+—el parámetro es obligatorio en `User.CreatePatient` y la migración rellenó los existentes—, así que el
+fallback solo cubre una fila insertada fuera del dominio. Se prefirió eso antes que devolver `null` en
+un campo que el contrato declara presente, o lanzar un error en un `GET` de perfil.
+
+**Siete dependencias en el constructor.** CONVENTIONS §4.4 pide revisar el diseño por encima de 4-5.
+Se revisó y se deja: este handler es un agregador de lectura cuya razón de existir es juntar en una
+respuesta lo que la pantalla necesita —identidad, perfil, alergias, nutricionista y evolución
+IBS-SSS— para que el cliente no encadene cinco llamadas. Partirlo trasladaría ese encadenamiento al
+cliente, que es justo lo que US28 evita.
+
+### Consecuencias
+
+CP070 queda desbloqueado del lado del backend. Mobile necesita regenerar su cliente: hoy lo genera
+desde `openapi-v1.0.0.json`, cuatro snapshots atrás.
+
+### Referencias
+
+- `src/Cauce.Application/Patients/UseCases/GetMyProfileSummary/GetMyProfileSummaryQuery.cs`
+- `src/Cauce.Application/Patients/UseCases/GetMyProfileSummary/GetMyProfileSummaryQueryHandler.cs`
+- `src/Cauce.Application/Patients/Mapping/PatientAllergyMapper.cs`
+- `tests/Cauce.Api.IntegrationTests/Patients/PatientSelfInsightsApiTests.cs`
+- HU0028, caso de prueba CP070; acta [A59](#acta-a59-código-correlativo-de-paciente-para-exportaciones-y-reportes).
 
 ---
