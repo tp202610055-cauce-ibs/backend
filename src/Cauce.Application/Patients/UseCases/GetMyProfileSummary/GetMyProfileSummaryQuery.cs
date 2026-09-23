@@ -34,9 +34,13 @@ public sealed record MyProfileSummaryResult(
 /// <summary>
 /// Datos de identificación del paciente para el perfil agregado.
 /// </summary>
+/// <param name="PatientCode">
+/// Código correlativo legible del paciente (<c>PAC-0042</c>, acta A59). Es el identificador con el
+/// que el paciente figura en el estudio, y el que la pantalla de perfil muestra (HU0028, CP070).
+/// </param>
 /// <param name="FullName">Nombre completo del paciente.</param>
 /// <param name="MaskedEmail">Correo enmascarado (por ejemplo, <c>r***@essalud.pe</c>).</param>
-public sealed record MyProfilePatientInfo(string FullName, string MaskedEmail);
+public sealed record MyProfilePatientInfo(string PatientCode, string FullName, string MaskedEmail);
 
 /// <summary>
 /// Perfil clínico resumido del paciente para el perfil agregado.
@@ -44,4 +48,13 @@ public sealed record MyProfilePatientInfo(string FullName, string MaskedEmail);
 /// <param name="IbsSubtype">Subtipo clínico de SII.</param>
 /// <param name="DiagnosisDate">Fecha de diagnóstico, si se conoce.</param>
 /// <param name="Age">Edad cumplida del paciente.</param>
-public sealed record MyProfileClinicalInfo(IbsSubtype IbsSubtype, DateOnly? DiagnosisDate, int Age);
+/// <param name="Allergies">
+/// Alergias declaradas por el paciente, con la misma forma que devuelven
+/// <c>GET /patients/allergies</c> y <c>GET /patients/profile</c> (HU0028, CP070). Es una lista
+/// vacía, nunca <see langword="null"/>, cuando el paciente no declaró ninguna.
+/// </param>
+public sealed record MyProfileClinicalInfo(
+    IbsSubtype IbsSubtype,
+    DateOnly? DiagnosisDate,
+    int Age,
+    IReadOnlyList<PatientAllergySummary> Allergies);

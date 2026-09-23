@@ -3,6 +3,7 @@ using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Patients.Dtos;
+using Cauce.Application.Patients.Mapping;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients.Exceptions;
 using MediatR;
@@ -10,9 +11,13 @@ using MediatR;
 namespace Cauce.Application.Patients.UseCases.GetMyProfileSummary;
 
 /// <summary>
-/// Handler del perfil agregado del paciente (US28). Resuelve al paciente, su perfil clínico, el
-/// nutricionista asignado y su evolución IBS-SSS (línea base, más reciente, cambio acumulado). El
-/// correo se devuelve enmascarado y la fecha de inicio en el piloto se resuelve por precedencia.
+/// Handler del perfil agregado del paciente (US28). Resuelve al paciente, su código correlativo, su
+/// perfil clínico con las alergias declaradas, el nutricionista asignado y su evolución IBS-SSS
+/// (línea base, más reciente, cambio acumulado). El correo se devuelve enmascarado y la fecha de
+/// inicio en el piloto se resuelve por precedencia.
+///
+/// <para>Es un agregador de lectura: junta en una respuesta lo que la pantalla de perfil necesita
+/// para no encadenar llamadas. De ahí que tenga más dependencias que un handler típico.</para>
 /// </summary>
 public sealed class GetMyProfileSummaryQueryHandler : IRequestHandler<GetMyProfileSummaryQuery, MyProfileSummaryResult>
 {
@@ -21,6 +26,8 @@ public sealed class GetMyProfileSummaryQueryHandler : IRequestHandler<GetMyProfi
     private readonly IPatientProfileRepository _patientProfileRepository;
     private readonly INutritionistPatientRepository _nutritionistPatientRepository;
     private readonly IIbsSssAssessmentRepository _assessmentRepository;
+    private readonly IAllergyRepository _allergyRepository;
+    private readonly IPatientAllergyRepository _patientAllergyRepository;
 
     /// <summary>
     /// Inicializa el handler con sus dependencias.
@@ -30,13 +37,17 @@ public sealed class GetMyProfileSummaryQueryHandler : IRequestHandler<GetMyProfi
         IUserRepository userRepository,
         IPatientProfileRepository patientProfileRepository,
         INutritionistPatientRepository nutritionistPatientRepository,
-        IIbsSssAssessmentRepository assessmentRepository)
+        IIbsSssAssessmentRepository assessmentRepository,
+        IAllergyRepository allergyRepository,
+        IPatientAllergyRepository patientAllergyRepository)
     {
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _patientProfileRepository = patientProfileRepository;
         _nutritionistPatientRepository = nutritionistPatientRepository;
         _assessmentRepository = assessmentRepository;
+        _allergyRepository = allergyRepository;
+        _patientAllergyRepository = patientAllergyRepository;
     }
 
     /// <inheritdoc />
@@ -62,6 +73,13 @@ public sealed class GetMyProfileSummaryQueryHandler : IRequestHandler<GetMyProfi
         var baseline = await _assessmentRepository.FindBaselineByPatientAsync(user.Id, cancellationToken).ConfigureAwait(false);
         var latest = await _assessmentRepository.FindLatestByPatientAsync(user.Id, cancellationToken).ConfigureAwait(false);
 
+        // Se reutiliza el mapeador del endpoint de alergias para que el resumen devuelva exactamente
+        // la misma forma que GET /patients/allergies y GET /patients/profile, y no una tercera.
+        var declarations = await _patientAllergyRepository.ListByPatientAsync(user.Id, cancellationToken).ConfigureAwait(false);
+        var allergies = await PatientAllergyMapper
+            .MapAsync(declarations, _allergyRepository, cancellationToken)
+            .ConfigureAwait(false);
+
         var assignment = await _nutritionistPatientRepository.FindActiveByPatientAsync(user.Id, cancellationToken).ConfigureAwait(false);
         NutritionistAssignmentSummary? assignedNutritionist = null;
         if (assignment is not null)
@@ -77,8 +95,11 @@ public sealed class GetMyProfileSummaryQueryHandler : IRequestHandler<GetMyProfi
         var significantResponse = baseline is not null && latest is not null && latest.IsClinicallySignificantImprovement(baseline);
 
         return new MyProfileSummaryResult(
-            new MyProfilePatientInfo(user.FullName, MaskEmail(user.Email)),
-            new MyProfileClinicalInfo(profile.IbsSubtype, profile.DiagnosisDate, profile.GetAge(utcNow)),
+            // El código lo asigna el alta y es obligatorio en User.CreatePatient, así que para un
+            // paciente nunca falta; el fallback cubre una fila insertada fuera del dominio y evita
+            // que el cliente reciba null en un campo que el contrato declara presente.
+            new MyProfilePatientInfo(user.PatientCode ?? string.Empty, user.FullName, MaskEmail(user.Email)),
+            new MyProfileClinicalInfo(profile.IbsSubtype, profile.DiagnosisDate, profile.GetAge(utcNow), allergies),
             ResolvePilotStartDate(baseline?.CompletedAt, profile.OnboardingCompleted, profile.CreatedAt, user.CreatedAt),
             assignedNutritionist,
             baseline?.TotalScore,
