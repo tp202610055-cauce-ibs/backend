@@ -105,6 +105,13 @@ public sealed class ExceptionHandlingMiddleware
                 problemDetails.Extensions["lockedUntil"] = lockedException.LockedUntil;
             }
 
+            if (exception is IbsSssAssessmentTooEarlyException tooEarlyException)
+            {
+                // El cliente necesita saber cuándo puede volver, no solo que llegó temprano.
+                problemDetails.Extensions["dueDate"] = tooEarlyException.DueDate;
+                problemDetails.Extensions["acceptedFrom"] = tooEarlyException.AcceptedFrom;
+            }
+
             if (exception is NutritionistNotAvailableException nutritionistException)
             {
                 // Un solo errorCode para el escenario, con el estado exacto en la extensión: el cliente
@@ -231,6 +238,8 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status404NotFound, "Nota clínica no encontrada", "clinical_note_not_found", exception.Message),
             InvalidClinicalNoteAssociationException => (
                 StatusCodes.Status400BadRequest, "Asociación de nota clínica inválida", "invalid_clinical_note_association", exception.Message),
+            IbsSssAssessmentTooEarlyException => (
+                StatusCodes.Status422UnprocessableEntity, "Evaluación IBS-SSS adelantada", "ibs_sss_assessment_too_early", exception.Message),
             DuplicateBaselineAssessmentException => (
                 StatusCodes.Status409Conflict, "Evaluación de línea base duplicada", "duplicate_baseline_assessment", exception.Message),
             InvalidIbsSssDimensionException => (

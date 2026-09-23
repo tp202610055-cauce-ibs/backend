@@ -12,7 +12,8 @@ using Microsoft.Extensions.Logging;
 namespace Cauce.Application.Reports.UseCases.GenerateMyClinicalReport;
 
 /// <summary>
-/// Handler del autoreporte clínico del paciente (US24). Reutiliza la infraestructura de reportes
+/// Handler del autoreporte clínico del paciente (US24), con período elegible (HU0024 CA01).
+/// Reutiliza la infraestructura de reportes
 /// (PDF cifrado + almacenamiento + URL prefirmada) del flujo del nutricionista, resuelve el
 /// nutricionista asignado (o ninguno) y envía la URL y la contraseña al propio paciente en dos
 /// correos separados. La contraseña nunca se persiste (DEC-B5-11, acta A10).
@@ -20,7 +21,10 @@ namespace Cauce.Application.Reports.UseCases.GenerateMyClinicalReport;
 public sealed class GenerateMyClinicalReportCommandHandler
     : IRequestHandler<GenerateMyClinicalReportCommand, GenerateMyClinicalReportResult>
 {
-    private const int ReportWindowDays = 90;
+    /// <summary>
+    /// Ventana del período por defecto, en días, cuando el paciente no elige uno (HU0024 CA01).
+    /// </summary>
+    public const int DefaultPeriodDays = 90;
 
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
@@ -65,8 +69,10 @@ public sealed class GenerateMyClinicalReportCommandHandler
         var now = DateTime.UtcNow;
         var patient = await ResolvePatientAsync(cancellationToken).ConfigureAwait(false);
 
-        var periodEnd = DateOnly.FromDateTime(now);
-        var periodStart = periodEnd.AddDays(-ReportWindowDays);
+        // El período es elegible; si el paciente no manda ninguno se cae a la ventana por defecto.
+        // El validador ya garantizó que vengan los dos extremos o ninguno.
+        var periodEnd = request.PeriodEnd ?? DateOnly.FromDateTime(now);
+        var periodStart = request.PeriodStart ?? periodEnd.AddDays(-DefaultPeriodDays);
 
         var hasData = await _reportDataReader
             .HasDataInPeriodAsync(patient.Id, periodStart, periodEnd, cancellationToken)

@@ -17,6 +17,7 @@ public sealed class GetMealHistoryQueryHandler : IRequestHandler<GetMealHistoryQ
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
     private readonly IMealRepository _mealRepository;
+    private readonly IMealFodmapResolver _fodmapResolver;
 
     /// <summary>
     /// Inicializa el handler con sus dependencias.
@@ -24,11 +25,13 @@ public sealed class GetMealHistoryQueryHandler : IRequestHandler<GetMealHistoryQ
     public GetMealHistoryQueryHandler(
         ICurrentUserService currentUserService,
         IUserRepository userRepository,
-        IMealRepository mealRepository)
+        IMealRepository mealRepository,
+        IMealFodmapResolver fodmapResolver)
     {
         _currentUserService = currentUserService;
         _userRepository = userRepository;
         _mealRepository = mealRepository;
+        _fodmapResolver = fodmapResolver;
     }
 
     /// <inheritdoc />
@@ -45,7 +48,13 @@ public sealed class GetMealHistoryQueryHandler : IRequestHandler<GetMealHistoryQ
             .CountByPatientInRangeAsync(patientId, request.From, request.To, cancellationToken)
             .ConfigureAwait(false);
 
-        var items = meals.Select(ClinicalRegistryMappings.ToHistoryItem).ToList();
+        // El nivel FODMAP agregado viaja también en la lectura, con la misma regla que en el alta.
+        var fodmapByMeal = await _fodmapResolver.ResolveAsync(meals, cancellationToken).ConfigureAwait(false);
+        var items = meals
+            .Select(meal => ClinicalRegistryMappings.ToHistoryItem(
+                meal,
+                fodmapByMeal.TryGetValue(meal.Id, out var level) ? level : null))
+            .ToList();
         return new PagedResult<MealHistoryItem>(items, request.Page, request.PageSize, total);
     }
 

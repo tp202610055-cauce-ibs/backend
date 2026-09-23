@@ -40,7 +40,7 @@ public sealed class LoginCommandHandlerLockoutTests
 
     private User GivenLocalUser()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), KeycloakId, Email, "Paciente", 1);
+        var user = User.CreatePatient(Guid.NewGuid(), KeycloakId, Email, "Paciente", 1, PatientCode.FromCorrelative(1));
         _userRepository.FindByEmailAsync(Email, Arg.Any<CancellationToken>()).Returns(user);
         return user;
     }

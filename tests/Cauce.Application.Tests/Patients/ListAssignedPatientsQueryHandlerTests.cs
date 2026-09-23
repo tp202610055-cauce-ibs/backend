@@ -127,7 +127,7 @@ public sealed class ListAssignedPatientsQueryHandlerTests
     [Fact]
     public async Task Handle_AsPatient_ThrowsUnauthorized()
     {
-        var patient = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId);
+        var patient = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         _currentUserService.UserId.Returns(Guid.NewGuid());
         _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(patient);
         _userRepository.GetRoleIdAsync(UserRoles.Nutritionist, Arg.Any<CancellationToken>()).Returns(NutritionistRoleId);

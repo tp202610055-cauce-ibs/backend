@@ -21,4 +21,19 @@ public interface IUnitOfWork
     /// lote sin reintentar la entidad fallida.
     /// </summary>
     void DiscardTrackedChanges();
+
+    /// <summary>
+    /// Ejecuta una operación dentro de una única transacción explícita del almacén subyacente.
+    ///
+    /// <para>Se usa cuando un caso de uso necesita más de un <c>SaveChanges</c> y esos guardados
+    /// tienen que ser atómicos entre sí. Si el almacén ya está dentro de una transacción (por ejemplo,
+    /// porque un caso de uso externo la abrió), la operación se ejecuta tal cual, sin anidar.</para>
+    /// </summary>
+    /// <typeparam name="TResult">Tipo del resultado de la operación.</typeparam>
+    /// <param name="operation">Operación a ejecutar dentro de la transacción.</param>
+    /// <param name="cancellationToken">Token de cancelación de la operación.</param>
+    /// <returns>El resultado de la operación.</returns>
+    Task<TResult> ExecuteInTransactionAsync<TResult>(
+        Func<CancellationToken, Task<TResult>> operation,
+        CancellationToken cancellationToken = default);
 }

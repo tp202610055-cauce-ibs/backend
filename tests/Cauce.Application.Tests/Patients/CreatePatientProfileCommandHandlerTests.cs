@@ -49,7 +49,7 @@ public sealed class CreatePatientProfileCommandHandlerTests
 
     private User ArrangePatient()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         _currentUserService.UserId.Returns(Guid.NewGuid());
         _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(user);
         _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(PatientRoleId);

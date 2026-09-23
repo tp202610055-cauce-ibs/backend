@@ -1,9 +1,10 @@
 # Estado de los Gaps de Backend — Pre-Mobile-1b
 
-> **Este documento cubre tres bloques.** La primera parte, histórica, es el diagnóstico y cierre de los 8
-> gaps previos a Mobile-1b. Los bloques **Backend-Fix-2** y **Nutritionist-Activation-1** tienen su propia
-> sección, más abajo, y no alteran nada de lo anterior. Ir a [Backend-Fix-2](#backend-fix-2) o a
-> [Nutritionist-Activation-1](#nutritionist-activation-1).
+> **Este documento cubre cuatro bloques.** La primera parte, histórica, es el diagnóstico y cierre de los 8
+> gaps previos a Mobile-1b. Los bloques **Backend-Fix-2**, **Nutritionist-Activation-1** y
+> **Backend-Pilot-Readiness** tienen su propia sección, más abajo, y no alteran nada de lo anterior. Ir a
+> [Backend-Fix-2](#backend-fix-2), a [Nutritionist-Activation-1](#nutritionist-activation-1) o a
+> [Backend-Pilot-Readiness](#backend-pilot-readiness).
 
 **Fecha de verificación:** 20 de agosto de 2026
 **Fecha de cierre:** 25 de agosto de 2026
@@ -315,3 +316,72 @@ mismo comando, con 776 pruebas verdes y 0 omitidas, y se fusionaron sus reportes
 La fusión por nombre relativo reproduce exactamente las dos cifras publicadas en aquel bloque, así que fue
 el método de aquella medición. Con el mismo criterio, este bloque pasa de 79,8 % a 80,5 % de líneas y de
 60,1 % a 60,9 % de ramas; sin ningún código generado, de 81,0 % a 81,6 %.
+
+---
+
+## Backend-Pilot-Readiness
+
+**Fecha:** 22 de septiembre de 2026
+**Rama:** `feature/backend-pilot-readiness`
+**Base:** `develop` @ `3b156b2` (tag `v0.10.0-consent-versioning`)
+**Actas:** [A59 a A65](../DECISIONS-BLOCK-BACKEND-1.md#índice)
+**Suite:** 942 pruebas verdes, 0 omitidas (379 Domain + 213 Application + 93 Infrastructure + 257 Integración)
+
+Bloque de piloto y trazabilidad. No es corrección de defectos: son decisiones ya tomadas (G1, G3, G4, G5)
+más un endurecimiento de auditoría y contrato. Corre en paralelo a mobile y no depende de nada suyo.
+
+### Qué se implementó
+
+| Punto | Resultado | Acta |
+| --- | --- | --- |
+| **G1** — código de paciente `PAC-0042` | Value object, secuencia PostgreSQL, obligatorio en el alta; aparece en `perfil_clinico.csv` y en el PDF del reporte | [A59](../DECISIONS-BLOCK-BACKEND-1.md#acta-a59-código-correlativo-de-paciente-para-exportaciones-y-reportes) |
+| **G3** — nombres de los CSV | Nueve nombres fijos, en español y sin tildes | [A60](../DECISIONS-BLOCK-BACKEND-1.md#acta-a60-contrato-del-archivo-de-exportación-de-datos-del-paciente) |
+| **G4** — período del reporte | Elegible y opcional; por defecto 90 días | [A61](../DECISIONS-BLOCK-BACKEND-1.md#acta-a61-período-elegible-y-contenido-del-reporte-clínico-del-paciente) |
+| **G5** — contenido del PDF | Historial de comidas + intensidades de síntomas (HU0024 CA01) | [A61](../DECISIONS-BLOCK-BACKEND-1.md#acta-a61-período-elegible-y-contenido-del-reporte-clínico-del-paciente) |
+| **(d)** — cuestionario adelantado | 422 `ibs_sss_assessment_too_early`, tolerancia ±24 h | [A62](../DECISIONS-BLOCK-BACKEND-1.md#acta-a62-rechazo-del-cuestionario-ibs-sss-adelantado-y-su-tolerancia) |
+| `PUT /custom-foods` revalida alérgenos | Implementado, **más un defecto preexistente corregido** | [A63](../DECISIONS-BLOCK-BACKEND-1.md#acta-a63-defecto-en-put-custom-foods-y-el-rastreo-de-hijos-nuevos-de-un-agregado-ya-cargado) |
+| URL prefirmada de exportación | 7 días → **1 hora**, configurable | [A60](../DECISIONS-BLOCK-BACKEND-1.md#acta-a60-contrato-del-archivo-de-exportación-de-datos-del-paciente) |
+| Host de firma de MinIO | Sale de configuración (`PublicEndpoint`) | [A60](../DECISIONS-BLOCK-BACKEND-1.md#acta-a60-contrato-del-archivo-de-exportación-de-datos-del-paciente) |
+| `GET /meals` devuelve `aggregatedFodmap` | Resuelto; es la causa de M42 en mobile | [A64](../DECISIONS-BLOCK-BACKEND-1.md#acta-a64-cambios-de-contrato-menores-del-bloque) |
+| `/history` polimórfico | El contrato OpenAPI ahora declara el `oneOf` | [A64](../DECISIONS-BLOCK-BACKEND-1.md#acta-a64-cambios-de-contrato-menores-del-bloque) |
+| `/foods/search` con `unaccent` | Insensible a tildes en ambos lados | [A64](../DECISIONS-BLOCK-BACKEND-1.md#acta-a64-cambios-de-contrato-menores-del-bloque) |
+| Notas clínicas idempotentes | `client_guid` + `Idempotency-Key`; **cambio incompatible** | [A64](../DECISIONS-BLOCK-BACKEND-1.md#acta-a64-cambios-de-contrato-menores-del-bloque) |
+| Transacción en `POST /ibs-sss` | `ExecuteInTransactionAsync` cubre los dos `SaveChanges` | [A64](../DECISIONS-BLOCK-BACKEND-1.md#acta-a64-cambios-de-contrato-menores-del-bloque) |
+
+### Hallazgo no previsto: `PUT /custom-foods` devolvía 500
+
+Al escribir la primera prueba de integración del endpoint se descubrió que **fallaba en toda actualización
+que cambiara los ingredientes**, desde que se implementó, por cómo EF Core rastrea un hijo nuevo agregado a
+un agregado ya cargado cuando el dominio asigna las claves. No lo cubría ninguna prueba: las existentes eran
+unitarias con repositorio sustituido y nunca emitían SQL.
+
+Se corrigió, porque una revalidación de alérgenos sobre un endpoint que siempre responde 500 no sirve de
+nada. Detalle y alternativas descartadas en el acta A63.
+
+### Efecto colateral resuelto: colisión de nombres `ConsentDocument`
+
+La deuda registrada en `CLAUDE.md` (dos tipos homónimos en namespaces distintos) bloqueó un `using` durante
+la implementación. Se aplicó el rename que el propio documento sugería: la plantilla QuestPDF pasa a
+llamarse `ConsentPdfDocument` y `ConsentDocument` queda libre para la entidad de dominio. Rename local a
+Infrastructure, sin migración ni cambio de contrato. Los dos seeders dejaron de calificar el tipo de
+opciones por completo.
+
+### Lo que se diagnosticó y **no** se tocó
+
+Cuatro puntos, con sus mediciones, en el acta
+[A65](../DECISIONS-BLOCK-BACKEND-1.md#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron):
+
+1. **Ancla de la ventana de 4 h.** Sigue en `clientCreatedAt`. Cero distancias negativas en los datos
+   reales, pero el ancla cambiaría la comida asociada en **5 de 11 síntomas (45 %)**. Requiere opinión de
+   nutricionista.
+2. **`isInActivePilot`.** Tres opciones con su contrapartida; recomendación del backend: endpoint admin
+   explícito. Decide Trigo con el Kaelín.
+3. **Categorías IBS-SSS.** El código usa tres bandas; Francis et al. (1997) define cuatro. Falta
+   `Remission` (< 75), que es justamente la que demostraría el efecto del piloto.
+4. **Unidades sin convertir a gramos.** Confirmado sin cambios. Nota nueva: ahora hay **dos** caminos que
+   usan el agregador (alta y lectura), detrás de la misma interfaz.
+
+### Documentación que queda desactualizada fuera de este repo
+
+- **HU0025, CP064 y CP065** declaran cinco archivos en el ZIP de exportación. Son **nueve** desde que se
+  implementó US25. Corresponde corregir la HU, no el código.

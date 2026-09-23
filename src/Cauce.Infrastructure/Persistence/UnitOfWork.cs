@@ -1,4 +1,5 @@
 using Cauce.Application.Common.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 namespace Cauce.Infrastructure.Persistence;
 
@@ -29,5 +30,29 @@ public sealed class UnitOfWork : IUnitOfWork
     public void DiscardTrackedChanges()
     {
         _context.ChangeTracker.Clear();
+    }
+
+    /// <inheritdoc />
+    public async Task<TResult> ExecuteInTransactionAsync<TResult>(
+        Func<CancellationToken, Task<TResult>> operation,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(operation);
+
+        // Si ya hay una transacción abierta, abrir otra lanzaría. Se ejecuta dentro de la existente,
+        // que es lo que el llamador quiere: atomicidad, no una transacción propia.
+        if (_context.Database.CurrentTransaction is not null)
+        {
+            return await operation(cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var transaction = await _context.Database
+            .BeginTransactionAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var result = await operation(cancellationToken).ConfigureAwait(false);
+
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        return result;
     }
 }

@@ -50,7 +50,11 @@ public sealed class ClinicalReportDocument : IDocument
         container.Column(column =>
         {
             column.Item().Text("Reporte clínico — Cauce").FontSize(18).Bold().FontColor(Colors.Teal.Darken2);
-            column.Item().Text($"Paciente: {_data.PatientInitials}   ·   Edad: {_data.PatientAge} años   ·   SII: {_data.IbsSubtype}");
+            // El código de paciente es lo que identifica al sujeto en el reporte (G1); las iniciales
+            // acompañan para que el nutricionista tratante reconozca a quién atiende sin que el
+            // documento lleve el nombre completo.
+            column.Item().Text($"Paciente: {_data.PatientCode}   ·   Iniciales: {_data.PatientInitials}");
+            column.Item().Text($"Edad: {_data.PatientAge} años   ·   SII: {_data.IbsSubtype}");
             column.Item().Text(
                 $"Período: {_data.PeriodStart:yyyy-MM-dd} a {_data.PeriodEnd:yyyy-MM-dd}   ·   " +
                 $"Generado: {_data.GeneratedAt:yyyy-MM-dd HH:mm} UTC");
@@ -104,6 +108,33 @@ public sealed class ClinicalReportDocument : IDocument
                 }
             }));
 
+            // HU0024 CA01: el reporte debe traer el historial de comidas, no solo el conteo y el
+            // ranking de alimentos, para que el nutricionista pueda leer qué comió el paciente y
+            // cuándo.
+            column.Item().Element(c => Section(c, "Historial de comidas", inner =>
+            {
+                if (_data.Meals.Count == 0)
+                {
+                    inner.Item().Text("Sin comidas registradas en el período.");
+                    return;
+                }
+
+                foreach (var meal in _data.Meals)
+                {
+                    var items = meal.Items.Count == 0
+                        ? "sin alimentos detallados"
+                        : string.Join(", ", meal.Items);
+                    inner.Item().Text($"• {meal.ConsumedAt:yyyy-MM-dd HH:mm} ({meal.MealTime}): {items}");
+                }
+
+                if (_data.Meals.Count < _data.MealCount)
+                {
+                    inner.Item().PaddingTop(4)
+                        .Text($"Se listan las primeras {_data.Meals.Count} de {_data.MealCount} comidas del período.")
+                        .Italic().FontColor(Colors.Grey.Darken1);
+                }
+            }));
+
             column.Item().Element(c => Section(c, "Síntomas", inner =>
             {
                 if (_data.Symptoms.Count == 0)
@@ -112,9 +143,25 @@ public sealed class ClinicalReportDocument : IDocument
                     return;
                 }
 
+                // HU0024 CA01: la intensidad es el dato clínico; el conteo por sí solo no distingue
+                // diez molestias leves de diez episodios severos.
                 foreach (var symptom in _data.Symptoms)
                 {
-                    inner.Item().Text($"• {symptom.SymptomType}: {symptom.Count}");
+                    inner.Item().Text(
+                        $"• {symptom.SymptomType}: {symptom.Count} episodios   ·   " +
+                        $"intensidad media {symptom.AverageIntensity:0.#}/100 " +
+                        $"(mín. {symptom.MinIntensity}, máx. {symptom.MaxIntensity})");
+                }
+
+                if (_data.SymptomEntries.Count > 0)
+                {
+                    inner.Item().PaddingTop(6).Text("Detalle cronológico:").SemiBold();
+                    foreach (var entry in _data.SymptomEntries)
+                    {
+                        var correlation = entry.AssociatedWithMeal ? " · asociado a una comida" : string.Empty;
+                        inner.Item().Text(
+                            $"• {entry.OccurredAt:yyyy-MM-dd HH:mm}: {entry.SymptomType}, intensidad {entry.Intensity}/100{correlation}");
+                    }
                 }
             }));
 

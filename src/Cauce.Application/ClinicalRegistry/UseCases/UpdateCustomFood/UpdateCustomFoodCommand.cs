@@ -11,8 +11,14 @@ namespace Cauce.Application.ClinicalRegistry.UseCases.UpdateCustomFood;
 /// <param name="Name">Nuevo nombre (1–150 caracteres).</param>
 /// <param name="PortionSizeGrams">Nuevo tamaño de porción en gramos (mayor que cero).</param>
 /// <param name="Ingredients">Nuevo conjunto de ingredientes.</param>
+/// <param name="ConfirmedAllergens">
+/// Indica que el paciente confirmó explícitamente guardar el alimento pese a que sus ingredientes
+/// coinciden con alergias declaradas (US10 CA03). Si es <see langword="false"/> y hay coincidencias,
+/// la operación responde 409 con el detalle.
+/// </param>
 public sealed record UpdateCustomFoodCommand(
     Guid CustomFoodId,
     string Name,
     decimal PortionSizeGrams,
-    IReadOnlyList<CustomFoodIngredientRequest> Ingredients) : IRequest<UpdateCustomFoodResult>;
+    IReadOnlyList<CustomFoodIngredientRequest> Ingredients,
+    bool ConfirmedAllergens = false) : IRequest<UpdateCustomFoodResult>;

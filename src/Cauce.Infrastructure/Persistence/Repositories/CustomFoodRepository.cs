@@ -69,6 +69,24 @@ public sealed class CustomFoodRepository : ICustomFoodRepository
     }
 
     /// <inheritdoc />
+    public void Update(CustomFood customFood)
+    {
+        ArgumentNullException.ThrowIfNull(customFood);
+
+        // Un ingrediente que todavía no conoce el rastreador es un alta. Sin esta marca explícita,
+        // DetectChanges lo descubre al guardar, ve que su clave ya viene asignada desde el dominio y
+        // lo pinta como Modified: EF emite un UPDATE contra una fila que no existe, la sentencia
+        // afecta cero filas y el guardado revienta con DbUpdateConcurrencyException.
+        foreach (var ingredient in customFood.Ingredients)
+        {
+            if (_context.Entry(ingredient).State == EntityState.Detached)
+            {
+                _context.Add(ingredient);
+            }
+        }
+    }
+
+    /// <inheritdoc />
     public void Remove(CustomFood customFood)
     {
         _context.Set<CustomFood>().Remove(customFood);

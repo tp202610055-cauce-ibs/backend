@@ -6,6 +6,7 @@ using Cauce.Api.Configuration;
 using Cauce.Api.Middleware;
 using Cauce.Api.Workers;
 using Cauce.Application;
+using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Infrastructure;
 using Cauce.Infrastructure.Identity;
 using Cauce.Infrastructure.Persistence.Seeders;
@@ -171,6 +172,27 @@ builder.Services.AddSwaggerGen(options =>
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         { jwtSecurityScheme, Array.Empty<string>() }
+    });
+
+    // Unión discriminada de HistoryEvent en el contrato. Sin esto, Swashbuckle aplana la jerarquía
+    // al tipo base y publica un esquema con solo `occurredAt`: el JSON real trae el discriminador
+    // `eventType` y el objeto de la comida, el síntoma o la nota, pero el cliente generado a partir
+    // del contrato no tiene forma de saberlo. UseOneOfForPolymorphism emite el `oneOf` con los tres
+    // subtipos y el discriminador que el serializador ya usa en tiempo de ejecución.
+    options.UseOneOfForPolymorphism();
+    options.UseAllOfForInheritance();
+    options.SelectDiscriminatorNameUsing(baseType =>
+        baseType == typeof(HistoryEvent) ? "eventType" : null);
+    options.SelectSubTypesUsing(baseType =>
+        baseType == typeof(HistoryEvent)
+            ? [typeof(MealHistoryEvent), typeof(SymptomHistoryEvent), typeof(ClinicalNoteHistoryEvent)]
+            : []);
+    options.SelectDiscriminatorValueUsing(subType => subType.Name switch
+    {
+        nameof(MealHistoryEvent) => "meal",
+        nameof(SymptomHistoryEvent) => "symptom",
+        nameof(ClinicalNoteHistoryEvent) => "clinical_note",
+        _ => null
     });
 
     // Documentación de endpoints a partir de los comentarios XML del ensamblado.

@@ -35,7 +35,7 @@ public sealed class ConfirmPasswordResetCommandHandlerTests
     [Fact]
     public async Task Handle_ValidToken_ResetsPasswordAndConsumesToken()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
         var token = PasswordResetToken.Issue(Guid.NewGuid(), user.Id, Hash(PlainToken), DateTime.UtcNow, PasswordResetToken.Validity);
         _tokenRepository.FindByTokenHashAsync(Hash(PlainToken), Arg.Any<CancellationToken>()).Returns(token);
         _userRepository.FindByIdAsync(user.Id, Arg.Any<CancellationToken>()).Returns(user);
@@ -60,7 +60,7 @@ public sealed class ConfirmPasswordResetCommandHandlerTests
     [Fact]
     public async Task Handle_ExpiredToken_ThrowsExpired()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
         var expiredToken = PasswordResetToken.Issue(
             Guid.NewGuid(), user.Id, Hash(PlainToken), DateTime.UtcNow.AddMinutes(-31), PasswordResetToken.Validity);
         _tokenRepository.FindByTokenHashAsync(Hash(PlainToken), Arg.Any<CancellationToken>()).Returns(expiredToken);

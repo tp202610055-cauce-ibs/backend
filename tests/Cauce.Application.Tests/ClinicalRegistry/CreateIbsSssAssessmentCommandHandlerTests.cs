@@ -30,12 +30,28 @@ public sealed class CreateIbsSssAssessmentCommandHandlerTests
     private readonly ISender _mediator = Substitute.For<ISender>();
     private readonly ILogger<CreateIbsSssAssessmentCommandHandler> _logger = Substitute.For<ILogger<CreateIbsSssAssessmentCommandHandler>>();
 
+    /// <summary>
+    /// Inicializa la prueba haciendo que la unidad de trabajo sustituida ejecute de verdad la
+    /// operación que recibe. El handler envuelve el registro en una transacción explícita, y un
+    /// sustituto sin configurar devolvería el valor por defecto sin llegar a invocarla: las pruebas
+    /// dejarían de ejercitar el handler sin dejar de pasar.
+    /// </summary>
+    public CreateIbsSssAssessmentCommandHandlerTests()
+    {
+        _unitOfWork
+            .ExecuteInTransactionAsync(
+                Arg.Any<Func<CancellationToken, Task<CreateIbsSssAssessmentResult>>>(),
+                Arg.Any<CancellationToken>())
+            .Returns(call => call.Arg<Func<CancellationToken, Task<CreateIbsSssAssessmentResult>>>()(
+                call.Arg<CancellationToken>()));
+    }
+
     private CreateIbsSssAssessmentCommandHandler CreateHandler() => new(
         _currentUserService, _userRepository, _assessmentRepository, _scheduleRepository, _outboxWriter, _unitOfWork, _mediator, _logger);
 
     private void ArrangePatient()
     {
-        var user = User.CreatePatient(Guid.NewGuid(), "kc", "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), "kc", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         _currentUserService.UserId.Returns(Guid.NewGuid());
         _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(user);
         _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(PatientRoleId);

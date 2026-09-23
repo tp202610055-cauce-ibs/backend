@@ -59,7 +59,7 @@ public sealed class AssignNutritionistCommandHandlerTests
     /// </summary>
     private (User Patient, User Nutritionist, InvitationCode Invitation) ArrangeHappyPath()
     {
-        var patient = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId);
+        var patient = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         _currentUserService.UserId.Returns(Guid.NewGuid());
         _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(patient);
         _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(PatientRoleId);
@@ -107,7 +107,7 @@ public sealed class AssignNutritionistCommandHandlerTests
 
             case UserStatus.Inactive:
                 nutritionist = User.CreatePatient(
-                    nutritionistId, "kc-nutri", "n@cauce.local", "Nutri Demo", PatientRoleId);
+                    nutritionistId, "kc-nutri", "n@cauce.local", "Nutri Demo", PatientRoleId, PatientCode.FromCorrelative(1));
                 nutritionist.Anonymize(PatientRoleId);
                 break;
 

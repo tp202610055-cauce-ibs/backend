@@ -1,5 +1,6 @@
 using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Domain.ClinicalRegistry;
+using Cauce.Domain.ClinicalRegistry.Enums;
 
 namespace Cauce.Application.ClinicalRegistry.Mapping;
 
@@ -68,8 +69,12 @@ public static class ClinicalRegistryMappings
     /// Proyecta una comida a su elemento de historial.
     /// </summary>
     /// <param name="meal">Comida.</param>
+    /// <param name="aggregatedFodmap">
+    /// Nivel FODMAP agregado de la comida, o <see langword="null"/> si no pudo calcularse. Lo resuelve
+    /// el handler, que es quien tiene acceso al catálogo: el mapeo es una proyección pura.
+    /// </param>
     /// <returns>El elemento de historial de la comida.</returns>
-    public static MealHistoryItem ToHistoryItem(Meal meal)
+    public static MealHistoryItem ToHistoryItem(Meal meal, FodmapLevel? aggregatedFodmap = null)
     {
         var items = meal.Items
             .Select(item => new MealItemSummary(item.FoodId, item.CustomFoodId, item.Quantity, item.Unit))
@@ -83,7 +88,7 @@ public static class ClinicalRegistryMappings
             meal.ClientCreatedAt,
             meal.SyncStatus,
             items,
-            AggregatedFodmap: null);
+            aggregatedFodmap);
     }
 
     /// <summary>
@@ -111,7 +116,7 @@ public static class ClinicalRegistryMappings
     /// <returns>El resumen de la nota.</returns>
     public static ClinicalNoteSummary ToSummary(ClinicalNote note)
     {
-        return new ClinicalNoteSummary(note.Id, note.MealId, note.SymptomId, note.Content, note.CreatedAt);
+        return new ClinicalNoteSummary(note.Id, note.ClientGuid, note.MealId, note.SymptomId, note.Content, note.CreatedAt);
     }
 
     /// <summary>

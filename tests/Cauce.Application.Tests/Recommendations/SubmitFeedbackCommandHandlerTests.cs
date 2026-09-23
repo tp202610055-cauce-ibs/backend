@@ -32,7 +32,7 @@ public sealed class SubmitFeedbackCommandHandlerTests
 
     public SubmitFeedbackCommandHandlerTests()
     {
-        var patient = User.CreatePatient(Guid.NewGuid(), "kc", "p@cauce.local", "Paciente", PatientRoleId);
+        var patient = User.CreatePatient(Guid.NewGuid(), "kc", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         _patientId = patient.Id;
         _currentUser.UserId.Returns(Guid.NewGuid());
         _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(patient);

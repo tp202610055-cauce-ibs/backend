@@ -1,4 +1,5 @@
 using Cauce.Api.Contracts.Patients;
+using Cauce.Api.Contracts.Reports;
 using Cauce.Application.Identity.UseCases.GetMyConsent;
 using Cauce.Application.Identity.UseCases.GetMyConsentPdf;
 using Cauce.Application.Patients.Dtos;
@@ -236,18 +237,27 @@ public sealed class PatientsController : BaseApiController
     }
 
     /// <summary>
-    /// Genera el reporte clínico personal del paciente autenticado (US24), cubriendo sus últimos 90
-    /// días. Devuelve una URL prefirmada de descarga; la contraseña del PDF cifrado se envía por correo
-    /// en un mensaje separado. Responde 422 si el paciente no tiene datos en el período.
+    /// Genera el reporte clínico personal del paciente autenticado (US24). Devuelve una URL prefirmada
+    /// de descarga; la contraseña del PDF cifrado se envía por correo en un mensaje separado. Responde
+    /// 422 si el paciente no tiene datos en el período.
     /// </summary>
+    /// <param name="request">
+    /// Período a cubrir (HU0024 CA01). Es opcional: sin cuerpo, el reporte abarca los últimos 90 días.
+    /// Si se envía, deben ir los dos extremos, con inicio anterior al fin, fin no futuro y una
+    /// duración de hasta 90 días.
+    /// </param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>La URL de descarga prefirmada y su vencimiento, con código 200.</returns>
     [HttpPost("me/report")]
     [ProducesResponseType(typeof(GenerateMyClinicalReportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status422UnprocessableEntity)]
-    public async Task<IActionResult> GenerateMyReport(CancellationToken ct)
+    public async Task<IActionResult> GenerateMyReport(
+        [FromBody] GenerateMyClinicalReportRequest? request,
+        CancellationToken ct)
     {
-        var result = await _mediator.Send(new GenerateMyClinicalReportCommand(), ct);
+        var command = new GenerateMyClinicalReportCommand(request?.PeriodStart, request?.PeriodEnd);
+        var result = await _mediator.Send(command, ct);
         return Ok(result);
     }
 

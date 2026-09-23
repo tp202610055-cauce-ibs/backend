@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Cauce.Api.IntegrationTests.Identity.Support;
+using Cauce.Infrastructure.Patients;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.ClinicalRegistry.Enums;
@@ -24,8 +25,7 @@ public sealed class DataExportApiTests
 {
     private static readonly string[] ExpectedCsvNames =
     [
-        "profile.csv", "allergies.csv", "meals.csv", "symptoms.csv", "ibs_sss_assessments.csv",
-        "recommendations.csv", "recommendation_feedback.csv", "consent_records.csv", "audit_logs.csv"
+        .. ArchiveEntryNames.All
     ];
 
     private readonly MinioFixture _minio;
@@ -69,8 +69,8 @@ public sealed class DataExportApiTests
 
         var entries = await DownloadZipEntriesAsync(url!);
         entries.Keys.Should().BeEquivalentTo(ExpectedCsvNames);
-        entries["meals.csv"].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().HaveCountGreaterThan(1);
-        entries["consent_records.csv"].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().HaveCountGreaterThan(1);
+        entries[ArchiveEntryNames.Meals].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().HaveCountGreaterThan(1);
+        entries[ArchiveEntryNames.ConsentRecords].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().HaveCountGreaterThan(1);
 
         var audit = (await AuditLogsAsync("PatientData", patient.Id, AuditActionType.Export)).Should().ContainSingle().Subject;
         audit.ActorUserId.Should().Be(patient.Id);
@@ -95,9 +95,9 @@ public sealed class DataExportApiTests
         entries.Keys.Should().BeEquivalentTo(ExpectedCsvNames);
 
         // CA02: cada CSV existe y trae encabezado; los sin filas tienen solo la línea de encabezado.
-        entries["meals.csv"].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().ContainSingle();
-        entries["symptoms.csv"].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().ContainSingle();
-        entries["profile.csv"].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().HaveCount(2);
+        entries[ArchiveEntryNames.Meals].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().ContainSingle();
+        entries[ArchiveEntryNames.Symptoms].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().ContainSingle();
+        entries[ArchiveEntryNames.Profile].Split('\n', StringSplitOptions.RemoveEmptyEntries).Should().HaveCount(2);
     }
 
     private async Task<Dictionary<string, string>> DownloadZipEntriesAsync(string url)
@@ -137,5 +137,31 @@ public sealed class DataExportApiTests
         var consent = ConsentRecord.Capture(Guid.NewGuid(), userId, "1.0", new string('a', 64), "127.0.0.1", DateTime.UtcNow);
         db.Set<ConsentRecord>().Add(consent);
         await db.SaveChangesAsync();
+    }
+
+    [SkippableFact]
+    public async Task ExportMyData_ProfileCsv_IdentifiesThePatientByCodeAndNotByGuid()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedPatientProfileAsync(patient.Id);
+
+        var response = await PatientClient(patient.KeycloakId, patient.Email)
+            .GetAsync("/api/v1/patients/me/export-data");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var url = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("downloadUrl").GetString()!;
+
+        var entries = await DownloadZipEntriesAsync(url);
+        var profile = entries[ArchiveEntryNames.Profile];
+
+        profile.Should().StartWith("patient_code,");
+        profile.Should().NotContain(patient.Id.ToString(), "el identificador técnico no viaja al archivo de investigación");
+        profile.Should().NotContain(patient.Email);
+
+        // G1: ninguna salida de la exportación debe poner el código junto al nombre real.
+        foreach (var (name, content) in entries)
+        {
+            content.Should().NotContain("Paciente", $"{name} no debe llevar el nombre del paciente");
+        }
     }
 }

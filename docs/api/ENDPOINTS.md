@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.3.0 · **Actualizado:** 2026-09-11 · **Contrato:** [`openapi-v1.2.0.json`](openapi-v1.2.0.json) (316 KB, 63 operaciones, 55 paths)
+**Versión:** 1.4.0 · **Actualizado:** 2026-09-22 · **Contrato:** [`openapi-v1.3.0.json`](openapi-v1.3.0.json) (327 KB, 64 operaciones, 56 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -11,6 +11,26 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los siete endpoints de identidad, la fuente autoritativa versionada es
 > [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.3.
+
+**Novedades de la v1.4.0 (bloque Backend-Pilot-Readiness).**
+- `POST /clinical-notes` **exige ahora clave de idempotencia** (`clientGuid` en el cuerpo o encabezado
+  `Idempotency-Key`). Es un cambio incompatible: sin ella responde 400. Un reintento con la misma clave
+  devuelve **200** con la misma nota; la misma clave con contenido distinto devuelve 409
+  `idempotency_mismatch`. `ClinicalNoteSummary` expone el `clientGuid`.
+- `GET /meals` y `GET /history` devuelven `aggregatedFodmap` calculado, con la misma regla que el `POST`.
+  Antes llegaba siempre en `null`.
+- `PUT /custom-foods/{id}` acepta `confirmedAllergens` y responde **409 `unconfirmed_allergens`** igual que
+  la creación.
+- `POST /patients/me/report` acepta un cuerpo **opcional** con `periodStart` y `periodEnd` (HU0024). Sin
+  cuerpo, sigue cubriendo los últimos 90 días.
+- `POST /ibs-sss` responde **422 `ibs_sss_assessment_too_early`** si una evaluación periódica llega antes de
+  la fecha agendada, con las extensiones `dueDate` y `acceptedFrom`.
+- `GET /foods/search` es insensible a tildes (`platano` encuentra `plátano`).
+- `GET /history` declara su unión discriminada (`oneOf` + discriminador `eventType`) en el contrato OpenAPI.
+  El JSON en tiempo de ejecución no cambió.
+- El ZIP de `GET /patients/me/export-data` cambia los nombres de sus nueve CSV al español sin tildes y su
+  URL prefirmada pasa a durar **1 hora** (antes 7 días). `perfil_clinico.csv` identifica al paciente por
+  `patient_code` (`PAC-0042`) en lugar de su GUID.
 
 **Novedades de la v1.3.0 (bloque Nutritionist-Activation-1).** El nutricionista se provisiona pendiente de
 activación y sin contraseña: Keycloak le envía el enlace para definirla, y la cuenta se activa en su primera
@@ -32,7 +52,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
   [CLAUDE.md → Enums](../../CLAUDE.md#enums-y-valores-controlados).
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
   `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.2.0.json` bajo
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.3.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -422,7 +442,7 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 ### `GET /api/v1/meals`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Historial paginado de comidas (rango `from`/`to`). |
+| Resumen | Historial paginado de comidas (rango `from`/`to`). Cada comida trae su `aggregatedFodmap` calculado, con la misma regla que el `POST`. |
 | US/TS | US09 |
 | Query | `from`, `to` (UTC), `page=1`, `pageSize=50` |
 | Idempotencia | — |
@@ -454,15 +474,15 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 | --- | --- |
 | Resumen | Crea una nota clínica asociada a exactamente una comida **o** un síntoma. |
 | US/TS | US13 |
-| Request body | `CreateClinicalNoteRequest` (mealId?, symptomId?, content) |
-| Idempotencia | — |
+| Request body | `CreateClinicalNoteRequest` (mealId?, symptomId?, content, clientGuid?) |
+| Idempotencia | **Sí — requerida** (`clientGuid` en el cuerpo o encabezado `Idempotency-Key`; si viajan ambos deben coincidir) |
 | Rate limit | `default-auth` |
-| Respuestas | **201** `CreateClinicalNoteResult` · 400 (`validation_error`, `invalid_clinical_note_association`) · 404 `meal_not_found`/`symptom_not_found` · 401 · 403 · 429 · 500 |
+| Respuestas | **201** `CreateClinicalNoteResult` · **200** mismo DTO en un reintento idempotente · 400 (`validation_error`, `invalid_clinical_note_association`) · 404 `meal_not_found`/`symptom_not_found` · 409 `idempotency_mismatch` · 401 · 403 · 429 · 500 |
 
 ### `GET /api/v1/clinical-notes`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Notas clínicas del paciente en un rango de fechas. |
+| Resumen | Notas clínicas del paciente en un rango de fechas. Cada nota incluye su `clientGuid`. |
 | US/TS | US13 |
 | Query | `from`, `to` |
 | Idempotencia | — |
@@ -492,12 +512,12 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 ### `PUT /api/v1/custom-foods/{customFoodId}`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Actualiza un alimento personalizado del paciente. |
+| Resumen | Actualiza un alimento personalizado del paciente. Revalida los ingredientes contra las alergias declaradas, igual que la creación (US10 CA03). |
 | US/TS | US10 |
-| Request body | `UpdateCustomFoodRequest` |
+| Request body | `UpdateCustomFoodRequest` (name, portionSizeGrams, ingredients, confirmedAllergens) |
 | Idempotencia | — |
 | Rate limit | `default-auth` |
-| Respuestas | **200** `UpdateCustomFoodResult` · 400 · 404 `custom_food_not_found`/`food_item_not_found` · 409 `duplicate_custom_food` · 401 · 403 · 429 · 500 |
+| Respuestas | **200** `UpdateCustomFoodResult` · 400 · 404 `custom_food_not_found`/`food_item_not_found` · 409 `duplicate_custom_food` · 409 `unconfirmed_allergens` (extensiones `detected`, `allergens[]`) · 401 · 403 · 429 · 500 |
 
 ### `DELETE /api/v1/custom-foods/{customFoodId}`
 | Campo | Valor |
@@ -529,6 +549,12 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 | Rate limit | `default-auth` |
 | Respuestas | **200** `HistoryEvent[]` · 400 · 401 · 403 · 429 · 500 |
 
+> **Unión discriminada.** Cada elemento trae `eventType` con uno de tres valores —`meal`, `symptom`,
+> `clinical_note`— y el objeto correspondiente en `meal`, `symptom` o `note`. Desde el snapshot
+> `openapi-v1.3.0.json` el contrato lo declara con `oneOf` y discriminador, así que los generadores de
+> cliente producen la unión en lugar de un tipo con un solo campo. El JSON en tiempo de ejecución no
+> cambió: el discriminador siempre estuvo ahí.
+
 ---
 
 ## 5. Paciente / IBS-SSS y evolución
@@ -538,12 +564,18 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 ### `POST /api/v1/ibs-sss`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Registra una evaluación IBS-SSS. El servidor calcula puntaje y categoría; la línea base cierra el onboarding. |
+| Resumen | Registra una evaluación IBS-SSS. El servidor calcula puntaje y categoría; la línea base cierra el onboarding. Evaluación, agenda, evento de outbox y cierre de onboarding se confirman en una sola transacción. |
 | US/TS | US04 (baseline), US12 (periódica) |
 | Request body | `CreateIbsSssAssessmentRequest` (assessmentType + 5 dimensiones 0–100) |
 | Idempotencia | — |
 | Rate limit | `default-auth` |
-| Respuestas | **201** `CreateIbsSssAssessmentResult` · 400 (`validation_error`, `invalid_ibs_sss_dimension`) · 409 `duplicate_baseline_assessment` · 401 · 403 · 429 · 500 |
+| Respuestas | **201** `CreateIbsSssAssessmentResult` · 400 (`validation_error`, `invalid_ibs_sss_dimension`) · 409 `duplicate_baseline_assessment` · **422 `ibs_sss_assessment_too_early`** · 401 · 403 · 429 · 500 |
+
+> **Cuestionario adelantado.** Una evaluación **periódica** que llega antes de `dueDate − 24 h` de la agenda
+> abierta se rechaza con 422 `ibs_sss_assessment_too_early`, y el cuerpo trae las extensiones `dueDate` y
+> `acceptedFrom` (ISO 8601 UTC) para que el cliente sepa cuándo puede reintentar. No aplica a la línea base
+> ni a un paciente sin agenda abierta. La tolerancia de 24 horas es un valor por defecto pendiente de
+> confirmación clínica (acta A62).
 
 ### `GET /api/v1/ibs-sss/evolution`
 | Campo | Valor |

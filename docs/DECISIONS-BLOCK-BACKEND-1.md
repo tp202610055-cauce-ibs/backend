@@ -3,12 +3,15 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A58, de los bloques Backend-Fix-2, Nutritionist-Activation-1 y el
-trabajo posterior sobre el consentimiento. Las actas A1 a A37 y las decisiones DEC-B3 a
-DEC-B7B no tienen archivo en ningún repo: solo sobreviven resumidas en el `CLAUDE.md` local.
-**Numeración:** A42 y A50 no existen como acta.
+**Alcance:** actas A38 a A65, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+trabajo posterior sobre el consentimiento y Backend-Pilot-Readiness. Las actas A1 a A37 y las
+decisiones DEC-B3 a DEC-B7B no tienen archivo en ningún repo: solo sobreviven resumidas en el
+`CLAUDE.md` local.
+**Numeración:** la serie es global entre repos, con prefijo `M` para mobile y `A` para backend.
+A42 y A50 no existen como acta.
 **Autores:** Trigo (decisión), Kiwicha (redacción).
-**Consolidado:** 2026-09-17, sin alterar el contenido de ninguna acta.
+**Consolidado:** 2026-09-17, sin alterar el contenido de ninguna acta. Ampliado el 2026-09-22 con
+las actas A59 a A65.
 
 ---
 
@@ -35,6 +38,13 @@ DEC-B7B no tienen archivo en ningún repo: solo sobreviven resumidas en el `CLAU
 | [A56](#acta-a56-deuda-diferida--los-códigos-de-invitación-no-se-revocan-al-suspender) | Deuda diferida — los códigos de invitación no se revocan al suspender | Aprobada, deuda diferida. Se resuelve junto con el flujo de suspensión |
 | [A57](#acta-a57-el-comprobante-en-pdf-del-consentimiento-se-resuelve-por-versión-aceptada-no-por-la-vigente) | El comprobante en PDF del consentimiento se resuelve por versión aceptada, no por la vigente | Aprobada, implementada en el bloque de cierre de HU0001 escenario 4 |
 | [A58](#acta-a58-desviación-de-dec-b3-07-el-seeder-del-consentimiento-corre-en-todos-los-ambientes) | Desviación de DEC-B3-07, el seeder del consentimiento corre en todos los ambientes | Aprobada. Solución intermedia hasta que exista el CLI de producción que prevé DEC-B3-07 |
+| [A59](#acta-a59-código-correlativo-de-paciente-para-exportaciones-y-reportes) | Código correlativo de paciente para exportaciones y reportes | Aprobada, implementada en Backend-Pilot-Readiness (G1) |
+| [A60](#acta-a60-contrato-del-archivo-de-exportación-de-datos-del-paciente) | Contrato del archivo de exportación de datos del paciente | Aprobada, implementada en Backend-Pilot-Readiness (G3). **Exige corregir HU0025/CP064/CP065: son nueve archivos, no cinco** |
+| [A61](#acta-a61-período-elegible-y-contenido-del-reporte-clínico-del-paciente) | Período elegible y contenido del reporte clínico del paciente | Aprobada, implementada en Backend-Pilot-Readiness (G4 y G5) |
+| [A62](#acta-a62-rechazo-del-cuestionario-ibs-sss-adelantado-y-su-tolerancia) | Rechazo del cuestionario IBS-SSS adelantado y su tolerancia | Aprobada. **La tolerancia de ±24 h es una propuesta del backend, pendiente de confirmación clínica** |
+| [A63](#acta-a63-defecto-en-put-custom-foods-y-el-rastreo-de-hijos-nuevos-de-un-agregado-ya-cargado) | Defecto en PUT /custom-foods y el rastreo de hijos nuevos de un agregado ya cargado | Aprobada, defecto preexistente RESUELTO en Backend-Pilot-Readiness |
+| [A64](#acta-a64-cambios-de-contrato-menores-del-bloque) | Cambios de contrato menores del bloque | Aprobada, implementada en Backend-Pilot-Readiness |
+| [A65](#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron) | Diagnósticos del bloque que no se implementaron | Documentada. Cuatro puntos abiertos: ancla de la ventana de 4 h, `isInActivePilot`, categorías IBS-SSS y conversión de unidades |
 
 ---
 
@@ -1396,5 +1406,653 @@ no editar la fila existente.
 - `src/Cauce.Infrastructure/Persistence/Seeders/ConsentDocumentStartup.cs`
 - `src/Cauce.Api/Program.cs`
 - DEC-B3-07, del Bloque 3. Vive en el repo `docs` (`DECISIONS-BLOCK-01.md`), que no está en este checkout.
+
+---
+
+## Acta A59: Código correlativo de paciente para exportaciones y reportes
+
+**Estado:** Aprobada, implementada en Backend-Pilot-Readiness (G1)
+**Fecha:** 2026-09-22
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, agregado `User` del módulo Identity, exportación de portabilidad y reporte clínico en PDF.
+
+---
+
+### Contexto
+
+Un paciente se identificaba de tres formas distintas según dónde se lo mirara: por su `user_id` (GUID)
+en el CSV de perfil de la exportación, por sus iniciales en el PDF del reporte clínico, y por su
+nombre completo en el panel de triaje del nutricionista.
+
+Ninguna de las tres sirve para investigación. El GUID no es legible por una persona y, peor, es el
+identificador técnico con el que se puede volver a la fila del paciente. Las iniciales no son únicas y
+no permiten referirse a un sujeto sin ambigüedad en una tabla de resultados. El nombre completo es
+dato personal y no tiene por qué salir del sistema.
+
+### Decisión
+
+Se agrega `PatientCode`, un value object con formato canónico `PAC-0042`, asignado en el alta del
+paciente y nunca reasignado.
+
+**Es un seudónimo, no un reemplazo del identificador interno.** `PatientId` (GUID) sigue siendo la
+clave primaria, la que usan la app móvil, la sincronización y todas las claves foráneas. Son dos cosas
+con uso distinto: el GUID identifica la fila, el código identifica al sujeto del estudio ante una
+persona. Este punto es el que evita que alguien "simplifique" reemplazando uno por el otro.
+
+**Dónde aparece:** en `perfil_clinico.csv` de la exportación, en lugar de `user_id`; y en el
+encabezado del PDF del reporte clínico, junto a las iniciales.
+
+**Dónde no aparece y no se tocó:** el panel de triaje (`GET /nutritionists/me/patients`) y el detalle
+del paciente siguen mostrando el nombre completo. Son vistas de atención clínica, no salidas de
+investigación: el nutricionista tratante necesita saber a quién atiende. Agregar ahí el código pondría
+código y nombre en la misma pantalla, que es exactamente lo que el seudónimo existe para evitar.
+
+**Las iniciales se conservan en el PDF.** El reporte lo lee el nutricionista tratante, y las iniciales
+son la pseudonimización que ya tenía. No son el nombre completo ni el identificador técnico, así que
+G1 no pide retirarlas; hacerlo habría sido una variante propia sobre cómo se seudonimiza.
+
+### El correlativo lo entrega la base, no la aplicación
+
+Se crea la secuencia PostgreSQL `patient_code_seq` y el alta reserva su próximo valor con `nextval`.
+
+La alternativa obvia, `MAX(patient_code) + 1`, es la que falla: dos altas simultáneas leen el mismo
+máximo y producen el mismo código. `nextval` es atómico y no bloquea. El índice único filtrado
+`ux_users_patient_code` queda como red de seguridad, no como mecanismo principal.
+
+Un fallo posterior en el alta deja un hueco en la numeración, porque la secuencia no se revierte con
+la transacción. Es aceptable: el código identifica, no cuenta. Un código repetido no lo sería.
+
+### El código es obligatorio en la construcción
+
+`User.CreatePatient` exige el `PatientCode` como parámetro. No es un `Assign` posterior ni un campo
+que se complete después.
+
+La razón es que un paciente sin código es invisible para la investigación, y ese estado no debe poder
+alcanzarse desde ningún camino de creación. Con el parámetro obligatorio, el compilador lo garantiza.
+El costo fue migrar 47 puntos de construcción en las pruebas; se pagó una vez.
+
+Las cuentas de nutricionista tienen `patient_code` en `NULL`: el código identifica sujetos del
+estudio, no cuentas del equipo clínico. Por eso el índice único es filtrado.
+
+### La anonimización no borra el código
+
+`User.Anonymize` (US26, derecho al olvido) reemplaza correo y nombre, pero **conserva** el código.
+
+Es coherente con que la baja sea anonimización y no borrado físico: el código es un seudónimo, no un
+dato personal, y conservarlo es lo que permite que los datos ya exportados al estudio sigan siendo
+interpretables después de la baja. Borrarlo dejaría huérfanas las filas de un dataset ya entregado.
+
+### Relleno de las filas existentes
+
+La migración asigna códigos a los pacientes ya registrados por antigüedad de cuenta, y adelanta la
+secuencia hasta el último valor usado. Sin eso, una base con pacientes previos quedaría con el campo
+en `NULL` y sin identificación en las exportaciones.
+
+### Consecuencias
+
+`perfil_clinico.csv` cambia su primera columna de `user_id` a `patient_code`. Es un cambio de contrato
+del archivo de exportación, deliberado y el punto central de G1.
+
+Queda pendiente decidir si el código debe exponerse al propio paciente en la app. Hoy no viaja en
+ninguna respuesta de la API: solo aparece dentro del ZIP y del PDF.
+
+### Referencias
+
+- `src/Cauce.Domain/Identity/PatientCode.cs`
+- `src/Cauce.Domain/Identity/User.cs`
+- `src/Cauce.Infrastructure/Identity/PatientCodeGenerator.cs`
+- `src/Cauce.Infrastructure/Persistence/Migrations/20260922050311_AddPatientCodeAndClinicalNoteClientGuid.cs`
+- `tests/Cauce.Domain.Tests/Identity/PatientCodeTests.cs`
+- `tests/Cauce.Api.IntegrationTests/Identity/PatientCodeApiTests.cs`
+- Acta [A60](#acta-a60-contrato-del-archivo-de-exportación-de-datos-del-paciente), sobre el resto del contrato del ZIP.
+
+---
+
+## Acta A60: Contrato del archivo de exportación de datos del paciente
+
+**Estado:** Aprobada, implementada en Backend-Pilot-Readiness (G3 y "Otros")
+**Fecha:** 2026-09-22
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, `GET /api/v1/patients/me/export-data` (US25) y la firma de URLs de MinIO.
+
+---
+
+### Contexto
+
+El ZIP de portabilidad entregaba nueve CSV con nombres en inglés (`profile.csv`, `allergies.csv`,
+`meals.csv`, …) y una URL prefirmada válida por siete días, firmada contra el mismo host con el que el
+backend habla con MinIO.
+
+### Decisión 1: nombres fijos, en español y sin tildes
+
+| Contenido | Nombre |
+| --- | --- |
+| Perfil clínico | `perfil_clinico.csv` |
+| Alergias declaradas | `alergias.csv` |
+| Comidas | `comidas.csv` |
+| Síntomas | `sintomas.csv` |
+| Evaluaciones IBS-SSS | `ibs_sss.csv` |
+| Recomendaciones | `recomendaciones.csv` |
+| Retroalimentación | `retroalimentacion.csv` |
+| Consentimientos | `consentimientos.csv` |
+| Auditoría | `auditoria.csv` |
+
+Son **parte del contrato del export**, no cadenas de presentación: no dependen del idioma de la app ni
+de la configuración regional de quien lo genera. El ZIP puede abrirse años después, en otra máquina y
+por otra persona.
+
+Sin tildes porque el nombre viaja dentro de una entrada ZIP, cuyo juego de caracteres depende del
+descompresor; `sintomas.csv` se abre igual en todas partes, `síntomas.csv` no.
+
+Los **encabezados de columna** siguen en `snake_case` en inglés y no se tocaron. G3 habla de los
+nombres de archivo; cambiar además las columnas habría sido ampliar el alcance por cuenta propia.
+
+### Los archivos son nueve, no cinco
+
+HU0025, CP064 y CP065 declaran cinco archivos: comidas, síntomas, IBS-SSS, recomendaciones y perfil
+clínico. El código genera nueve desde que se implementó US25.
+
+Los cuatro adicionales —alergias, retroalimentación, consentimientos y auditoría— no son un exceso:
+son los que la portabilidad de la Ley N.° 29733 también exige entregar. El registro de consentimientos
+y la bitácora de auditoría donde el paciente es actor son, de hecho, los más difíciles de reconstruir
+si no se entregan.
+
+**Se corrige la documentación, no el código.** Quitar cuatro archivos para que el número coincida con
+una HU desactualizada empeoraría el cumplimiento.
+
+### Decisión 2: la URL prefirmada vive una hora, no siete días
+
+`Export:PresignedUrlValidityMinutes`, por defecto **60**.
+
+Los siete días anteriores estaban puestos porque son el máximo que admite el esquema de firma S3, no
+porque el flujo los necesitara. Es un máximo, no un requisito.
+
+Una URL prefirmada es una credencial al portador: quien la tenga descarga el expediente clínico
+completo del paciente sin autenticarse. El endpoint la devuelve de forma **síncrona en la respuesta
+HTTP** y el cliente descarga en el acto —a diferencia del reporte clínico, que sí viaja por correo y
+por eso conserva sus 24 h—. Una hora deja margen para un reintento o una conexión mala sin dejar el
+enlace vivo durante una semana. La exposición baja de 168 horas a 1.
+
+Es configurable para poder ajustarlo sin tocar código si el piloto muestra que una hora es corta.
+
+### Decisión 3: el host de firma sale de configuración
+
+Se agregan `Storage:Minio:PublicEndpoint` y `PublicUseSsl`. Si están vacíos se usa el endpoint de
+conexión y el comportamiento es el anterior.
+
+El host con el que el backend habla con MinIO no tiene por qué ser el host desde el que descarga el
+paciente. Dentro de la red de Docker el backend resuelve `minio:9000`, un nombre que no existe fuera
+del contenedor: una URL firmada contra ese host no abre en el celular.
+
+**No alcanza con reescribir el host después de firmar**, porque el host forma parte de lo que la firma
+cubre. Hay que firmar directamente contra el host público, y por eso existe un segundo cliente
+(`MinioPresignClient`) en lugar de una sustitución de cadenas. Es un tipo propio y no una segunda
+registración de `IMinioClient` para que la inyección no dependa del orden de registro.
+
+### Consecuencias
+
+Un cliente que asuma los nombres en inglés deja de encontrar los archivos. No hay consumidores
+automáticos hoy: el ZIP lo abre una persona.
+
+Queda pendiente, como antes, el ciclo de vida de objetos en MinIO que caduque los ZIP: hoy caduca la
+URL, no el objeto (acta A16). Con la ventana en una hora, la distancia entre "el enlace ya no sirve" y
+"el archivo ya no está" es mayor, no menor.
+
+### Referencias
+
+- `src/Cauce.Infrastructure/Patients/ArchiveEntryNames.cs`
+- `src/Cauce.Infrastructure/Patients/DataExportOptions.cs`
+- `src/Cauce.Infrastructure/Storage/MinioOptions.cs`, `MinioPresignClient.cs`
+- `tests/Cauce.Api.IntegrationTests/Patients/MinioPresignHostApiTests.cs`
+- HU0025, casos de prueba CP064 y CP065 — **requieren corrección: cinco archivos declarados contra nueve reales**.
+
+---
+
+## Acta A61: Período elegible y contenido del reporte clínico del paciente
+
+**Estado:** Aprobada, implementada en Backend-Pilot-Readiness (G4 y G5)
+**Fecha:** 2026-09-22
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, `POST /api/v1/patients/me/report` (US24) y el documento PDF del reporte clínico.
+
+---
+
+### Contexto
+
+El autoreporte del paciente cubría un período fijo de 90 días, codificado como constante en el
+handler. HU0024 exige que el período sea elegible.
+
+El PDF, por su parte, resumía las comidas como un conteo (`Comidas registradas: 23`) más un ranking de
+alimentos frecuentes, y los síntomas como un conteo por tipo (`AbdominalPain: 6`). HU0024 CA01 pide
+historial de comidas e intensidades de síntomas, y ninguna de las dos cosas estaba.
+
+### El reporte del nutricionista ya tenía resuelta la mitad
+
+Antes de duplicar nada se revisó `GenerateClinicalReportCommand` (US22), que **ya** acepta
+`PeriodStart` y `PeriodEnd` con un validador FluentValidation: inicio anterior al fin, fin no futuro y
+un tope de 90 días. El autoreporte del paciente era el único de los dos con el período fijo.
+
+Por eso G4 no introduce un patrón nuevo: replica el que ya existía, con la diferencia de que en el
+autoreporte el período es **opcional**.
+
+### Decisión 1: el período es opcional y se valida igual que el del nutricionista
+
+`GenerateMyClinicalReportCommand(DateOnly? PeriodStart, DateOnly? PeriodEnd)`. Sin cuerpo, o con ambos
+extremos en `null`, se usa la ventana por defecto de 90 días hacia atrás.
+
+Mantener el comportamiento anterior como valor por defecto es lo que permite que el cliente que ya
+consumía el endpoint sin cuerpo siga funcionando sin cambios.
+
+Las reglas van en un validador y responden **400 con el diccionario `errors`**, no 422
+`report_period_invalid`. Es la misma forma que el endpoint del nutricionista, y el contrato ya
+establece que ante un 400 el cliente lee `errors` primero. `report_period_invalid` queda reservado
+para la invariante de dominio de `ClinicalReportMetadata`, que es donde vive hoy.
+
+Se exige que el período venga **completo o ausente**: enviar solo un extremo es un error del cliente,
+no una petición a completar con un valor inventado.
+
+### Decisión 2: el PDF lleva el historial, no solo los agregados
+
+Se agregan dos secciones y se amplía una:
+
+- **Historial de comidas**: fecha, momento del día y los alimentos de cada comida, en orden
+  cronológico.
+- **Síntomas**: además del conteo por tipo, la **intensidad media, mínima y máxima**, y un detalle
+  cronológico de cada episodio con su intensidad y si quedó correlacionado con una comida.
+
+El conteo por sí solo no distingue diez molestias leves de diez episodios severos, y esa distinción es
+justamente la que el nutricionista necesita para leer el reporte.
+
+Las listas de detalle se acotan con `Reports:MaxDetailRows` (200 por defecto) para que el PDF no
+crezca sin límite. **Los agregados se calculan sobre el período completo**, no sobre las filas
+listadas: el documento avisa del recorte (`Se listan las primeras N de M comidas`) en lugar de mentir
+sobre cuántas hubo.
+
+### Sobre cómo se verificó el contenido del PDF
+
+No se afirma sobre el texto del PDF. QuestPDF embebe subconjuntos de fuente y el contenido queda
+codificado con la tabla de glifos del subconjunto, así que leerlo de vuelta no es confiable.
+
+La verificación va en dos niveles:
+
+1. **Datos** (`ClinicalReportDataApiTests`, contra PostgreSQL real): que el lector devuelva el
+   historial de comidas ordenado, las intensidades agregadas por tipo y el detalle cronológico.
+2. **Composición** (`ClinicalReportDocumentTests`): que un reporte con historial de comidas y con
+   detalle de síntomas pese **estrictamente más** que el mismo reporte sin ellos. Solo puede pasar si
+   las secciones se están dibujando.
+
+Es una verificación indirecta del render y conviene saberlo al leer esas pruebas.
+
+### Consecuencias
+
+`Reports:DefaultPeriodDays` y `Reports:MaxPeriodDays` se evaluaron y **se descartaron**: la capa de
+aplicación no puede leer `ReportOptions`, que vive en Infrastructure, así que habrían quedado como
+configuración muerta. El valor por defecto es una constante pública del handler y el tope una del
+validador. Configuración que nadie lee es peor que una constante con nombre.
+
+El tope de 90 días se mantiene. US24 CA01 ya no tiene la deuda de "período fijo", pero sí queda que el
+tope sea un número acordado con el equipo clínico y no heredado del reporte del nutricionista.
+
+### Referencias
+
+- `src/Cauce.Application/Reports/UseCases/GenerateMyClinicalReport/GenerateMyClinicalReportCommandValidator.cs`
+- `src/Cauce.Infrastructure/Reports/ClinicalReportDataReader.cs`, `ClinicalReportDocument.cs`
+- `tests/Cauce.Api.IntegrationTests/Reports/ClinicalReportDataApiTests.cs`
+- `tests/Cauce.Infrastructure.Tests/Reports/ClinicalReportDocumentTests.cs`
+- HU0024 CA01.
+
+---
+
+## Acta A62: Rechazo del cuestionario IBS-SSS adelantado y su tolerancia
+
+**Estado:** Aprobada con un valor por defecto **pendiente de confirmación clínica**
+**Fecha:** 2026-09-22
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, `POST /api/v1/ibs-sss` (US12) y la agenda `IbsSssAssessmentSchedule`.
+
+---
+
+### Contexto
+
+El protocolo del piloto aplica el IBS-SSS cada 14 días, y la agenda (`ibs_sss_schedules`) ya registra
+cuándo vence la próxima evaluación. Hasta este bloque el endpoint aceptaba cualquier evaluación
+periódica sin mirar esa fecha.
+
+Aceptar una evaluación adelantada acorta el intervalo y deja dos mediciones demasiado próximas como
+para compararlas. Como la métrica primaria del piloto es la reducción del IBS-SSS a lo largo del
+tiempo, eso contamina el resultado.
+
+### Decisión
+
+Una evaluación **periódica** se rechaza con **422 `ibs_sss_assessment_too_early`** si llega antes de
+`DueDate − tolerancia` de la agenda abierta del paciente. La respuesta incluye las extensiones
+`dueDate` y `acceptedFrom`: el cliente necesita saber cuándo puede volver, no solo que llegó temprano.
+
+No se rechaza cuando:
+
+- la evaluación es de **línea base**: no pertenece al ciclo periódico y la agenda no la gobierna;
+- el paciente **no tiene agenda abierta**: no hay fecha esperada contra la cual estar adelantado;
+- la agenda está **completada o perdida**: dejó de gobernar el ciclo.
+
+### La tolerancia es un valor propuesto, no un dato clínico
+
+**±24 horas**, declarada en un único lugar:
+`IbsSssAssessmentSchedule.EarlySubmissionTolerance`.
+
+El protocolo todavía no fija una tolerancia. **Este número lo propuso el backend y requiere
+confirmación o ajuste del equipo clínico**; cambiarlo es editar esa constante y nada más.
+
+La razón de que exista *alguna* tolerancia, en cambio, sí es concreta: el ciclo de 14 días se ancla a
+medianoche UTC y el paciente responde en hora de Lima (UTC−5). Un cuestionario contestado "el día que
+toca" puede caer unas horas antes del vencimiento sin estar adelantado en ningún sentido clínico. Con
+tolerancia cero, el paciente vería un rechazo por una diferencia de huso horario.
+
+### Consecuencias
+
+Un paciente que quiera adelantarse deliberadamente recibe un rechazo explicativo en lugar de un
+registro aceptado que ensucia la serie.
+
+Queda abierto qué hacer con el caso inverso: hoy una evaluación **muy atrasada** se acepta sin
+observación, aunque la agenda ya esté marcada como perdida a los 7 días. Si el análisis exige
+descartar esas mediciones, corresponde decidirlo con el mismo criterio y en la misma constante.
+
+### Referencias
+
+- `src/Cauce.Domain/ClinicalRegistry/IbsSssAssessmentSchedule.cs`
+- `src/Cauce.Domain/ClinicalRegistry/Exceptions/IbsSssAssessmentTooEarlyException.cs`
+- `tests/Cauce.Domain.Tests/ClinicalRegistry/IbsSssAssessmentScheduleTests.cs`
+- `tests/Cauce.Api.IntegrationTests/ClinicalRegistry/IbsSssEarlySubmissionApiTests.cs`
+- US12 CA02; acta A28, sobre la agenda como concepto separado de la evaluación.
+
+---
+
+## Acta A63: Defecto en PUT /custom-foods y el rastreo de hijos nuevos de un agregado ya cargado
+
+**Estado:** Aprobada, defecto preexistente **corregido** en Backend-Pilot-Readiness
+**Fecha:** 2026-09-22
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, `PUT /api/v1/custom-foods/{id}` (US10) y el patrón de persistencia de colecciones de agregado.
+
+---
+
+### Contexto
+
+El alcance del bloque pedía que `PUT /custom-foods` revalidara alérgenos igual que la creación. Al
+escribir la primera prueba de integración del endpoint se descubrió que **el endpoint devolvía 500 en
+toda actualización que cambiara los ingredientes**, desde que se implementó.
+
+No lo cubría ninguna prueba: las que existían eran unitarias, con un repositorio sustituido, y por eso
+nunca llegaron a emitir SQL.
+
+### Causa
+
+El handler reemplaza el conjunto de ingredientes quitando todos y agregando los nuevos. EF Core emitía:
+
+```sql
+DELETE FROM custom_food_ingredients WHERE ingredient_id = <el viejo>;
+UPDATE custom_food_ingredients SET custom_food_id = …, food_id = …, proportion_grams = …
+  WHERE ingredient_id = <el nuevo>;
+```
+
+El `UPDATE` sobre el ingrediente recién creado afecta cero filas, y `SaveChanges` falla con
+`DbUpdateConcurrencyException`.
+
+El motivo es que el identificador de cada ingrediente lo asigna el dominio
+(`CustomFoodIngredient.Create(Guid.NewGuid(), …)`). Cuando EF descubre, al detectar cambios, una
+entidad relacionada que todavía no rastrea y **cuya clave ya viene puesta**, la interpreta como una
+fila preexistente y la pinta como `Modified`, no como `Added`. La señal delatora es que el `UPDATE`
+marca *todas* las columnas como modificadas, que es lo que hace una entidad adjuntada entera.
+
+Por eso el resto del sistema no sufre el problema: `Meal` construye sus ítems y agrega **el grafo
+completo** con `AddAsync`, y ahí EF marca todo como alta. `PUT /custom-foods` es el único lugar donde
+se agrega un hijo a un agregado **ya rastreado**.
+
+### Decisión
+
+Se agrega `ICustomFoodRepository.Update(CustomFood)`, que marca como alta los ingredientes que el
+rastreador todavía no conoce, y el handler lo llama tras reemplazar la colección.
+
+El repositorio es el lugar correcto: la ambigüedad es de persistencia, y resolverla en la capa de
+aplicación habría filtrado semántica de EF Core hacia donde no corresponde. El handler expresa
+intención (`Update`), no micro-gestión del rastreador.
+
+Se descartaron dos alternativas:
+
+- **Que la base genere el identificador del ingrediente** (`gen_random_uuid()` como valor por
+  defecto): funcionaría, pero obliga a una migración y deja a `CustomFoodIngredient` como la única
+  entidad del dominio que no asigna su propia clave.
+- **Llamar a `DbContext` desde el handler**: viola la regla de dependencia de Clean Architecture.
+
+### Decisión complementaria: la revalidación de alérgenos
+
+Con el endpoint funcionando, se agrega el cruce contra alergias declaradas, idéntico al de la
+creación: 409 `unconfirmed_allergens` con el detalle si hay coincidencias sin confirmar, y `acuse` en
+la auditoría de la actualización si el paciente confirma.
+
+Hacía falta porque **el conjunto de ingredientes se reemplaza entero**: un alimento creado sin
+alérgenos puede pasar a tenerlos con un `PUT`. Revalidar solo al crear dejaba esa puerta abierta.
+
+### Consecuencias
+
+Ya existe cobertura de integración del endpoint, que era la ausencia que permitió que el defecto
+viviera sin detectarse.
+
+**Regla a recordar:** agregar un hijo a un agregado ya cargado no basta con mutar la colección cuando
+el dominio asigna las claves. Si aparece otro agregado con colección mutable editada en sitio, le
+corresponde el mismo tratamiento. Hoy `CustomFood` es el único caso.
+
+### Referencias
+
+- `src/Cauce.Infrastructure/Persistence/Repositories/CustomFoodRepository.cs`
+- `src/Cauce.Application/ClinicalRegistry/UseCases/UpdateCustomFood/UpdateCustomFoodCommandHandler.cs`
+- `tests/Cauce.Api.IntegrationTests/ClinicalRegistry/CustomFoodAllergenApiTests.cs`
+- US10 CA03; DEC-B4-14 y acta A26, sobre el detector heurístico de alérgenos.
+
+---
+
+## Acta A64: Cambios de contrato menores del bloque
+
+**Estado:** Aprobada, implementada en Backend-Pilot-Readiness ("Menores" y "Otros")
+**Fecha:** 2026-09-22
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, endpoints `/history`, `/foods/search`, `/clinical-notes`, `/meals` e `/ibs-sss`.
+
+---
+
+### Contexto
+
+Cinco puntos menores del bloque cambian el contrato o el comportamiento observable. Se agrupan aquí
+porque ninguno justifica un acta propia, pero todos son visibles para los frontends.
+
+### 1. `GET /meals` devuelve `aggregatedFodmap`
+
+`POST /meals` devolvía el nivel FODMAP agregado y `GET /meals` lo devolvía **siempre en `null`**, con
+un literal en el mapeo. La misma comida respondía `"Moderate"` al registrarse y nada al releerse.
+
+Es la causa del defecto M42 del lado móvil: el distintivo FODMAP del Diario nunca llegaba a mostrarse,
+porque la pantalla lee del historial, no de la respuesta del alta.
+
+La regla de agregación es la misma en los dos caminos, **incluido el criterio de excluir los alimentos
+personalizados**, cuyo nivel se derivaría de sus ingredientes y todavía no se calcula. Se replicó tal
+cual y no se "mejoró" de paso: las pruebas verifican que lectura y alta digan lo mismo, no que el
+valor sea clínicamente el correcto. El cálculo se resuelve en una sola consulta al catálogo por
+página, no una por ítem.
+
+Aplica también a `GET /history`, que proyecta las comidas con el mismo mapeo.
+
+### 2. `/history` declara su unión discriminada en el contrato
+
+El JSON en tiempo de ejecución siempre trajo el discriminador `eventType` (`meal`, `symptom`,
+`clinical_note`) y el objeto correspondiente. El **contrato OpenAPI no lo decía**: aplanaba la
+jerarquía al tipo base y publicaba un esquema con un solo campo, `occurredAt`.
+
+Un cliente generado a partir de ese contrato obtenía un tipo inservible. Se configura Swashbuckle para
+emitir el `oneOf` con los tres subtipos y el discriminador que el serializador ya usaba.
+
+**No hay cambio de comportamiento**: el JSON que viaja es idéntico. Lo que cambia es que ahora el
+contrato lo describe.
+
+### 3. `/foods/search` es insensible a tildes
+
+La búsqueda usaba `ILIKE` simple. El catálogo TPCA-CENAN tiene nombres con tilde (`plátano`, `maíz`,
+`níspero`) y el teclado del celular no las pone por defecto: buscar `platano` no devolvía nada.
+
+Pasa a `unaccent(...) ILIKE unaccent(...)`, el mismo patrón que ya usaba el glosario (US27). La
+normalización se aplica **a los dos lados** de la comparación, no solo a la columna, de modo que
+`camoté` también encuentra `Camote`.
+
+Se verifica contra PostgreSQL real con Testcontainers: con un repositorio simulado la consulta nunca
+se traduce y la prueba no diría nada sobre la extensión.
+
+### 4. Las notas clínicas son idempotentes
+
+`clinical_notes` no tenía `client_guid`, pese a que la regla del proyecto lo exige para comidas,
+síntomas, notas clínicas y feedback (DEC-B3-04). Una nota reenviada tras un corte de red se duplicaba.
+
+Se agrega la columna, el comando implementa `IIdempotentCommand` y el endpoint acepta la clave en el
+cuerpo (`clientGuid`) o en el encabezado `Idempotency-Key`, igual que comidas y síntomas. Un reintento
+con la misma clave devuelve **200** con la misma nota; la misma clave con contenido distinto devuelve
+**409 `idempotency_mismatch`**.
+
+El índice único `ux_clinical_notes_patient_client_guid` es la red de seguridad para cuando KeyDB no
+esté disponible y el behavior degrade a fail-open. `ClinicalNoteSummary` expone el `clientGuid` para
+que el dispositivo pueda reconciliar.
+
+**Es un cambio incompatible**: la clave es obligatoria. Un cliente que hoy publique sin ella recibe
+400. La migración rellena las filas existentes con GUID generados en la base, antes de crear el
+índice.
+
+La lógica de resolver la clave entre cuerpo y encabezado se movió a `BaseApiController`, donde estaba
+duplicada entre `MealsController` y `SymptomsController`.
+
+### 5. `POST /ibs-sss` es atómico
+
+El registro de una línea base cierra además el onboarding del paciente, y ese cierre es un segundo
+`SaveChanges` en otro handler. Sin transacción, un fallo en el cierre dejaba la evaluación **ya
+confirmada** y el perfil sin cerrar.
+
+Ese estado no lo repara ningún flujo posterior: la línea base es única y no puede repetirse.
+
+Se agrega `IUnitOfWork.ExecuteInTransactionAsync`, que envuelve evaluación, agenda, evento de outbox y
+cierre de onboarding en una sola transacción. Si ya hay una abierta, ejecuta dentro de ella en lugar
+de anidar.
+
+La prueba que lo cubre se verificó por ambos lados: **falla** si se quita la transacción y pasa con
+ella. Una prueba de atomicidad que pase en los dos casos no prueba nada.
+
+### Referencias
+
+- `src/Cauce.Application/ClinicalRegistry/Services/MealFodmapResolver.cs`
+- `src/Cauce.Api/Program.cs` (configuración de polimorfismo en Swashbuckle)
+- `src/Cauce.Infrastructure/Persistence/Repositories/FoodItemRepository.cs`
+- `src/Cauce.Api/Controllers/BaseApiController.cs`
+- `src/Cauce.Application/Common/Interfaces/IUnitOfWork.cs`
+- Acta M42 del repo mobile, sobre el distintivo FODMAP del Diario.
+- DEC-B3-04, sobre `Idempotency-Key` = `client_guid`.
+
+---
+
+## Acta A65: Diagnósticos del bloque que no se implementaron
+
+**Estado:** Documentada. Cuatro puntos abiertos, ninguno implementado, cada uno con su bloqueante
+**Fecha:** 2026-09-22
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend. Registro de lo que se midió durante Backend-Pilot-Readiness sin tocar el código.
+
+---
+
+### Contexto
+
+El bloque pedía explícitamente diagnosticar cuatro puntos sin implementarlos. Esta acta guarda las
+mediciones para que la decisión posterior no tenga que repetirlas.
+
+### 1. Ancla de la ventana de 4 horas
+
+**No se cambió.** El ancla sigue siendo `clientCreatedAt`.
+
+Medición contra la base de desarrollo (11 síntomas, 17 comidas, datos reales de las pruebas en
+dispositivo de Mobile-3.x):
+
+| Métrica | Valor |
+| --- | --- |
+| Síntomas con asociación hoy | 9 de 11 |
+| **Distancias negativas con el ancla actual** | **0** |
+| Asociaciones que **cambiarían de comida** con ancla `occurredAt` | **5 de 11 (45 %)** |
+| Síntomas que **ganarían** asociación | 1 |
+| Síntomas que **perderían** asociación | 0 |
+| Comidas registradas en diferido (`clientCreatedAt` > `consumedAt` + 1 min) | 5 de 17 |
+| Desfase máximo de sincronización | 60 minutos |
+
+**Lectura.** No hay ninguna distancia negativa en los datos actuales, con cualquiera de las dos
+anclas. Pero el ancla **sí cambia la correlación clínica en casi la mitad de los casos**, y la causa
+está identificada: 5 de 17 comidas se registraron hasta una hora después de consumirse, y el ancla
+actual las trata como si se hubieran consumido al sincronizar.
+
+Eso hace que el diagnóstico sea más fuerte, no más débil: el problema no es que produzca valores
+imposibles, es que correlaciona el síntoma con una comida distinta de la que el paciente comió antes.
+
+**Sigue requiriendo opinión de nutricionista.** Lo marcó también la auditoría del 19-sep.
+
+### 2. `isInActivePilot` — tres opciones para decidir
+
+Estado verificado: `User.EnrollInActivePilot()` existe en el dominio y **no tiene ningún llamador en
+`src/`**. Tampoco hay campo de consentimiento retirado ni fecha de cierre del piloto que pudiera
+alimentarlo: `ConsentRecord` solo tiene `IsCurrent`, que es el versionado del documento, no una
+revocación. No hay nada que reutilizar, y por eso la política hay que elegirla.
+
+| Opción | Cómo funciona | A favor | En contra |
+| --- | --- | --- | --- |
+| **A. Endpoint admin explícito** `POST /admin/patients/{id}/pilot-enrollment`, con `[AdminApiKey]` | El Kaelín inscribe paciente por paciente | Trazable, auditable, reversible; sigue el patrón ya existente de `/admin/nutritionists` | Requiere que alguien del hospital opere el endpoint uno por uno |
+| **B. Derivado del código de invitación** | El código que genera el nutricionista lleva una marca de piloto; el paciente que lo canjea queda inscrito | Cero operación manual; el reclutamiento y la inscripción son el mismo acto | Cambia el significado del código de invitación; un paciente que se registre sin código queda fuera y hay que resolverlo aparte |
+| **C. Ventana temporal del piloto** en configuración | Todo paciente registrado entre dos fechas queda inscrito | Sin operación ni endpoint | No distingue pacientes reclutados de altas de prueba; sacar a alguien exige tocar la base |
+
+**Recomendación del backend: opción A.** Es la única que deja rastro de quién inscribió a quién y
+permite revertir. B es elegante pero acopla dos decisiones que el hospital puede querer tomar por
+separado. C es la más barata y la que peor envejece.
+
+La decisión la toma Trigo con el Kaelín. Acta A38 sigue siendo la deuda de origen.
+
+### 3. Categorías del IBS-SSS
+
+El código usa **tres** categorías: `Mild` (0–174), `Moderate` (175–300), `Severe` (301–500), en
+`IbsSssScoring.Categorize`.
+
+La escala original de **Francis et al. (1997)**, que es la fuente del instrumento, define **cuatro**
+bandas: remisión (< 75), leve (75–174), moderada (175–300) y severa (> 300). El código colapsa
+remisión dentro de `Mild`.
+
+**No se cambiaron los cortes**, como pedía el bloque. Lo que importa señalar es la consecuencia para
+la métrica primaria del piloto: un paciente que baje de 180 a 60 puntos aparece como "Mild" igual que
+uno que esté en 170, cuando clínicamente el primero está en remisión. Si la tesis reporta distribución
+por categoría, la banda de remisión es justamente la que demuestra el efecto.
+
+Agregar `Remission` es un valor nuevo de enum, una columna `varchar` sin migración de esquema y una
+rama en `Categorize`. El costo es bajo; la decisión es clínica.
+
+### 4. Unidades de medida sin convertir a gramos
+
+**Confirmado, sin cambios.** `CreateMealCommandHandler` pasa `item.Quantity` tal cual al agregador,
+sin convertir por unidad: una taza de arroz y una taza de lechuga entran como el mismo número.
+
+Hoy no produce ningún resultado incorrecto porque `FodmapAggregator` solo pregunta si el peso es mayor
+que cero. Se vuelve real el día que se implemente el TODO de umbrales de Monash que el propio agregador
+ya declara.
+
+Nada nuevo que agregar a lo ya sabido, salvo un detalle que conviene anotar: **el mismo valor sin
+convertir llega ahora también a la lectura**, porque `GET /meals` usa el mismo agregador (acta A64,
+punto 1). No cambia nada mientras el umbral sea "mayor que cero", pero cuando se implemente la
+conversión hay **dos** caminos que actualizar, no uno. Están detrás de la misma interfaz
+(`IFodmapAggregator`) justamente para que sea un solo cambio.
+
+La conversión depende del alimento y es decisión de Mirian.
+
+### Referencias
+
+- `src/Cauce.Application/ClinicalRegistry/UseCases/CreateSymptom/CreateSymptomCommandHandler.cs`
+- `src/Cauce.Domain/Identity/User.cs` (`EnrollInActivePilot`, sin llamador)
+- `src/Cauce.Domain/ClinicalRegistry/IbsSssScoring.cs`
+- `src/Cauce.Infrastructure/ClinicalRegistry/FodmapAggregator.cs`
+- Acta [A38](#acta-a38-deuda-diferida--isinactivepilot-hardcodeado), deuda de origen de `isInActivePilot`.
+- DEC-B3-06, sobre la ventana de 4 h; Francis et al. (1997), *Aliment Pharmacol Ther*, para las bandas del IBS-SSS.
 
 ---

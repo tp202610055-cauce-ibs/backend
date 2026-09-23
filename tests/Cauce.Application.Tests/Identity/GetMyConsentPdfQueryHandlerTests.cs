@@ -44,7 +44,7 @@ public sealed class GetMyConsentPdfQueryHandlerTests
     private User ArrangePatient(string acceptedVersion, string acceptedHash)
     {
         var keycloakId = Guid.NewGuid();
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId.ToString(), "p@cauce.local", "Paciente", PatientRoleId);
+        var user = User.CreatePatient(Guid.NewGuid(), keycloakId.ToString(), "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
 
         _currentUserService.UserId.Returns(keycloakId);
         _userRepository.FindByKeycloakIdAsync(keycloakId.ToString(), Arg.Any<CancellationToken>())

@@ -12,16 +12,22 @@ namespace Cauce.Infrastructure.Storage;
 public sealed class MinioObjectStorage : IObjectStorage
 {
     private readonly IMinioClient _minioClient;
+    private readonly MinioPresignClient _presignClient;
     private readonly ILogger<MinioObjectStorage> _logger;
 
     /// <summary>
     /// Inicializa el almacenamiento con el cliente de MinIO.
     /// </summary>
-    /// <param name="minioClient">Cliente de MinIO.</param>
+    /// <param name="minioClient">Cliente de MinIO para la conexión interna.</param>
+    /// <param name="presignClient">Cliente de MinIO apuntado al endpoint de firma.</param>
     /// <param name="logger">Logger de la categoría del almacenamiento.</param>
-    public MinioObjectStorage(IMinioClient minioClient, ILogger<MinioObjectStorage> logger)
+    public MinioObjectStorage(
+        IMinioClient minioClient,
+        MinioPresignClient presignClient,
+        ILogger<MinioObjectStorage> logger)
     {
         _minioClient = minioClient;
+        _presignClient = presignClient;
         _logger = logger;
     }
 
@@ -59,7 +65,9 @@ public sealed class MinioObjectStorage : IObjectStorage
             .WithObject(objectKey)
             .WithExpiry((int)validity.TotalSeconds);
 
-        return await _minioClient.PresignedGetObjectAsync(presignedArgs).ConfigureAwait(false);
+        // Se firma con el cliente del endpoint público: el host forma parte de la firma, así que
+        // reescribirlo después la invalidaría.
+        return await _presignClient.Client.PresignedGetObjectAsync(presignedArgs).ConfigureAwait(false);
     }
 
     /// <inheritdoc />

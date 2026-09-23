@@ -14,6 +14,7 @@ namespace Cauce.Infrastructure.Patients;
 /// se materializan desde la base de datos y se pasan al constructor del archivo, que es una función pura
 /// (sin E/S) para poder probar el formato de los CSV sin infraestructura.
 /// </summary>
+/// <param name="PatientCode">Código correlativo legible del paciente (<c>PAC-0042</c>).</param>
 /// <param name="Profile">Perfil clínico del paciente, o <see langword="null"/> si no existe.</param>
 /// <param name="Allergies">Declaraciones de alergia del paciente.</param>
 /// <param name="Meals">Comidas registradas por el paciente.</param>
@@ -24,6 +25,7 @@ namespace Cauce.Infrastructure.Patients;
 /// <param name="ConsentRecords">Registros de consentimiento del paciente.</param>
 /// <param name="AuditLogs">Entradas de auditoría en las que el paciente fue el actor.</param>
 public sealed record ClinicalDataSet(
+    string PatientCode,
     PatientProfile? Profile,
     IReadOnlyList<PatientAllergy> Allergies,
     IReadOnlyList<Meal> Meals,
@@ -64,19 +66,19 @@ public static class ClinicalDataArchiveBuilder
         {
             var profileRows = data.Profile is null
                 ? Array.Empty<string[]>()
-                : new[] { ProfileRow(data.Profile) };
-            WriteCsv(archive, "profile.csv", counts,
-                new[] { "user_id", "date_of_birth", "biological_sex", "weight_kg", "height_cm", "ibs_subtype", "diagnosis_date", "medications", "onboarding_completed", "created_at", "updated_at" },
+                : new[] { ProfileRow(data.PatientCode, data.Profile) };
+            WriteCsv(archive, ArchiveEntryNames.Profile, counts,
+                new[] { "patient_code", "date_of_birth", "biological_sex", "weight_kg", "height_cm", "ibs_subtype", "diagnosis_date", "medications", "onboarding_completed", "created_at", "updated_at" },
                 profileRows);
 
-            WriteCsv(archive, "allergies.csv", counts,
+            WriteCsv(archive, ArchiveEntryNames.Allergies, counts,
                 new[] { "patient_allergy_id", "allergy_id", "severity", "notes", "declared_at" },
                 data.Allergies.Select(a => new[]
                 {
                     a.Id.ToString(), a.AllergyId.ToString(), a.Severity.ToString(), Text(a.Notes), Utc(a.DeclaredAt)
                 }));
 
-            WriteCsv(archive, "meals.csv", counts,
+            WriteCsv(archive, ArchiveEntryNames.Meals, counts,
                 new[] { "meal_id", "client_guid", "meal_time", "consumed_at", "item_count", "sync_status", "created_at", "client_created_at" },
                 data.Meals.Select(m => new[]
                 {
@@ -84,7 +86,7 @@ public static class ClinicalDataArchiveBuilder
                     m.GetItemCount().ToString(CultureInfo.InvariantCulture), m.SyncStatus.ToString(), Utc(m.CreatedAt), Utc(m.ClientCreatedAt)
                 }));
 
-            WriteCsv(archive, "symptoms.csv", counts,
+            WriteCsv(archive, ArchiveEntryNames.Symptoms, counts,
                 new[] { "symptom_id", "client_guid", "symptom_type", "intensity", "occurred_at", "associated_meal_id", "has_meal_association", "sync_status", "created_at", "client_created_at" },
                 data.Symptoms.Select(s => new[]
                 {
@@ -92,7 +94,7 @@ public static class ClinicalDataArchiveBuilder
                     s.AssociatedMealId?.ToString() ?? string.Empty, s.HasMealAssociation.ToString(), s.SyncStatus.ToString(), Utc(s.CreatedAt), Utc(s.ClientCreatedAt)
                 }));
 
-            WriteCsv(archive, "ibs_sss_assessments.csv", counts,
+            WriteCsv(archive, ArchiveEntryNames.Assessments, counts,
                 new[] { "assessment_id", "assessment_type", "cycle_number", "pain_severity", "pain_frequency", "bloating_severity", "bowel_habits_dissatisfaction", "life_interference", "total_score", "severity_category", "completed_at", "next_assessment_date" },
                 data.Assessments.Select(a => new[]
                 {
@@ -101,7 +103,7 @@ public static class ClinicalDataArchiveBuilder
                     a.SeverityCategory.ToString(), Utc(a.CompletedAt), a.NextAssessmentDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? string.Empty
                 }));
 
-            WriteCsv(archive, "recommendations.csv", counts,
+            WriteCsv(archive, ArchiveEntryNames.Recommendations, counts,
                 new[] { "recommendation_id", "model_version_id", "status", "confidence_score", "auto_approved", "explanation_source", "ai_explanation", "nutritionist_note", "generated_at", "reviewed_at", "delivered_at", "expires_at" },
                 data.Recommendations.Select(r => new[]
                 {
@@ -110,21 +112,21 @@ public static class ClinicalDataArchiveBuilder
                     Text(r.AiExplanation), Text(r.NutritionistNote), Utc(r.GeneratedAt), UtcOrEmpty(r.ReviewedAt), UtcOrEmpty(r.DeliveredAt), UtcOrEmpty(r.ExpiresAt)
                 }));
 
-            WriteCsv(archive, "recommendation_feedback.csv", counts,
+            WriteCsv(archive, ArchiveEntryNames.Feedback, counts,
                 new[] { "feedback_id", "recommendation_id", "was_applied", "outcome", "comment", "submitted_at" },
                 data.Feedback.Select(f => new[]
                 {
                     f.Id.ToString(), f.RecommendationId.ToString(), f.WasApplied.ToString(), f.Outcome.ToString(), Text(f.Comment), Utc(f.SubmittedAt)
                 }));
 
-            WriteCsv(archive, "consent_records.csv", counts,
+            WriteCsv(archive, ArchiveEntryNames.ConsentRecords, counts,
                 new[] { "consent_id", "document_version", "accepted_at", "ip_address", "consent_text_hash", "is_current" },
                 data.ConsentRecords.Select(c => new[]
                 {
                     c.Id.ToString(), Text(c.DocumentVersion), Utc(c.AcceptedAt), Text(c.IpAddress), Text(c.ConsentTextHash), c.IsCurrent.ToString()
                 }));
 
-            WriteCsv(archive, "audit_logs.csv", counts,
+            WriteCsv(archive, ArchiveEntryNames.AuditLogs, counts,
                 new[] { "audit_log_id", "action_type", "entity_type", "entity_id", "occurred_at", "ip_address", "additional_context" },
                 data.AuditLogs.Select(l => new[]
                 {
@@ -136,9 +138,9 @@ public static class ClinicalDataArchiveBuilder
         return new ClinicalDataArchive(buffer.ToArray(), counts);
     }
 
-    private static string[] ProfileRow(PatientProfile profile) =>
+    private static string[] ProfileRow(string patientCode, PatientProfile profile) =>
     [
-        profile.UserId.ToString(),
+        patientCode,
         profile.DateOfBirth.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         profile.BiologicalSex.ToString(),
         profile.WeightKg.ToString(CultureInfo.InvariantCulture),

@@ -23,6 +23,8 @@ namespace Cauce.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "unaccent");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.HasSequence("patient_code_seq");
+
             modelBuilder.Entity("Cauce.Domain.Auditing.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -105,6 +107,10 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("note_id");
 
+                    b.Property<Guid>("ClientGuid")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_guid");
+
                     b.Property<string>("Content")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -138,6 +144,10 @@ namespace Cauce.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("SymptomId")
                         .HasDatabaseName("ix_clinical_notes_symptom_id");
+
+                    b.HasIndex("PatientId", "ClientGuid")
+                        .IsUnique()
+                        .HasDatabaseName("ux_clinical_notes_patient_client_guid");
 
                     b.ToTable("clinical_notes", null, t =>
                         {
@@ -981,6 +991,11 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_until");
 
+                    b.Property<string>("PatientCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("patient_code");
+
                     b.Property<int>("RoleId")
                         .HasColumnType("integer")
                         .HasColumnName("role_id");
@@ -1005,6 +1020,11 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                     b.HasIndex("KeycloakId")
                         .IsUnique()
                         .HasDatabaseName("ux_users_keycloak_id");
+
+                    b.HasIndex("PatientCode")
+                        .IsUnique()
+                        .HasDatabaseName("ux_users_patient_code")
+                        .HasFilter("patient_code IS NOT NULL");
 
                     b.HasIndex("RoleId")
                         .HasDatabaseName("ix_users_role_id");

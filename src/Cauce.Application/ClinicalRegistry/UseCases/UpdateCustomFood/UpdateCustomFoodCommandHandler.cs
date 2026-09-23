@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
@@ -12,8 +13,9 @@ namespace Cauce.Application.ClinicalRegistry.UseCases.UpdateCustomFood;
 
 /// <summary>
 /// Handler de la actualización de un alimento personalizado. Verifica la propiedad del
-/// paciente, la unicidad del nombre y la existencia de los alimentos referenciados;
-/// reemplaza el conjunto de ingredientes y registra el evento en auditoría.
+/// paciente, la unicidad del nombre, la existencia de los alimentos referenciados y el cruce con las
+/// alergias declaradas (US10 CA03); reemplaza el conjunto de ingredientes y registra el evento en
+/// auditoría, con el acuse de alérgenos si lo hubo.
 /// </summary>
 public sealed class UpdateCustomFoodCommandHandler : IRequestHandler<UpdateCustomFoodCommand, UpdateCustomFoodResult>
 {
@@ -21,6 +23,7 @@ public sealed class UpdateCustomFoodCommandHandler : IRequestHandler<UpdateCusto
     private readonly IUserRepository _userRepository;
     private readonly ICustomFoodRepository _customFoodRepository;
     private readonly IFoodItemRepository _foodItemRepository;
+    private readonly ICustomFoodAllergenChecker _allergenChecker;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAuditLogger _auditLogger;
     private readonly ILogger<UpdateCustomFoodCommandHandler> _logger;
@@ -33,6 +36,7 @@ public sealed class UpdateCustomFoodCommandHandler : IRequestHandler<UpdateCusto
         IUserRepository userRepository,
         ICustomFoodRepository customFoodRepository,
         IFoodItemRepository foodItemRepository,
+        ICustomFoodAllergenChecker allergenChecker,
         IUnitOfWork unitOfWork,
         IAuditLogger auditLogger,
         ILogger<UpdateCustomFoodCommandHandler> logger)
@@ -41,6 +45,7 @@ public sealed class UpdateCustomFoodCommandHandler : IRequestHandler<UpdateCusto
         _userRepository = userRepository;
         _customFoodRepository = customFoodRepository;
         _foodItemRepository = foodItemRepository;
+        _allergenChecker = allergenChecker;
         _unitOfWork = unitOfWork;
         _auditLogger = auditLogger;
         _logger = logger;
@@ -74,6 +79,18 @@ public sealed class UpdateCustomFoodCommandHandler : IRequestHandler<UpdateCusto
             }
         }
 
+        // US10 CA03 también aplica a la edición: el conjunto de ingredientes se reemplaza entero, así
+        // que un alimento creado sin alérgenos puede pasar a tenerlos con un PUT. Revalidar solo al
+        // crear dejaba abierta esa puerta.
+        var ingredientFoodIds = request.Ingredients.Select(ingredient => ingredient.FoodId).ToList();
+        var detectedAllergens = await _allergenChecker
+            .CheckAsync(patientId, ingredientFoodIds, cancellationToken)
+            .ConfigureAwait(false);
+        if (detectedAllergens.Count > 0 && !request.ConfirmedAllergens)
+        {
+            throw new UnconfirmedAllergensException(detectedAllergens);
+        }
+
         customFood.UpdateName(request.Name);
         customFood.UpdatePortionSize(request.PortionSizeGrams);
 
@@ -88,11 +105,24 @@ public sealed class UpdateCustomFoodCommandHandler : IRequestHandler<UpdateCusto
             customFood.AddIngredient(ingredient.FoodId, ingredient.ProportionGrams);
         }
 
+        _customFoodRepository.Update(customFood);
+
         // Auditoría explícita ANTES del SaveChanges: custom_foods no tiene trigger; una sola
         // transacción persiste los cambios y la bitácora de forma atómica (DEC-B5-01 capa 3, acta A8).
+        var auditContext = detectedAllergens.Count > 0
+            ? JsonSerializer.Serialize(new
+            {
+                acknowledged_allergens = detectedAllergens.Select(allergen => new
+                {
+                    ingredient_name = allergen.IngredientName,
+                    allergen_name = allergen.AllergenName,
+                    severity = allergen.Severity
+                })
+            })
+            : null;
         await _auditLogger.LogAsync(
             AuditActionType.Update, nameof(CustomFood), customFood.Id,
-            oldValuesHash: null, newValuesHash: null, additionalContext: null, cancellationToken: cancellationToken).ConfigureAwait(false);
+            oldValuesHash: null, newValuesHash: null, additionalContext: auditContext, cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 

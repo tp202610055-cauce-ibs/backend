@@ -1,14 +1,10 @@
 using Cauce.Domain.Identity;
+using Cauce.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Cauce.Infrastructure.Persistence.Seeders;
-
-// Nota de nombres: `Cauce.Infrastructure.Identity.ConsentDocument` es la plantilla de
-// QuestPDF y no tiene relacion con la entidad de dominio del mismo nombre. Para que
-// `ConsentDocument` aqui signifique siempre la entidad, el tipo de opciones se califica
-// entero en vez de importar ese namespace.
 
 /// <summary>
 /// Seeder idempotente de las versiones del documento de consentimiento informado.
@@ -30,7 +26,7 @@ namespace Cauce.Infrastructure.Persistence.Seeders;
 public sealed class ConsentDocumentsSeeder
 {
     private readonly CauceDbContext _context;
-    private readonly Cauce.Infrastructure.Identity.ConsentDocumentOptions _options;
+    private readonly ConsentDocumentOptions _options;
     private readonly ILogger<ConsentDocumentsSeeder> _logger;
 
     /// <summary>
@@ -41,7 +37,7 @@ public sealed class ConsentDocumentsSeeder
     /// <param name="logger">Logger de la categoría del seeder.</param>
     public ConsentDocumentsSeeder(
         CauceDbContext context,
-        IOptions<Cauce.Infrastructure.Identity.ConsentDocumentOptions> options,
+        IOptions<ConsentDocumentOptions> options,
         ILogger<ConsentDocumentsSeeder> logger)
     {
         _context = context;

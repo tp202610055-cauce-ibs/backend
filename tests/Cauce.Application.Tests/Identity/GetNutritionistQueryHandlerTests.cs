@@ -49,7 +49,7 @@ public sealed class GetNutritionistQueryHandlerTests
     [Fact]
     public async Task Handle_PatientAccount_ThrowsNutritionistNotFound()
     {
-        var patient = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId);
+        var patient = User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1));
         _userRepository.FindByIdAsync(patient.Id, Arg.Any<CancellationToken>()).Returns(patient);
 
         var act = () => CreateHandler().Handle(new GetNutritionistQuery(patient.Id), CancellationToken.None);

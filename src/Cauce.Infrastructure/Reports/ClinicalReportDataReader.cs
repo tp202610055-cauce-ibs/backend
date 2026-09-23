@@ -76,12 +76,14 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
             .ConfigureAwait(false)
             ?? throw new PatientProfileNotFoundException();
 
-        var patientName = await _context.Users
+        var patient = await _context.Users
             .AsNoTracking()
             .Where(user => user.Id == patientId)
-            .Select(user => user.FullName)
+            .Select(user => new { user.FullName, user.PatientCode })
             .FirstOrDefaultAsync(ct)
-            .ConfigureAwait(false) ?? string.Empty;
+            .ConfigureAwait(false);
+        var patientName = patient?.FullName ?? string.Empty;
+        var patientCode = patient?.PatientCode ?? string.Empty;
 
         // En el autoreporte del paciente (US24) no hay nutricionista asignado: la sección se omite
         // por completo del PDF, por eso el nombre queda en null.
@@ -109,17 +111,41 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
 
         var frequentFoods = await ResolveFrequentFoodsAsync(patientId, start, end, ct).ConfigureAwait(false);
 
-        var symptomTypes = await _context.Symptoms
+        // HU0024 CA01 exige la intensidad, no solo el conteo: se traen las filas completas para poder
+        // agregar por tipo y además listarlas cronológicamente.
+        var symptomRows = await _context.Symptoms
             .AsNoTracking()
             .Where(symptom => symptom.PatientId == patientId && symptom.OccurredAt >= start && symptom.OccurredAt <= end)
-            .Select(symptom => symptom.SymptomType)
+            .OrderBy(symptom => symptom.OccurredAt)
+            .Select(symptom => new
+            {
+                symptom.SymptomType,
+                symptom.Intensity,
+                symptom.OccurredAt,
+                symptom.HasMealAssociation
+            })
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        var symptoms = symptomTypes
-            .GroupBy(type => type)
-            .Select(group => new ReportSymptomSummary(group.Key.ToString(), group.Count()))
+
+        var symptoms = symptomRows
+            .GroupBy(row => row.SymptomType)
+            .Select(group => new ReportSymptomSummary(
+                group.Key.ToString(),
+                group.Count(),
+                Math.Round(group.Average(row => (decimal)row.Intensity), 1),
+                group.Min(row => row.Intensity),
+                group.Max(row => row.Intensity)))
             .OrderByDescending(summary => summary.Count)
+            .ThenBy(summary => summary.SymptomType, StringComparer.Ordinal)
             .ToList();
+
+        var symptomEntries = symptomRows
+            .Take(_options.MaxDetailRows)
+            .Select(row => new ReportSymptomEntry(
+                row.OccurredAt, row.SymptomType.ToString(), row.Intensity, row.HasMealAssociation))
+            .ToList();
+
+        var meals = await ResolveMealHistoryAsync(patientId, start, end, ct).ConfigureAwait(false);
 
         var assessmentRows = await _context.IbsSssAssessments
             .AsNoTracking()
@@ -165,6 +191,7 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
             .ToList();
 
         return new ClinicalReportData(
+            patientCode,
             BuildInitials(patientName),
             profile.GetAge(DateTime.UtcNow),
             profile.IbsSubtype.ToString(),
@@ -177,11 +204,68 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
             DateTime.UtcNow,
             allergies.Select(allergy => new ReportAllergy(allergy.Name, allergy.Severity.ToString())).ToList(),
             mealCount,
+            meals,
             frequentFoods,
             symptoms,
+            symptomEntries,
             assessments,
             recommendations,
             feedback);
+    }
+
+    /// <summary>
+    /// Materializa el historial cronológico de comidas del período con el nombre de cada alimento,
+    /// resolviendo por separado los del catálogo y los personalizados.
+    /// </summary>
+    private async Task<IReadOnlyList<ReportMealEntry>> ResolveMealHistoryAsync(
+        Guid patientId,
+        DateTime start,
+        DateTime end,
+        CancellationToken ct)
+    {
+        var mealRows = await _context.Meals
+            .AsNoTracking()
+            .Where(meal => meal.PatientId == patientId && meal.ConsumedAt >= start && meal.ConsumedAt <= end)
+            .OrderBy(meal => meal.ConsumedAt)
+            .Take(_options.MaxDetailRows)
+            .Select(meal => new { meal.Id, meal.ConsumedAt, meal.MealTime })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        if (mealRows.Count == 0)
+        {
+            return [];
+        }
+
+        var mealIds = mealRows.Select(meal => meal.Id).ToList();
+
+        var catalogItems = await (from item in _context.MealItems.AsNoTracking()
+                                  where mealIds.Contains(item.MealId) && item.FoodId != null
+                                  join food in _context.FoodItems.AsNoTracking() on item.FoodId equals food.Id
+                                  select new { item.MealId, food.Name })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var customItems = await (from item in _context.MealItems.AsNoTracking()
+                                 where mealIds.Contains(item.MealId) && item.CustomFoodId != null
+                                 join customFood in _context.CustomFoods.AsNoTracking() on item.CustomFoodId equals customFood.Id
+                                 select new { item.MealId, customFood.Name })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        var namesByMeal = catalogItems
+            .Concat(customItems)
+            .GroupBy(row => row.MealId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<string>)group.Select(row => row.Name).OrderBy(name => name, StringComparer.Ordinal).ToList());
+
+        return mealRows
+            .Select(meal => new ReportMealEntry(
+                meal.ConsumedAt,
+                meal.MealTime.ToString(),
+                namesByMeal.TryGetValue(meal.Id, out var names) ? names : []))
+            .ToList();
     }
 
     private async Task<IReadOnlyList<ReportFoodFrequency>> ResolveFrequentFoodsAsync(

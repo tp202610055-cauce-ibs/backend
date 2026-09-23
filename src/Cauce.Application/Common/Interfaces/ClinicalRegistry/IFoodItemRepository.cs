@@ -37,6 +37,18 @@ public interface IFoodItemRepository
     Task<IReadOnlyList<FoodItem>> SearchByNameAsync(string query, int take, CancellationToken ct = default);
 
     /// <summary>
+    /// Devuelve el nivel FODMAP de los alimentos indicados, indexado por identificador. Está pensado
+    /// para resolver de una sola consulta los niveles de todos los ítems de una página de comidas,
+    /// en vez de una consulta por ítem.
+    /// </summary>
+    /// <param name="foodIds">Identificadores de los alimentos.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Diccionario de identificador a nivel FODMAP; omite los que no existen.</returns>
+    Task<IReadOnlyDictionary<Guid, FodmapLevel>> GetFodmapLevelsAsync(
+        IReadOnlyCollection<Guid> foodIds,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Cuenta los alimentos activos que cumplen los filtros indicados.
     /// </summary>
     /// <param name="categoryFilter">Filtro por categoría, opcional.</param>

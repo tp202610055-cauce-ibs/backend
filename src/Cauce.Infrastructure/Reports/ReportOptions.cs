@@ -24,4 +24,12 @@ public sealed class ReportOptions
     /// Cantidad máxima de alimentos frecuentes a incluir en el reporte.
     /// </summary>
     public int TopFrequentFoods { get; init; } = 10;
+
+
+    /// <summary>
+    /// Cantidad máxima de filas de detalle (comidas y síntomas individuales) que se listan en el PDF.
+    /// Acota el tamaño del documento sin recortar los agregados, que se calculan sobre el período
+    /// completo.
+    /// </summary>
+    public int MaxDetailRows { get; init; } = 200;
 }

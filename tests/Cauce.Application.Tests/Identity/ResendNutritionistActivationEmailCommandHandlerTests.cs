@@ -87,7 +87,7 @@ public sealed class ResendNutritionistActivationEmailCommandHandlerTests
     public async Task Handle_PatientAccount_ThrowsNutritionistNotFound()
     {
         var patient = GivenStoredUser(
-            User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId));
+            User.CreatePatient(Guid.NewGuid(), "kc-patient", "p@cauce.local", "Paciente", PatientRoleId, PatientCode.FromCorrelative(1)));
 
         var act = () => CreateHandler().Handle(
             new ResendNutritionistActivationEmailCommand(patient.Id), CancellationToken.None);
