@@ -1,10 +1,16 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.3 · **Fecha:** 11 de septiembre de 2026 · **Backend:** rama `feature/nutritionist-activation-1`
+**Versión:** 1.3.1 · **Fecha:** 22 de septiembre de 2026 · **Backend:** rama `feature/backend-pilot-readiness`
 **Alcance:** endpoints de identidad que consume la app móvil Flutter (US01, US05, US07, US08, US19, US20).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
 `src/Cauce.Application/Identity/`. Cada afirmación de este documento lleva su evidencia en `archivo:línea`.
+
+> **v1.3.1 (Backend-Pilot-Readiness).** Sin cambios de contrato en los nueve endpoints de identidad. Se
+> actualizan las citas `archivo:línea` de `RegisterPatientCommandHandler.cs`, desplazadas siete líneas al
+> inyectar el generador del código de paciente (acta A59). El registro ahora asigna un `patient_code`
+> (`PAC-0042`) a la cuenta, pero **no viaja en la respuesta 201**: solo aparece en la exportación de datos
+> y en el PDF del reporte clínico.
 
 **Decisión de arquitectura vigente:** el móvil autentica contra `POST /api/v1/auth/login` del backend
 (passthrough a Keycloak). No usa Authorization Code + PKCE directo contra Keycloak. Motivo: el
@@ -83,14 +89,14 @@ La IP de origen no viaja en el body: el controller la toma de la conexión (`Aut
 | `userId` | Guid | Id local del usuario |
 | `email` | string | |
 | `status` | string (enum) | Siempre `"PendingActivation"` para un paciente nuevo (`src/Cauce.Domain/Identity/User.cs:124`) |
-| `emailVerificationRequired` | bool | Siempre `true` (`RegisterPatientCommandHandler.cs:135`) |
+| `emailVerificationRequired` | bool | Siempre `true` (`RegisterPatientCommandHandler.cs:142`) |
 
 **Errores**
 
 | HTTP | `errorCode` | Cuándo |
 |---|---|---|
 | 400 | `validation_error` | Falla una regla de FluentValidation |
-| 400 | `consent_text_mismatch` | La versión o el hash del consentimiento no coinciden con el documento vigente. Se evalúa **antes** que cualquier otra regla (`RegisterPatientCommandHandler.cs:60-63`) |
+| 400 | `consent_text_mismatch` | La versión o el hash del consentimiento no coinciden con el documento vigente. Se evalúa **antes** que cualquier otra regla (`RegisterPatientCommandHandler.cs:65-68`) |
 | 400 | `invalid_invitation_code` | El código no existe |
 | 400 | `expired_invitation_code` | El código venció |
 | 400 | `invitation_code_already_used` | El código ya se usó |
@@ -717,8 +723,8 @@ cuentas existen.
 |---|---|---|
 | El realm exige verificación | Sí | `realm.json`: `verifyEmail: true` |
 | El usuario se crea sin verificar y con acción requerida | Sí | `KeycloakAdminClient.cs:74-76`: `emailVerified = !requireEmailVerification`, `requiredActions = ["VERIFY_EMAIL"]` |
-| El registro pide verificación | Sí | `RegisterPatientCommandHandler.cs:75` pasa `requireEmailVerification: true` |
-| Correo de verificación | Se dispara best-effort | `RegisterPatientCommandHandler.cs:131, 175-188`. Si falla, el registro igual queda válido |
+| El registro pide verificación | Sí | `RegisterPatientCommandHandler.cs:80` pasa `requireEmailVerification: true` |
+| Correo de verificación | Se dispara best-effort | `RegisterPatientCommandHandler.cs:138, 202-215`. Si falla, el registro igual queda válido |
 | Endpoint de reenvío | **NO EXISTE** | |
 | `users.email_verified` se actualiza al verificar | **NO** | `User.VerifyEmail()` solo lo invoca `DemoPatientSeeder.cs:94`. No hay listener de eventos de Keycloak |
 
@@ -791,7 +797,7 @@ public bool VerifyHash(string documentVersion, string clientProvidedHash)
 |---|---|
 | Versión | Comparación **Ordinal**, sensible a mayúsculas. `"1.0"` debe llegar exactamente así |
 | Hash | Comparación **OrdinalIgnoreCase**. El cliente puede enviar el hex en mayúscula o minúscula |
-| Resultado negativo | `RegisterPatientCommandHandler.cs:60-63` lanza `ConsentTextMismatchException` → **400 `consent_text_mismatch`** |
+| Resultado negativo | `RegisterPatientCommandHandler.cs:65-68` lanza `ConsentTextMismatchException` → **400 `consent_text_mismatch`** |
 
 **El servidor recalcula el hash de su propio texto y lo compara.** No persiste lo que llega sin verificar. Si
 la versión no coincide con la vigente, o el hash no coincide con el del texto vigente, el registro se rechaza
@@ -800,7 +806,7 @@ con el mismo `errorCode`: `consent_text_mismatch`. El contrato **no distingue** 
 
 ### 8.4 Lo que se persiste
 
-`ConsentRecord.Capture(...)` (`RegisterPatientCommandHandler.cs:86-93`) guarda: `userId`,
+`ConsentRecord.Capture(...)` (`RegisterPatientCommandHandler.cs:96-103`) guarda: `userId`,
 `documentVersion`, `consentTextHash`, `ipAddress`, `acceptedAt`. **No guarda el texto.**
 
 ### 8.5 Consecuencia para el móvil *(resuelta en v1.1)*
