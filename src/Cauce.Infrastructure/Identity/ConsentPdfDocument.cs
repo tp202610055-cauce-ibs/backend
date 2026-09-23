@@ -10,7 +10,7 @@ namespace Cauce.Infrastructure.Identity;
 /// encabezado con los datos de la aceptación (versión, momento, hash de integridad) y el texto íntegro
 /// del documento aceptado. Marca visualmente que el contenido es un borrador en revisión clínica.
 /// </summary>
-public sealed class ConsentDocument : IDocument
+public sealed class ConsentPdfDocument : IDocument
 {
     private readonly ConsentPdfContent _content;
     private readonly string _consentText;
@@ -20,7 +20,7 @@ public sealed class ConsentDocument : IDocument
     /// </summary>
     /// <param name="content">Datos del encabezado y de la aceptación.</param>
     /// <param name="consentText">Texto íntegro del documento de consentimiento.</param>
-    public ConsentDocument(ConsentPdfContent content, string consentText)
+    public ConsentPdfDocument(ConsentPdfContent content, string consentText)
     {
         _content = content;
         _consentText = consentText;

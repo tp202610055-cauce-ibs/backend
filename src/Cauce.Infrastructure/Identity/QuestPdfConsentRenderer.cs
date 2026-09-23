@@ -16,7 +16,7 @@ public sealed class QuestPdfConsentRenderer : IConsentPdfRenderer
     {
         ArgumentNullException.ThrowIfNull(content);
         ArgumentException.ThrowIfNullOrWhiteSpace(consentText);
-        var document = new ConsentDocument(content, consentText);
+        var document = new ConsentPdfDocument(content, consentText);
         return document.GeneratePdf();
     }
 }

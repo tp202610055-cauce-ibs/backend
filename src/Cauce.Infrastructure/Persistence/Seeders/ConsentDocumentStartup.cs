@@ -1,15 +1,11 @@
 using Cauce.Domain.Identity;
+using Cauce.Infrastructure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Cauce.Infrastructure.Persistence.Seeders;
-
-// Nota de nombres: `Cauce.Infrastructure.Identity.ConsentDocument` es la plantilla de
-// QuestPDF y no tiene relacion con la entidad de dominio del mismo nombre. Para que
-// `ConsentDocument` aqui signifique siempre la entidad, el tipo de opciones se califica
-// entero en vez de importar ese namespace.
 
 /// <summary>
 /// Publica la versión configurada del consentimiento y verifica que no haya divergido.
@@ -51,7 +47,7 @@ public static class ConsentDocumentStartup
         try
         {
             var context = services.GetRequiredService<CauceDbContext>();
-            var options = services.GetRequiredService<IOptions<Cauce.Infrastructure.Identity.ConsentDocumentOptions>>().Value;
+            var options = services.GetRequiredService<IOptions<ConsentDocumentOptions>>().Value;
 
             await services.GetRequiredService<ConsentDocumentsSeeder>()
                 .SeedAsync(ct)
