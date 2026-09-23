@@ -5,6 +5,7 @@ namespace Cauce.Application.Reports.Contracts;
 /// técnicos del sistema (identificadores de Keycloak, correos crudos, IPs): solo información
 /// clínica y de identificación mínima del paciente.
 /// </summary>
+/// <param name="PatientCode">Código correlativo legible del paciente (<c>PAC-0042</c>).</param>
 /// <param name="PatientInitials">Iniciales del paciente (por ejemplo, "R. G. C.").</param>
 /// <param name="PatientAge">Edad del paciente.</param>
 /// <param name="IbsSubtype">Subtipo de SII.</param>
@@ -17,12 +18,15 @@ namespace Cauce.Application.Reports.Contracts;
 /// <param name="GeneratedAt">Momento de generación, en UTC.</param>
 /// <param name="Allergies">Alergias declaradas.</param>
 /// <param name="MealCount">Cantidad de comidas registradas en el período.</param>
+/// <param name="Meals">Historial cronológico de comidas del período (HU0024 CA01).</param>
 /// <param name="FrequentFoods">Alimentos más frecuentes.</param>
-/// <param name="Symptoms">Resumen de síntomas por tipo.</param>
+/// <param name="Symptoms">Resumen de síntomas por tipo, con sus intensidades.</param>
+/// <param name="SymptomEntries">Historial cronológico de síntomas del período con su intensidad (HU0024 CA01).</param>
 /// <param name="Assessments">Evaluaciones IBS-SSS del período.</param>
 /// <param name="ApprovedRecommendations">Recomendaciones aprobadas del período.</param>
 /// <param name="Feedback">Retroalimentación recibida.</param>
 public sealed record ClinicalReportData(
+    string PatientCode,
     string PatientInitials,
     int PatientAge,
     string IbsSubtype,
@@ -35,8 +39,10 @@ public sealed record ClinicalReportData(
     DateTime GeneratedAt,
     IReadOnlyList<ReportAllergy> Allergies,
     int MealCount,
+    IReadOnlyList<ReportMealEntry> Meals,
     IReadOnlyList<ReportFoodFrequency> FrequentFoods,
     IReadOnlyList<ReportSymptomSummary> Symptoms,
+    IReadOnlyList<ReportSymptomEntry> SymptomEntries,
     IReadOnlyList<ReportAssessment> Assessments,
     IReadOnlyList<ReportRecommendation> ApprovedRecommendations,
     IReadOnlyList<ReportFeedback> Feedback);
@@ -51,10 +57,35 @@ public sealed record ReportAllergy(string Name, string Severity);
 /// <param name="Count">Cantidad de veces consumido.</param>
 public sealed record ReportFoodFrequency(string FoodName, int Count);
 
-/// <summary>Resumen de un tipo de síntoma.</summary>
+/// <summary>Resumen de un tipo de síntoma, con la distribución de intensidad observada.</summary>
 /// <param name="SymptomType">Tipo de síntoma.</param>
 /// <param name="Count">Cantidad de ocurrencias.</param>
-public sealed record ReportSymptomSummary(string SymptomType, int Count);
+/// <param name="AverageIntensity">Intensidad media (1–100) de las ocurrencias del período.</param>
+/// <param name="MinIntensity">Intensidad mínima registrada.</param>
+/// <param name="MaxIntensity">Intensidad máxima registrada.</param>
+public sealed record ReportSymptomSummary(
+    string SymptomType,
+    int Count,
+    decimal AverageIntensity,
+    int MinIntensity,
+    int MaxIntensity);
+
+/// <summary>Comida individual del historial del reporte.</summary>
+/// <param name="ConsumedAt">Momento de consumo, en UTC.</param>
+/// <param name="MealTime">Momento del día (desayuno, almuerzo, cena, colación).</param>
+/// <param name="Items">Nombres de los alimentos que la componen.</param>
+public sealed record ReportMealEntry(DateTime ConsumedAt, string MealTime, IReadOnlyList<string> Items);
+
+/// <summary>Síntoma individual del historial del reporte.</summary>
+/// <param name="OccurredAt">Momento de ocurrencia, en UTC.</param>
+/// <param name="SymptomType">Tipo de síntoma.</param>
+/// <param name="Intensity">Intensidad reportada (1–100).</param>
+/// <param name="AssociatedWithMeal">Indica si quedó correlacionado con una comida en la ventana de 4 h.</param>
+public sealed record ReportSymptomEntry(
+    DateTime OccurredAt,
+    string SymptomType,
+    int Intensity,
+    bool AssociatedWithMeal);
 
 /// <summary>Evaluación IBS-SSS del reporte.</summary>
 /// <param name="Date">Fecha de la evaluación.</param>
