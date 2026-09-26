@@ -27,6 +27,12 @@ public sealed class SymptomRepository : ISymptomRepository
     }
 
     /// <inheritdoc />
+    public Task<Symptom?> FindByIdForUpdateAsync(Guid symptomId, CancellationToken ct = default)
+    {
+        return _context.Set<Symptom>().FirstOrDefaultAsync(x => x.Id == symptomId, ct);
+    }
+
+    /// <inheritdoc />
     public Task<Symptom?> FindByClientGuidAsync(Guid clientGuid, CancellationToken ct = default)
     {
         return _context.Set<Symptom>().AsNoTracking().FirstOrDefaultAsync(x => x.ClientGuid == clientGuid, ct);
