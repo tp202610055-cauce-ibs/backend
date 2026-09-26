@@ -5601,6 +5601,200 @@
         }
       }
     },
+    "/api/v1/symptoms/{id}/meal-association": {
+      "put": {
+        "tags": [
+          "NutritionistSymptoms"
+        ],
+        "summary": "Corrige a mano la comida asociada a un síntoma de un paciente asignado: con `mealId` la fija a\r\nesa comida, sin sujeción a la ventana de 4 horas; con `mealId: null` la desvincula. La comida\r\ndebe ser del mismo paciente. Requiere el header `Idempotency-Key`.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Identificador del síntoma.",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Clave de idempotencia del header `Idempotency-Key`.",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Comida que se asocia, o null para desvincular.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSymptomMealAssociationRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSymptomMealAssociationRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetSymptomMealAssociationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/recommendations": {
       "post": {
         "tags": [
@@ -11100,6 +11294,19 @@
         },
         "additionalProperties": false,
         "description": "Cuerpo de la petición de reenvío del correo de verificación (acta A40). La respuesta es siempre 200\r\ncuando la petición supera la validación, exista o no la cuenta, para no revelar qué correos están\r\nregistrados ni cuáles ya están verificados."
+      },
+      "SetSymptomMealAssociationRequest": {
+        "type": "object",
+        "properties": {
+          "mealId": {
+            "type": "string",
+            "description": "Comida que se asocia al síntoma, o null para desvincularlo.",
+            "format": "uuid",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Cuerpo de la corrección manual de la comida asociada a un síntoma."
       },
       "SeverityCategory": {
         "enum": [

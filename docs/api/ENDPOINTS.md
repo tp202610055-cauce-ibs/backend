@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.5.0 · **Actualizado:** 2026-09-23 · **Contrato:** [`openapi-v1.4.0.json`](openapi-v1.4.0.json) (328 KB, 64 operaciones, 56 paths)
+**Versión:** 1.6.0 · **Actualizado:** 2026-09-25 · **Contrato:** [`openapi-v1.5.0.json`](openapi-v1.5.0.json) (333 KB, 65 operaciones, 57 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -11,6 +11,12 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los siete endpoints de identidad, la fuente autoritativa versionada es
 > [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.3.
+
+**Novedades de la v1.6.0.** Nuevo `PUT /symptoms/{id}/meal-association`, para que el nutricionista
+asignado corrija a mano la comida asociada a un síntoma: la fija a una comida del mismo paciente, sin la
+ventana de 4 h, o la desvincula con `mealId: null`. Exige `Idempotency-Key`. Es aditivo: una operación y
+un esquema nuevos (`SetSymptomMealAssociationRequest`), ningún path ni esquema existente modificado.
+Todavía no tiene consumidor (ver la nota en la sección 9).
 
 **Novedades de la v1.5.0.** `GET /patients/me/summary` suma dos campos, sin operaciones ni esquemas
 nuevos: `patient.patientCode` con el código correlativo del paciente (`PAC-0042`), y
@@ -58,7 +64,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
   [CLAUDE.md → Enums](../../CLAUDE.md#enums-y-valores-controlados).
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
   `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.4.0.json` bajo
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.5.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -111,7 +117,7 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | *(sin `errorCode`)* | 401 | Falta/expira el Bearer JWT, o falta `X-Admin-Api-Key` en `/admin/*`. |
 | `forbidden` | 403 | Rol incorrecto para la política del endpoint. |
 | `unauthorized_patient_access` | 403 | El nutricionista no está asignado a ese paciente. |
-| `patient_resource_access_denied` | 403 | El recurso (comida/alimento) no pertenece al paciente autenticado. |
+| `patient_resource_access_denied` | 403 | El recurso (comida/alimento) no pertenece al paciente autenticado. En la corrección manual de un nutricionista: la comida no es del paciente del síntoma. |
 | `recommendation_access_denied` | 403 | Sin autorización sobre la recomendación. |
 | `report_access_denied` | 403 | Sin autorización sobre el reporte. |
 | `audit_log_immutable` | 403 | Intento de modificar `audit_logs` (bloqueado por trigger). |
@@ -783,6 +789,20 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 | Idempotencia | — |
 | Rate limit | — |
 | Respuestas | **200** `PatientEvolutionForNutritionistResult` · 401 · 403 `unauthorized_patient_access` · 500 |
+
+### `PUT /api/v1/symptoms/{id}/meal-association`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Corrección manual de la comida asociada a un síntoma de un paciente asignado. Con `mealId` fija esa comida, **sin sujeción a la ventana de 4 h**; con `mealId: null` la desvincula. La comida debe ser del mismo paciente que el síntoma. Deja una fila de auditoría `meal_association_correction` con la comida anterior y la nueva. |
+| US/TS | — (corrección clínica; la regla automática que corrige está descrita en el acta A67) |
+| Request body | `SetSymptomMealAssociationRequest` (mealId?). Un cuerpo `{}` equivale a `mealId: null`, igual que en `PUT /users/me/fcm-token`. |
+| Idempotencia | **Sí — requerido** (header `Idempotency-Key`) |
+| Rate limit | `default-auth` |
+| Respuestas | **204** · 400 `validation_error` · 404 (`symptom_not_found`, `meal_not_found`) · 409 `idempotency_mismatch` · 401 · 403 (`unauthorized_patient_access`, `patient_resource_access_denied`) · 429 · 500 |
+
+> **Sin consumidor todavía.** Ningún endpoint del nutricionista expone hoy los identificadores de los
+> síntomas y las comidas de su paciente (`GET /symptoms`, `GET /meals` y `GET /history` son solo del
+> paciente), así que el endpoint queda disponible a la espera de la vista del portal que los muestre.
 
 ---
 
