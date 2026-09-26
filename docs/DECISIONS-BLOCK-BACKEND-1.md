@@ -3,16 +3,17 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A66, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+**Alcance:** actas A38 a A67, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
 trabajo posterior sobre el consentimiento, Backend-Pilot-Readiness y los bloques pequeños
-posteriores. Las actas A1 a A37 y las
-decisiones DEC-B3 a DEC-B7B no tienen archivo en ningún repo: solo sobreviven resumidas en el
-`CLAUDE.md` local.
+posteriores. Las decisiones DEC-B3 a DEC-B7B y las actas A1 a A29 viven en el repo `docs`, en
+`decisions/DECISIONS-BLOCK-01.md` a `decisions/DECISIONS-BLOCK-07B.md`; las actas A30 a A37 y A42,
+en archivos sueltos del mismo directorio.
 **Numeración:** la serie es global entre repos, con prefijo `M` para mobile y `A` para backend.
-A42 y A50 no existen como acta.
+A42 es un acta del repo `docs`; A50 no existe como acta.
 **Autores:** Trigo (decisión), Kiwicha (redacción).
 **Consolidado:** 2026-09-17, sin alterar el contenido de ninguna acta. Ampliado el 2026-09-22 con
-las actas A59 a A65.
+las actas A59 a A65. El 2026-09-25 se corrigieron este encabezado y una referencia de A58, que daban
+por inexistente el Bloque 3, y se agregó A67.
 
 ---
 
@@ -47,6 +48,7 @@ las actas A59 a A65.
 | [A64](#acta-a64-cambios-de-contrato-menores-del-bloque) | Cambios de contrato menores del bloque | Aprobada, implementada en Backend-Pilot-Readiness |
 | [A65](#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron) | Diagnósticos del bloque que no se implementaron | Documentada. Cuatro puntos abiertos: ancla de la ventana de 4 h, `isInActivePilot`, categorías IBS-SSS y conversión de unidades |
 | [A66](#acta-a66-el-código-de-paciente-y-las-alergias-declaradas-viajan-en-el-resumen-de-perfil) | El código de paciente y las alergias declaradas viajan en el resumen de perfil | Aprobada, implementada. Resuelve el punto abierto de A59 |
+| [A67](#acta-a67-desviación-de-dec-b3-06-la-asociación-entre-síntoma-y-comida-la-calcula-solo-el-servidor) | Desviación de DEC-B3-06, la asociación entre síntoma y comida la calcula solo el servidor | Aprobada. Corrige la redacción de DEC-B3-06 sin editar el Bloque 3 |
 
 ---
 
@@ -1407,7 +1409,7 @@ no editar la fila existente.
 - `src/Cauce.Infrastructure/Persistence/Seeders/ConsentDocumentsSeeder.cs`
 - `src/Cauce.Infrastructure/Persistence/Seeders/ConsentDocumentStartup.cs`
 - `src/Cauce.Api/Program.cs`
-- DEC-B3-07, del Bloque 3. Vive en el repo `docs` (`DECISIONS-BLOCK-01.md`), que no está en este checkout.
+- DEC-B3-07, del Bloque 3. Vive en el repo `docs`, en `decisions/DECISIONS-BLOCK-01.md`.
 
 ---
 
@@ -2133,5 +2135,124 @@ desde `openapi-v1.0.0.json`, cuatro snapshots atrás.
 - `src/Cauce.Application/Patients/Mapping/PatientAllergyMapper.cs`
 - `tests/Cauce.Api.IntegrationTests/Patients/PatientSelfInsightsApiTests.cs`
 - HU0028, caso de prueba CP070; acta [A59](#acta-a59-código-correlativo-de-paciente-para-exportaciones-y-reportes).
+
+---
+
+## Acta A67: Desviación de DEC-B3-06, la asociación entre síntoma y comida la calcula solo el servidor
+
+**Estado:** Aprobada. Corrige la redacción de DEC-B3-06 sin editar el Bloque 3
+**Fecha:** 2026-09-25
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, `CreateSymptomCommandHandler`, `MealRepository.FindLatestInWindowAsync` y
+`SyncBatchCommandHandler`. Documentación: DEC-B3-06 del Bloque 3, en el repo `docs`.
+
+---
+
+### Contexto
+
+La ventana de 4 horas se va a conversar con un nutricionista del Kaelín (acta
+[A65](#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron), punto 1). Para llevar la mecánica
+exacta a esa conversación se contrastó DEC-B3-06 contra el código, y la redacción no describe lo que
+el sistema hace.
+
+DEC-B3-06 afirma que la asociación la calcula el cliente móvil al guardar el síntoma y que el servidor
+la revalida al sincronizar. El cálculo es exclusivamente del servidor: el contrato de creación del
+síntoma no tiene ningún campo con el que el cliente pueda proponer una asociación. El móvil ya lo
+documenta así en su propio código, donde trata al servidor como la autoridad.
+
+El documento del Bloque 3 prohíbe editarse: "Si alguna decisión cambia, no editar este documento". La
+corrección sigue entonces el camino del acta
+[A58](#acta-a58-desviación-de-dec-b3-07-el-seeder-del-consentimiento-corre-en-todos-los-ambientes),
+que registró una desviación de DEC-B3-07 como acta nueva.
+
+### Desvíos entre DEC-B3-06 y el código
+
+| DEC-B3-06 dice | El código hace |
+| --- | --- |
+| Calcula el cliente al guardar el síntoma | Calcula solo el servidor; `CreateSymptomRequest` no tiene campo para una asociación |
+| Intervalo cerrado `[s − 4h, s]` | Intervalo `(s − 4h, s]`, con inicio exclusivo (`MealRepository.FindLatestInWindowAsync`) |
+| Guarda `meal.client_guid` | Guarda el identificador del servidor de la comida, que es la FK a `meals` |
+| El endpoint es `POST /api/v1/sync/symptoms` | No existe; los caminos reales son `POST /symptoms` y `POST /sync/batch` |
+| El servidor revalida y limpia si el delta supera 4 h | No hay nada que revalidar |
+| Reintenta la asociación cuando la comida llega en un lote posterior | No está implementado |
+| La asociación es input al motor (tabla de trazabilidad, TS-05) | Ningún motor lee síntomas: ni el de regla ni el ONNX |
+
+### Decisión
+
+DEC-B3-06 queda redactada como sigue. Esta redacción reemplaza a la del Bloque 3, que se conserva
+como referencia histórica.
+
+#### DEC-B3-06 — Asociación temporal síntoma↔comida (ventana 4h)
+
+##### Configuración
+
+El servidor calcula `symptoms.associated_meal_id` al crear el síntoma, tanto en
+`POST /api/v1/symptoms` como dentro de `POST /api/v1/sync/batch`. El cliente no
+propone ninguna asociación: el contrato de creación del síntoma no tiene campo para
+eso, y el cliente muestra lo que responde el servidor.
+
+##### Algoritmo
+
+1. Al crear un `Symptom`, buscar las `Meal` del mismo paciente cuyo `client_created_at`
+   caiga en `(symptom.client_created_at − 4h, symptom.client_created_at]`, con inicio
+   exclusivo y fin inclusivo. Los dos extremos usan `client_created_at`; ni
+   `occurred_at` ni `consumed_at` intervienen.
+2. Si hay varias, se toma la de `client_created_at` más reciente. No se pondera por
+   carga FODMAP ni por contenido.
+3. Si existe → `associated_meal_id = meal.meal_id` (identificador del servidor) y
+   `has_meal_association = true`.
+4. Si no existe → `associated_meal_id = null` y `has_meal_association = false`. La
+   ventana no se amplía.
+
+##### Momento del cálculo
+
+La asociación se calcula una sola vez, al crear el síntoma. En `POST /sync/batch` las
+comidas se procesan y persisten antes que los síntomas, así que un síntoma y su comida
+que viajan en el mismo lote se asocian bien. Si la comida llega en una petición
+posterior, el síntoma queda sin asociación: no hay recálculo retroactivo.
+
+##### Justificación clínica
+
+- Ventana de 4h fundamentada en literatura: Monash University (2019) y Ford et al.
+  (2024, *Gut*).
+- 24h sería clínicamente inválido para correlación causal alimentaria.
+
+##### Alcance
+
+La asociación no es input del motor de recomendaciones: ni el motor de regla ni el
+ONNX leen síntomas. Se expone en `GET /symptoms`, `GET /history`, el PDF del reporte
+clínico y la exportación de datos.
+
+### Consecuencias
+
+**La redacción del Bloque 3 queda como referencia histórica.** Ante una contradicción entre las dos,
+rige esta acta. Eso incluye la fila de DEC-B3-06 en la tabla de trazabilidad del Bloque 3, que la
+sección "Alcance" de arriba corrige.
+
+**La pérdida de la asociación entre llamadas separadas es una limitación aceptada del piloto.** Un
+síntoma cuya comida llega al servidor en una petición posterior queda sin asociación para siempre. Es
+un caso borde: el móvil manda todo lo pendiente en un solo lote ordenado por `clientCreatedAt`, así
+que hace falta una comida que falle dentro de su lote y se reintente después.
+
+**Se descartó rellenar las asociaciones nulas al crear una comida**, que es lo que la redacción
+original preveía con el reintento en el lote siguiente. Un `null` no distingue "no hubo comida en la
+ventana" de "una persona desvinculó la asociación a mano", así que el relleno desharía en silencio una
+corrección clínica. Tampoco reproduciría la regla canónica: la comida asociada dependería del orden de
+llegada y no de cuál es la más reciente.
+
+**El ancla sigue abierta.** Esta acta describe la regla vigente y no la valida clínicamente. Si el
+ancla pasa de `client_created_at` a `occurred_at`, lo decide la conversación con el nutricionista que
+dejó pendiente A65.
+
+### Referencias
+
+- `src/Cauce.Application/ClinicalRegistry/UseCases/CreateSymptom/CreateSymptomCommandHandler.cs`
+- `src/Cauce.Infrastructure/Persistence/Repositories/MealRepository.cs` (`FindLatestInWindowAsync`)
+- `src/Cauce.Application/ClinicalRegistry/UseCases/SyncBatch/SyncBatchCommandHandler.cs`
+- `src/Cauce.Api/Contracts/ClinicalRegistry/CreateSymptomRequest.cs`
+- DEC-B3-06 y su fila en la tabla de trazabilidad: repo `docs`, `decisions/DECISIONS-BLOCK-01.md`.
+- Acta [A58](#acta-a58-desviación-de-dec-b3-07-el-seeder-del-consentimiento-corre-en-todos-los-ambientes),
+  precedente de desviación registrada como acta nueva; acta
+  [A65](#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron), punto 1, sobre el ancla.
 
 ---
