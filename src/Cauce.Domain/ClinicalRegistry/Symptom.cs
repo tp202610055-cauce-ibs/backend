@@ -141,7 +141,9 @@ public sealed class Symptom : Entity, IAggregateRoot
     }
 
     /// <summary>
-    /// Asocia el síntoma con una comida por correlación temporal.
+    /// Asocia el síntoma con una comida. La usa el cálculo automático por correlación temporal y también la
+    /// corrección manual del nutricionista, que no está sujeta a la ventana de 4 horas. Que la comida sea
+    /// del mismo paciente lo verifica quien llama.
     /// </summary>
     /// <param name="mealId">Identificador de la comida asociada.</param>
     /// <param name="utcNow">Marca de tiempo UTC de la operación.</param>

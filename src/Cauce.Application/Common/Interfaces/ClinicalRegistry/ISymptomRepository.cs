@@ -16,6 +16,15 @@ public interface ISymptomRepository
     Task<Symptom?> FindByIdAsync(Guid symptomId, CancellationToken ct = default);
 
     /// <summary>
+    /// Busca un síntoma por su identificador con seguimiento de cambios, para modificarlo en el mismo
+    /// <c>SaveChanges</c>. <see cref="FindByIdAsync"/> lo lee sin seguimiento.
+    /// </summary>
+    /// <param name="symptomId">Identificador del síntoma.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El síntoma rastreado o <see langword="null"/> si no existe.</returns>
+    Task<Symptom?> FindByIdForUpdateAsync(Guid symptomId, CancellationToken ct = default);
+
+    /// <summary>
     /// Busca un síntoma por su <c>client_guid</c> (identidad estable del dispositivo).
     /// </summary>
     /// <param name="clientGuid">Identificador del dispositivo.</param>

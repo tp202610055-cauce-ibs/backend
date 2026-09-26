@@ -130,5 +130,15 @@ public enum AuditActionType
     /// Reenvío, por el endpoint administrativo, del enlace con el que un nutricionista pendiente define su
     /// contraseña (acta A52). Se registra solo cuando Keycloak aceptó el envío.
     /// </summary>
-    ActivationEmailResend
+    ActivationEmailResend,
+
+    /// <summary>
+    /// Corrección manual, por el nutricionista asignado, de la comida asociada a un síntoma: la fija a una
+    /// comida concreta o la desvincula. <c>symptoms</c> ya tiene trigger de auditoría, así que esta fila es
+    /// otra excepción a la regla de no duplicación de DEC-B5-01, como las que ya existen sobre
+    /// <c>recommendations</c> y con la misma justificación que Approve/Reject: el trigger registra solo
+    /// hashes, y esta fila guarda en el contexto adicional qué comida había antes y cuál quedó, que es lo que
+    /// hace falta para reconstruir la decisión clínica.
+    /// </summary>
+    MealAssociationCorrection
 }
