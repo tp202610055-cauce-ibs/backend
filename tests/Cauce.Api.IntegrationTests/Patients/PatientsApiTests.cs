@@ -321,6 +321,69 @@ public sealed class PatientsApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    [SkippableFact]
+    public async Task GetAssignedPatientDetail_WithoutProfile_Returns200WithClinicalFieldsInNull()
+    {
+        SkipIfNoDocker();
+        var (nutritionistId, nutritionistKeycloakId) = await SeedNutritionistAsync(UniqueEmail());
+        var (patientId, _) = await SeedPatientAsync(UniqueEmail());
+        using (var scope = _factory.Services.CreateScope())
+        {
+            // Vínculo por canje post-registro (acta A41): el paciente aparece en el panel antes del perfil.
+            var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+            db.NutritionistPatients.Add(NutritionistPatient.Establish(Guid.NewGuid(), nutritionistId, patientId, null, DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await NutritionistClient(nutritionistKeycloakId).GetAsync($"/api/v1/nutritionists/me/patients/{patientId}");
+
+        // Acta A69: antes respondía 404 patient_profile_not_found.
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var detail = await response.Content.ReadFromJsonAsync<JsonElement>();
+        detail.GetProperty("patientUserId").GetGuid().Should().Be(patientId);
+        detail.GetProperty("fullName").GetString().Should().Be("Paciente Seed");
+        detail.GetProperty("onboardingCompleted").GetBoolean().Should().BeFalse();
+        foreach (var field in new[] { "age", "bmi", "bmiCategory", "ibsSubtype", "biologicalSex", "diagnosisDate", "medications" })
+        {
+            detail.GetProperty(field).ValueKind.Should().Be(JsonValueKind.Null, $"{field} no tiene perfil del que salir");
+        }
+
+        detail.GetProperty("allergies").GetArrayLength().Should().Be(0);
+    }
+
+    [SkippableFact]
+    public async Task GetAssignedPatientDetail_WithProfile_IncludesSexDiagnosisAndMedicationsButNotTheCode()
+    {
+        SkipIfNoDocker();
+        var (nutritionistId, nutritionistKeycloakId) = await SeedNutritionistAsync(UniqueEmail());
+        var (patientId, patientKeycloakId) = await SeedPatientAsync(UniqueEmail());
+        await SeedConsumedInvitationAsync(nutritionistId, patientId);
+        var diagnosisDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-2);
+        var profile = await PatientClient(patientKeycloakId).PostAsJsonAsync("/api/v1/patients/profile", new
+        {
+            dateOfBirth = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(-30),
+            biologicalSex = "Female",
+            weightKg = 62.5m,
+            heightCm = 162m,
+            ibsSubtype = "IbsD",
+            diagnosisDate,
+            medications = "Mebeverina 135 mg"
+        });
+        profile.StatusCode.Should().Be(HttpStatusCode.Created);
+
+        var response = await NutritionistClient(nutritionistKeycloakId).GetAsync($"/api/v1/nutritionists/me/patients/{patientId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var detail = await response.Content.ReadFromJsonAsync<JsonElement>();
+        detail.GetProperty("ibsSubtype").GetString().Should().Be("IbsD");
+        detail.GetProperty("biologicalSex").GetString().Should().Be("Female");
+        detail.GetProperty("diagnosisDate").GetString().Should().Be(diagnosisDate.ToString("yyyy-MM-dd"));
+        detail.GetProperty("medications").GetString().Should().Be("Mebeverina 135 mg");
+        detail.GetProperty("age").GetInt32().Should().BeGreaterThan(0);
+        // Acta A59: el código de paciente no va a las vistas de atención, donde quedaría junto al nombre.
+        detail.TryGetProperty("patientCode", out _).Should().BeFalse();
+    }
+
     // ----- Helpers -----
 
     private void SkipIfNoDocker()
