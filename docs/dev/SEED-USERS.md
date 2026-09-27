@@ -7,7 +7,8 @@ sembrado queda deshabilitado.
 
 Estas credenciales son de **desarrollo local**, no secretos de producción. Sirven para validar los flujos de
 la app móvil (Flutter) y del portal (React) sin depender del flujo de invitación por nutricionista ni de la
-verificación por correo.
+verificación por correo. Todas usan el dominio `@cauce.local`, que no existe fuera de esta red: un correo
+real nunca llega a un tercero.
 
 ---
 
@@ -46,14 +47,104 @@ Ver acta [`A30-dev-seed-patient.md`](../../../docs/decisions/A30-dev-seed-patien
 | Campo | Valor |
 |---|---|
 | **Email / usuario** | `nutricionista.demo@cauce.local` |
-| **Contraseña** | `Demo123!` (**temporal** — required action `UPDATE_PASSWORD`) |
+| **Contraseña** | `Portal#2026` (**permanente**, sin required actions, desde el acta A68) |
 | **Rol (realm Keycloak)** | `nutritionist` |
+| **Estado local** | `Active` |
+| **Entra por** | `POST /api/v1/auth/portal/login` (portal web) |
 | **Seeder / config** | `DevAdminSeeder` · sección `DevAdmin` en `appsettings.Development.json` |
 
-> ⚠️ Por la contraseña temporal, este usuario **no** puede iniciar sesión por Direct Access Grants hasta
-> cambiarla (required action `UPDATE_PASSWORD`). Para probar el portal web con un nutricionista logueable,
-> cambiar su contraseña a permanente en la consola de Keycloak (`http://localhost:8081/admin`, realm `cauce`)
-> o vía password reset.
+Es la cuenta de CP016, CP045 y CP072. Tiene asignado al paciente demo.
+
+> **Bases sembradas antes del acta A68.** La cuenta nacía con la contraseña temporal `Demo123!`, y el seeder
+> no toca una cuenta que ya existe. Hay que correr una sola vez el paso de la sección
+> [Puesta a punto en Windows](#puesta-a-punto-en-windows-portal-listo-1), punto 3.
+
+---
+
+## Cuentas de QA del portal (acta A68)
+
+Sembradas por `QaNutritionistsSeeder` (sección `QaNutritionists` de `appsettings.Development.json`), con el
+patrón de `DemoPatientSeeder`: solo Development, idempotente por correo, reutiliza el usuario de Keycloak si
+ya existe.
+
+| Cuenta | Contraseña | Keycloak | Backend | Qué prueba |
+|---|---|---|---|---|
+| `nutricionista.inactivo@cauce.local` | `Portal#2026` | **deshabilitada** | `Suspended` | CP017: con la contraseña correcta, el portal responde el mismo 401 `invalid_credentials`. La auditoría registra `account_disabled` |
+| `nutricionista.pendiente@cauce.local` | *(ninguna)* | habilitada, sin credencial | `PendingActivation` | Cuenta pendiente de activación: cualquier contraseña da 401, con causa `pending_activation`. No se le envía el correo de activación |
+
+`nutricionista.inactivo` queda `Suspended` y no `Inactive` porque el backend no tiene una transición a
+`Inactive` para nutricionistas. Para el portal, las dos son igual de "no activas".
+
+---
+
+## Cómo iniciar sesión en el portal (sin portal)
+
+```bash
+curl -i -X POST http://localhost:5074/api/v1/auth/portal/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"nutricionista.demo@cauce.local","password":"Portal#2026"}'
+```
+
+La respuesta trae `accessToken`, `expiresIn`, `tokenType` y `user`, y un header
+`Set-Cookie: cauce_portal_rt=…; path=/api/v1/auth/portal; samesite=strict; httponly`. El refresh token no
+viaja en el cuerpo. Para renovar, reenviar esa cookie con el header `X-Cauce-Portal: 1` a
+`POST /api/v1/auth/portal/refresh`.
+
+---
+
+## Puesta a punto en Windows (Portal listo 1)
+
+Tres pasos que se hacen **una sola vez** por máquina, con el stack levantado (Docker Desktop abierto y los
+contenedores `cauce-keycloak` y `cauce-postgres` corriendo). No hace falta borrar nada: los usuarios se
+conservan.
+
+**1. Abrir PowerShell en la carpeta `infrastructure`.** Tecla Windows, escribir `PowerShell`, Enter. En la
+ventana azul, pegar (clic derecho pega) y Enter:
+
+```powershell
+cd "$HOME\Documents\github_flavio_trigueros\academicos\proyecto_final_cauce\infrastructure"
+```
+
+No debería mostrar nada; la línea siguiente empieza con `PS C:\Users\...\infrastructure>`.
+
+**2. Actualizar el cliente del portal en Keycloak y guardar su secret en el backend.** Pegar estas tres
+líneas juntas y Enter:
+
+```powershell
+docker cp keycloak/apply-portal-client.sh cauce-keycloak:/tmp/apply-portal-client.sh
+$secret = (docker exec cauce-keycloak bash -c "tr -d '\r' < /tmp/apply-portal-client.sh | bash" | Select-Object -Last 1)
+dotnet user-secrets set "Keycloak:WebPortalClientSecret" $secret --project ..\backend\src\Cauce.Api
+```
+
+Lo que debería verse:
+
+```
+Logging into http://localhost:8080 as user admin of realm master
+Successfully saved Keycloak:WebPortalClientSecret to the secret store.
+```
+
+El secret no se muestra en pantalla: se guarda directo. Si aparece `Error: No such container: cauce-keycloak`,
+el stack no está levantado. Repetir el paso no rompe nada: conserva el mismo secret.
+
+> **Si se prefiere ver el secret.** En `http://localhost:8081/admin`, entrar con el usuario admin del `.env`
+> de `infrastructure`, elegir el realm `cauce` arriba a la izquierda, ir a **Clients** → `cauce-web-portal` →
+> pestaña **Credentials** → **Client Secret**, y copiarlo con el ícono de copiar. Nunca pulsar
+> **Regenerate** sin volver a guardarlo en el backend.
+
+**3. Solo si la base es anterior al acta A68: dejar permanente la contraseña del nutricionista demo.** Pegar
+estas dos líneas juntas y Enter:
+
+```powershell
+docker cp keycloak/dev-demo-nutritionist-password.sh cauce-keycloak:/tmp/dev-demo.sh
+docker exec cauce-keycloak bash -c "tr -d '\r' < /tmp/dev-demo.sh | bash"
+```
+
+Debería terminar con `Listo: nutricionista.demo@cauce.local tiene contraseña permanente y ninguna acción
+pendiente.` Si la cuenta no existe todavía, avisa que el seeder la va a crear ya permanente.
+
+**4. Reiniciar el backend** (`dotnet run --project src/Cauce.Api`, o Run en el IDE). Al arrancar crea las dos
+cuentas de QA si no existen. En el log deberían aparecer `Seeded disabled QA nutritionist` y `Seeded pending
+QA nutritionist` la primera vez.
 
 ---
 

@@ -3,7 +3,7 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A67, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+**Alcance:** actas A38 a A69, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
 trabajo posterior sobre el consentimiento, Backend-Pilot-Readiness y los bloques pequeños
 posteriores. Las decisiones DEC-B3 a DEC-B7B y las actas A1 a A29 viven en el repo `docs`, en
 `decisions/DECISIONS-BLOCK-01.md` a `decisions/DECISIONS-BLOCK-07B.md`; las actas A30 a A37 y A42,
@@ -13,7 +13,8 @@ A42 es un acta del repo `docs`; A50 no existe como acta.
 **Autores:** Trigo (decisión), Kiwicha (redacción).
 **Consolidado:** 2026-09-17, sin alterar el contenido de ninguna acta. Ampliado el 2026-09-22 con
 las actas A59 a A65. El 2026-09-25 se corrigieron este encabezado y una referencia de A58, que daban
-por inexistente el Bloque 3, y se agregó A67.
+por inexistente el Bloque 3, y se agregó A67. El 2026-09-26 se agregaron A68 y A69, del bloque Portal
+listo 1.
 
 ---
 
@@ -49,6 +50,8 @@ por inexistente el Bloque 3, y se agregó A67.
 | [A65](#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron) | Diagnósticos del bloque que no se implementaron | Documentada. Cuatro puntos abiertos: ancla de la ventana de 4 h, `isInActivePilot`, categorías IBS-SSS y conversión de unidades |
 | [A66](#acta-a66-el-código-de-paciente-y-las-alergias-declaradas-viajan-en-el-resumen-de-perfil) | El código de paciente y las alergias declaradas viajan en el resumen de perfil | Aprobada, implementada. Resuelve el punto abierto de A59 |
 | [A67](#acta-a67-desviación-de-dec-b3-06-la-asociación-entre-síntoma-y-comida-la-calcula-solo-el-servidor) | Desviación de DEC-B3-06, la asociación entre síntoma y comida la calcula solo el servidor | Aprobada. Corrige la redacción de DEC-B3-06 sin editar el Bloque 3 |
+| [A68](#acta-a68-autenticación-del-portal-web-a-través-del-backend) | Autenticación del portal web a través del backend | Aprobada, implementada en Portal listo 1. Desviación consciente de RFC 9700 §2.4 |
+| [A69](#acta-a69-contrato-del-portal-para-la-revisión-hitl-y-el-detalle-del-paciente) | Contrato del portal para la revisión HITL y el detalle del paciente | Aprobada, implementada en Portal listo 1. Cambio incompatible en `modify` |
 
 ---
 
@@ -2254,5 +2257,295 @@ dejó pendiente A65.
 - Acta [A58](#acta-a58-desviación-de-dec-b3-07-el-seeder-del-consentimiento-corre-en-todos-los-ambientes),
   precedente de desviación registrada como acta nueva; acta
   [A65](#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron), punto 1, sobre el ancla.
+
+---
+
+## Acta A68: Autenticación del portal web a través del backend
+
+**Estado:** Aprobada, implementada en Portal listo 1. Contiene una desviación consciente de RFC 9700 §2.4
+**Fecha:** 2026-09-26
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend (identidad, auditoría, CORS, forwarded headers, seeders de desarrollo) e
+`infrastructure` (cliente `cauce-web-portal` del realm).
+
+---
+
+### Contexto
+
+El portal web del nutricionista necesitaba iniciar sesión. El realm tenía `cauce-web-portal` como cliente
+confidencial con Standard Flow y PKCE, pensado para Authorization Code directo contra Keycloak. Una SPA no
+puede guardar el secret de un cliente confidencial, y Direct Access Grants estaba apagado, así que ni el
+login directo ni el passthrough del backend funcionaban.
+
+Kiwicha decidió el 26-sep que el portal se autentique **igual que el móvil, contra el backend**, y que nunca
+hable con Keycloak. Motivos: el C4 de la tesis no tiene relación portal → Keycloak (el API Gateway es el
+punto único de entrada y el Audit Middleware registra los eventos de autenticación), y CP006 y CP017 exigen
+que cada intento fallido quede en `audit_log`, que es lo que el middleware ya hace en `/auth/login`.
+
+### Decisión
+
+**1. Rutas propias para el canal portal.** `POST /auth/portal/login`, `/auth/portal/refresh` y
+`/auth/portal/logout`, con los mismos handlers que el móvil y un parámetro `LoginChannel`. Se descartó un
+campo de canal en `/auth/login` porque obligaba a cambiar el contrato del móvil: `refreshToken` pasaba a ser
+anulable en la respuesta y opcional en el request de refresh y logout, y el cliente Dart que el móvil genera
+desde el OpenAPI cambiaba de tipos al regenerarse.
+
+**2. Las rutas del móvil solo aceptan `cauce-mobile`.** Cualquier otro `clientId` responde 400
+`unsupported_client` y queda auditado. Sin esta regla, con Direct Access Grants activo en el portal,
+`/auth/login` con `cauce-web-portal` devolvería el refresh token en el cuerpo y saltearía el filtro de rol. El
+chequeo vive en los handlers y no en los validadores, para que el rechazo quede auditado con su causa. El
+esquema de las tres rutas no cambió: un diff del OpenAPI contra la v1.5.0 da operaciones y esquemas
+idénticos, con solo la descripción ampliada.
+
+**3. Cliente `cauce-web-portal`.** Sigue confidencial. Direct Access Grants ON, Standard Flow OFF (el enlace
+de activación de H2 no lo necesita, verificado en vivo), redirect y post-logout solo hacia el portal
+(`http://localhost:5173/*` en desarrollo). El backend pide sus tokens sin `offline_access`, así que rigen las
+sesiones del cliente: 30 minutos de inactividad y 8 horas en total. El secret vive solo en la configuración
+del backend (`Keycloak:WebPortalClientSecret`) y nunca llega al navegador.
+
+**4. Solo entra el rol `nutritionist`.** Paciente, cuenta deshabilitada en Keycloak, pendiente de activación
+sin contraseña, contraseña incorrecta, correo inexistente, y nutricionista `Suspended` o `Inactive` en el
+backend reciben el **mismo 401 `invalid_credentials` con el mismo mensaje**. Cuando Keycloak ya autenticó
+(paciente, suspendido, inactivo), el backend revoca en el acto la sesión que Keycloak abrió. El bloqueo por
+intentos fallidos conserva su 423 `account_locked` con `lockedUntil` (CP015). Un nutricionista pendiente que
+ya definió su contraseña sí entra: ese primer inicio de sesión lo activa (acta A51). La renovación aplica las
+mismas reglas, así que un nutricionista suspendido después de entrar pierde la sesión en la siguiente
+renovación, a más tardar a los 15 minutos.
+
+**5. Refresh token en cookie.** `cauce_portal_rt` con `HttpOnly`, `SameSite=Strict`,
+`Path=/api/v1/auth/portal` y `Max-Age` igual a `refresh_expires_in`. `Secure` se configura con
+`PortalSession:CookieSecure`: activo por defecto y apagado solo en Development, donde la API corre sobre
+`http://localhost`. El refresh token nunca aparece en el cuerpo. El access token vive en memoria del portal.
+Las respuestas de login y refresh llevan `Cache-Control: no-store`.
+
+**6. Defensa contra CSRF.** `refresh` y `logout` exigen el header `X-Cauce-Portal` no vacío; sin él, 403
+`csrf_header_missing`. Un formulario de otro sitio no puede agregar headers propios, y un `fetch` de otro
+origen que lo intente dispara un preflight que CORS rechaza. El header se sumó a la lista de CORS.
+
+**7. El cierre de sesión exige el Bearer.** Además de la cookie y el header, `logout` pide el access token de
+un nutricionista. Así la fila `logout` de la auditoría tiene actor verificado, sin leer el `sub` de un refresh
+token que el backend no puede validar. Si el access token venció, el portal renueva primero.
+
+**8. Auditoría de acceso con canal y causa.** Cada intento de iniciar, renovar o cerrar sesión queda en
+`audit_logs` con fecha, IP de origen, user-agent, canal (`mobile` o `portal`) y, si fue rechazado, su causa
+interna en `additional_context`. La causa nunca viaja al cliente. Los handlers la dejan en un contexto con
+alcance de petición (`IAuthenticationAttemptContext`) que el middleware lee; si el rechazo ocurrió antes del
+handler, el middleware la deduce de la excepción o del status. Las causas salen del estado local de la cuenta
+y de la Admin API de Keycloak (habilitada, acciones pendientes, fuerza bruta), **nunca del texto de error de
+Keycloak**: `wrong_password`, `unknown_account`, `account_disabled`, `pending_activation`,
+`required_action_pending`, `account_locked`, `role_not_allowed`, `account_suspended`, `account_inactive`,
+`unsupported_client`, `client_misconfigured`, `local_account_missing`, `invalid_request`,
+`missing_refresh_cookie`, `invalid_refresh_token`, `csrf_header_missing`, `undetermined`. Describen el estado
+de la cuenta al momento del fallo, que es lo que permite investigarlo.
+
+- El 423 se audita como `AccountLocked`, que existía y nadie usaba, y emite además un
+  `SecurityEvent account_locked` de nivel Warning en el log (CP015, paso 7).
+- Nuevo `FailedLogout` para los cierres rechazados. Un valor de enum más, sin migración: la columna es
+  `varchar`, como con `MealAssociationCorrection`.
+- La renovación se sigue auditando en el handler, no en el middleware, con la misma forma de contexto.
+- Una renovación frenada por falta del header CSRF no llega al handler y no queda auditada. Es una defensa
+  del navegador, no un intento de sesión.
+
+**9. Cliente mal configurado.** Si Keycloak rechaza al cliente OIDC (`unauthorized_client`, o
+`invalid_client` según RFC 6749), el login y la renovación responden 500 `identity_provider_misconfigured` sin
+detalle interno, y el cliente y el código OAuth quedan en el log de error. Antes llegaba disfrazado de 401
+`invalid_credentials`. Un portal sin secret configurado falla del mismo modo, sin llegar a llamar a Keycloak.
+Solo se lee el código de error, que es estándar, y no la descripción.
+
+**10. Rate limiting.** `auth-login` es de 10 peticiones por minuto por IP, en ventana fija. El portal tiene
+contadores propios con los mismos umbrales: `auth-portal-login` (10/min·IP) y `auth-portal-refresh`
+(20/min·IP), así que las dos puertas no se agotan entre sí. CP015 necesita a lo sumo seis intentos (cinco
+fallos y el que muestra el bloqueo) y no se topa con un 429; las pruebas lo cubren en los dos canales. Dos
+matices del stack real:
+- Con `failureFactor: 5`, **el quinto fallo consecutivo ya responde 423**.
+- El realm tiene `quickLoginCheckMilliSeconds: 1000`: dos fallos a menos de un segundo bloquean 60 segundos
+  sin llegar al quinto. En QA manual no pasa; en pruebas automatizadas hay que espaciar los intentos.
+
+**11. Forwarded headers configurables.** Sección `ForwardedHeaders` (`Enabled`, `ForwardLimit`,
+`KnownProxies`, `KnownNetworks`), apagada por defecto. Habilitada sin proxies ni redes, la aplicación no
+arranca: ASP.NET Core confiaría en cualquier origen y la IP de la auditoría se podría falsear con un header.
+El middleware va primero en el pipeline, para que el log de peticiones, el rate limiting y la auditoría vean
+la IP del usuario. Esto importa también para el rate limiting: detrás de NGINX sin esta configuración, todo el
+hospital compartiría los mismos 10 intentos por minuto.
+
+**12. CORS.** En desarrollo, solo `http://localhost:5173`: el puerto 3000 salió porque nada lo usaba. En
+`appsettings.json` la lista queda vacía y cada despliegue la configura. Los orígenes se leen al construir las
+opciones, no al registrar los servicios, para que siempre valga la configuración del ambiente.
+
+**13. Activación que lleva al portal (H2, CP005 reescrito).** El pedido de `execute-actions-email` agrega
+`client_id=cauce-web-portal` y `redirect_uri={portal}/login`. Keycloak rechaza la petición si la URI no está
+entre las redirect URIs del cliente. La URL base se toma de `Email:PortalAppBaseUrl`, que ya existía para los
+enlaces de restablecimiento: el prompt pedía una clave `Portal:BaseUrl`, pero dos claves con el mismo valor
+reabren el problema del puerto sin unificar. Verificado de punta a punta en el stack local:
+- el correo sale en español ("Actualiza tu cuenta") y el token del enlace trae `azp=cauce-web-portal` y
+  `reduri=http://localhost:5173/login`, con vigencia de 12 h;
+- las pantallas están en español ("Actualización de contraseña", "Nueva contraseña") y terminan en "Tu cuenta
+  se ha actualizado. « Volver a la aplicación", con enlace a `http://localhost:5173/login`;
+- el primer login por el portal pasa la cuenta a `active` y audita `account_activation` y `login`;
+- el enlace ya usado responde "Acción caducada".
+
+**14. Propagación al Keycloak que ya corre.** `--import-realm` solo importa realms inexistentes, así que un
+cambio en `realm.json` no llega a un Keycloak ya importado, y borrar el realm haría perder los usuarios. El
+script idempotente `infrastructure/keycloak/apply-portal-client.sh` ajusta el cliente con `kcadm` dentro del
+contenedor, sin tocar usuarios ni volúmenes. Si el secret sigue siendo el marcador del import
+(`REGENERAR_DESPUES_DEL_IMPORT`), lo regenera; si ya es uno real, lo conserva. Al final imprime el secret
+vigente. En la base local el secret era el marcador: el portal no habría podido autenticar nunca.
+
+**15. Cuentas de desarrollo** (solo Development, todas en `@cauce.local`).
+- `nutricionista.demo@cauce.local` pasa a contraseña **permanente** `Portal#2026`: el portal nunca muestra una
+  pantalla de Keycloak donde cambiar una temporal. El seeder la aplica en las instalaciones nuevas, y el paso
+  único `infrastructure/keycloak/dev-demo-nutritionist-password.sh` en las bases existentes.
+- `nutricionista.inactivo@cauce.local`: deshabilitada en Keycloak, con contraseña, y `Suspended` en el
+  backend. Queda `Suspended` porque no existe una transición a `Inactive` para nutricionistas (actas A55 y
+  A56).
+- `nutricionista.pendiente@cauce.local`: pendiente de activación, sin contraseña y sin correo enviado.
+- `paciente.demo@cauce.local` no cambia.
+- `IKeycloakAdminClient.SetTemporaryPasswordAsync` se retiró: no le quedaba ningún llamador.
+
+### Desviación consciente de RFC 9700 §2.4
+
+RFC 9700 (OAuth 2.0 Security Best Current Practice, enero de 2025), §2.4: "The resource owner password
+credentials grant MUST NOT be used". El móvil ya lo usaba y el portal pasa a usarlo. Se mantiene de forma
+consciente, con estos controles compensatorios:
+
+- **Clientes propios del sistema.** Las credenciales solo se escriben en la app y el portal de Cauce, contra
+  el backend de Cauce. No hay clientes de terceros que pidan la contraseña del usuario, que es el riesgo
+  central que motiva la prohibición.
+- **TLS** entre los clientes y el backend en el despliegue, y entre el backend y Keycloak dentro de la red del
+  hospital.
+- **Fuerza bruta de Keycloak**: `failureFactor: 5`, espera creciente hasta 900 s y chequeo anti-ráfaga.
+- **Auditoría de cada intento**, exitoso o no, con IP, canal y causa interna (punto 8).
+- **Secret fuera del navegador.** El del portal vive solo en el backend. El móvil es un cliente público sin
+  secret, como exige su naturaleza de app instalada.
+- **Superficie del token en el portal**: refresh token en cookie `HttpOnly` y `SameSite=Strict` con header
+  contra CSRF; access token de 15 minutos solo en memoria; rotación de refresh tokens en cada uso.
+
+**Trabajo futuro:** migrar a Authorization Code + PKCE. En el portal, con un BFF o con la pantalla de login de
+Keycloak con tema propio; en el móvil, con AppAuth. Exige resolver primero cómo se auditan los inicios de
+sesión, porque con ese flujo el backend deja de verlos: haría falta un event listener de Keycloak o un callback
+del backend. Queda fuera del piloto.
+
+### Consecuencias
+
+- **Móvil:** no cambia nada. Si alguna vez enviara otro `clientId`, recibiría 400.
+- **Portal:** llama con `credentials: "include"`, envía `X-Cauce-Portal: 1` en `refresh` y `logout`, llama a
+  `refresh` al cargar para recuperar la sesión y vuelve al login ante un 401. La cookie no se borra en una
+  renovación fallida (el manejador de errores limpia los headers de la respuesta); expira sola y el siguiente
+  login la reemplaza.
+- **Despliegue (Deployment-1):**
+  - TLS;
+  - portal y API en el mismo sitio (por la cookie `SameSite=Strict`);
+  - `Cors:AllowedOrigins` con la URL del portal;
+  - `PortalSession:CookieSecure=true`;
+  - `Email:PortalAppBaseUrl` con la URL pública del portal;
+  - `ForwardedHeaders` con las IP de NGINX;
+  - `CAUCE_Keycloak__WebPortalClientSecret` como variable de entorno;
+  - las redirect URIs del cliente del portal apuntando al portal real (variable `PORTAL_URL` del script);
+  - `KC_HOSTNAME` y el SMTP del hospital en el realm, que ya pedía A52.
+- **Configuración por developer:** un user-secret nuevo, `Keycloak:WebPortalClientSecret`. El paso a paso
+  para Windows está en `docs/dev/SEED-USERS.md`.
+- **Sigue abierta la asimetría del acta [A48](#acta-a48-asimetría-en-la-persistencia-de-la-auditoría-de-intentos-anónimos)**:
+  `password-reset/request` sigue sin persistir la auditoría de un correo inexistente. Su bloque es previo al
+  despliegue.
+- **Observación sin resolver, fuera de alcance:** en esta máquina los `.sh` de `infrastructure` están en CRLF
+  (`core.autocrlf=true` y sin `.gitattributes`). Los scripts nuevos quitan el `\r` al ejecutarse, pero el
+  script de init de Postgres fallaría con un volumen nuevo creado desde un checkout de Windows.
+
+### Referencias
+
+- `src/Cauce.Api/Controllers/PortalAuthController.cs`, `src/Cauce.Api/Middleware/AuditingMiddleware.cs`,
+  `src/Cauce.Api/Configuration/ForwardedHeadersSetup.cs`, `src/Cauce.Api/Configuration/PortalSessionOptions.cs`
+- `src/Cauce.Application/Identity/UseCases/Login/LoginCommandHandler.cs`, `.../RefreshToken/`, `.../Logout/`,
+  `src/Cauce.Application/Identity/Services/PortalAccessRules.cs`, `src/Cauce.Application/Common/Identity/`
+- `src/Cauce.Infrastructure/Identity/KeycloakTokenClient.cs`, `KeycloakAdminClient.cs`,
+  `src/Cauce.Infrastructure/Persistence/Seeders/QaNutritionistsSeeder.cs`
+- `infrastructure/keycloak/import/realm.json`, `apply-portal-client.sh`, `dev-demo-nutritionist-password.sh`
+- `docs/api/CONTRACT-IDENTITY-v1.md` v1.4.0 §2.12, `docs/api/ENDPOINTS.md` v1.7.0 §2.b
+- Actas [A48](#acta-a48-asimetría-en-la-persistencia-de-la-auditoría-de-intentos-anónimos),
+  [A51](#acta-a51-mecanismo-de-activación-de-cuentas-de-nutricionista),
+  [A52](#acta-a52-enlace-de-keycloak-para-que-el-nutricionista-defina-su-contraseña-y-su-reenvío),
+  [A55](#acta-a55-deuda-diferida--la-suspensión-no-corta-sesiones-ni-tokens-ya-emitidos).
+- RFC 9700 §2.4; RFC 6749 §5.2.
+
+---
+
+## Acta A69: Contrato del portal para la revisión HITL y el detalle del paciente
+
+**Estado:** Aprobada, implementada en Portal listo 1. Incluye un cambio incompatible en `modify`
+**Fecha:** 2026-09-26
+**Aprobado por:** Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend, DTOs de recomendación, detalle del paciente para el nutricionista y endpoints
+HITL. Contrato: `openapi-v1.6.0.json`.
+
+---
+
+### Contexto
+
+La Fase 0 del portal encontró que la cola de revisión no decía de qué paciente era cada fila, que el título y
+la descripción de una recomendación manual no llegaban a ningún DTO, y que el detalle del paciente respondía
+404 para un paciente vinculado que todavía no había creado su perfil. Además, `modify` no exigía clave de
+idempotencia, a diferencia de aprobar y rechazar.
+
+### Decisión
+
+**1. Detalle de la recomendación.** `RecommendationDetailDto` suma `title`, `description`, `source`,
+`isActive`, `archivedAt`, `archiveReason` y `validUntil`. Es aditivo. Las recomendaciones del motor traen
+`title` y `description` en `null`.
+
+**2. Cola de revisión.** `GET /recommendations/pending-review` devuelve `PendingReviewRecommendationDto`: el
+resumen anterior más `patientId` y `patientFullName`, resueltos en una sola consulta para toda la página
+(`IUserRepository.GetFullNamesAsync`). El JSON es un superconjunto del anterior; cambia el nombre del esquema.
+
+**3. Detalle del paciente.** `GET /nutritionists/me/patients/{id}` suma `biologicalSex`, `diagnosisDate` y
+`medications`. Sin perfil responde **200** con `onboardingCompleted: false`, alergias vacías y los campos
+clínicos en `null`, en lugar de 404: los vínculos por canje post-registro (acta A41) aparecen en el panel
+antes del perfil. `age`, `bmi`, `bmiCategory` e `ibsSubtype` pasan a ser anulables. Para un cliente tipado es
+un cambio incompatible, pero todavía no hay consumidor.
+
+**4. El código de paciente no se expone.** El prompt lo pedía en la cola, el panel y el detalle. El acta
+[A59](#acta-a59-código-correlativo-de-paciente-para-exportaciones-y-reportes) lo deja fuera de esas vistas por
+seudonimización, no por alcance: "Agregar ahí el código pondría código y nombre en la misma pantalla, que es
+exactamente lo que el seudónimo existe para evitar". A59 manda, y así lo confirmó Kiwicha. Las pruebas
+verifican que la clave no aparece. El mockup P16 muestra nombre y código juntos: hay que corregirlo del lado
+del diseño.
+
+**5. Visibilidad de la nota y del motivo del rechazo.** La nota del nutricionista sigue visible para el
+paciente al aprobar, modificar o crear manual (HU0015 CA2, HU0017 CA3), en `nutritionistNote`. El motivo de
+un rechazo nunca le llega (HU0017 CA2): la recomendación `Rejected` no aparece en su listado, su detalle
+responde 404 y el push del rechazo no incluye el motivo. Las tres cosas quedan cubiertas por pruebas.
+
+**6. `modify` exige `Idempotency-Key`.** Igual que aprobar y rechazar. **Cambio incompatible:** sin la clave
+responde 400 con `errors.clientGuid`. Fuera de las pruebas nadie lo llamaba: el paquete generado del móvil
+incluye el método, pero el código de la app nunca lo usa. Un reintento con la misma clave responde 204 en
+lugar de 409 `conflict_state`.
+
+**7. Mínimos de la nota clínica.** No cambian: 20 caracteres al aprobar (HU0017 CA1), 10 al rechazar, al
+modificar (HU0017 CA3) y en la manual (HU0029). El XML doc de `ApproveRecommendationRequest` decía 10 y se
+corrigió; los cuatro quedan escritos en `ENDPOINTS.md`.
+
+**8. Versión del contrato.** `openapi-v1.6.0.json`: 60 paths, 68 operaciones y 122 esquemas. Por la
+convención del proyecto, un bloque sube la versión menor aunque traiga cambios incompatibles, como pasó en la
+v1.2.0 y la v1.3.0: se declaran en el historial. Se retiró la v1.5.0. `ENDPOINTS.md` pasa a la v1.7.0 y
+`CONTRACT-IDENTITY-v1.md` a la v1.4.0.
+
+### Consecuencias
+
+- El portal puede mostrar la cola con el nombre del paciente sin abrir cada detalle, y el detalle de una
+  manual con su título y descripción.
+- Siguen fuera de alcance, en Portal listo 2: el historial del paciente para el nutricionista (H5), las
+  recomendaciones por paciente (H4), el triaje y el ciclo IBS-SSS (H7), los estados terminales y el archivado
+  de `Delivered` (H8), las notificaciones (H9), el glosario (H10), el push (H11), el piloto (H12) y la
+  suspensión (H13).
+
+### Referencias
+
+- `src/Cauce.Application/Recommendations/Dtos/RecommendationDetailDto.cs`,
+  `PendingReviewRecommendationDto.cs`, `Mapping/RecommendationsMappings.cs`
+- `src/Cauce.Application/Patients/UseCases/GetAssignedPatientDetail/`
+- `src/Cauce.Application/Recommendations/UseCases/ModifyRecommendation/`
+- `docs/api/openapi-v1.6.0.json`, `docs/api/ENDPOINTS.md` v1.7.0
+- Actas [A41](#acta-a41-endpoint-de-canje-de-código-de-invitación-post-registro),
+  [A59](#acta-a59-código-correlativo-de-paciente-para-exportaciones-y-reportes),
+  [A68](#acta-a68-autenticación-del-portal-web-a-través-del-backend).
 
 ---
