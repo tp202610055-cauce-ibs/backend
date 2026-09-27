@@ -64,4 +64,15 @@ public interface IUserRepository
     /// <returns>El nombre del rol.</returns>
     /// <exception cref="InvalidOperationException">Si el rol no existe en el catálogo.</exception>
     Task<string> GetRoleNameAsync(int roleId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Obtiene el nombre completo de varias cuentas en una sola consulta. Lo usan los listados que
+    /// muestran a qué paciente pertenece cada fila, como la cola de revisión del nutricionista (acta A69).
+    /// </summary>
+    /// <param name="userIds">Identificadores de las cuentas.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El nombre completo por identificador; las cuentas inexistentes no aparecen.</returns>
+    Task<IReadOnlyDictionary<Guid, string>> GetFullNamesAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken ct = default);
 }

@@ -12,4 +12,4 @@ namespace Cauce.Application.Recommendations.UseCases.ListPendingReviewForNutriti
 /// <param name="PageSize">Tamaño de página.</param>
 public sealed record ListPendingReviewForNutritionistQuery(
     int Page,
-    int PageSize) : IRequest<PagedResult<RecommendationSummaryDto>>;
+    int PageSize) : IRequest<PagedResult<PendingReviewRecommendationDto>>;

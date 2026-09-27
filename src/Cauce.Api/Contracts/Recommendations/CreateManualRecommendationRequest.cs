@@ -7,7 +7,7 @@ namespace Cauce.Api.Contracts.Recommendations;
 /// <param name="Title">Título de la recomendación.</param>
 /// <param name="Description">Descripción de la recomendación.</param>
 /// <param name="Steps">Pasos accionables, opcional.</param>
-/// <param name="ClinicalNote">Nota clínica del nutricionista.</param>
+/// <param name="ClinicalNote">Nota clínica del nutricionista (entre 10 y 2000 caracteres, US29).</param>
 /// <param name="ValidUntil">Fecha de vigencia, o <see langword="null"/> si no caduca.</param>
 public sealed record CreateManualRecommendationRequest(
     Guid PatientId,

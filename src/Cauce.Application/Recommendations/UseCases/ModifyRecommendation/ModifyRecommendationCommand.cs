@@ -1,3 +1,4 @@
+using Cauce.Application.Common.Idempotency;
 using Cauce.Domain.Recommendations.Enums;
 using MediatR;
 
@@ -5,7 +6,8 @@ namespace Cauce.Application.Recommendations.UseCases.ModifyRecommendation;
 
 /// <summary>
 /// Comando para aprobar una recomendación tras modificarla (US17 CA03). Solo válido sobre
-/// recomendaciones en revisión pendiente.
+/// recomendaciones en revisión pendiente. Es idempotente respecto del <see cref="ClientGuid"/> tomado del
+/// header <c>Idempotency-Key</c>, igual que aprobar y rechazar (acta A69).
 /// </summary>
 /// <param name="RecommendationId">Identificador de la recomendación.</param>
 /// <param name="ClinicalNote">Nota clínica de la modificación.</param>
@@ -13,13 +15,15 @@ namespace Cauce.Application.Recommendations.UseCases.ModifyRecommendation;
 /// <param name="Title">Nuevo título, o <see langword="null"/> para conservarlo.</param>
 /// <param name="Description">Nueva descripción, o <see langword="null"/> para conservarla.</param>
 /// <param name="Steps">Nuevos pasos, o <see langword="null"/> para conservarlos.</param>
+/// <param name="ClientGuid">Clave de idempotencia (UUID v4).</param>
 public sealed record ModifyRecommendationCommand(
     Guid RecommendationId,
     string ClinicalNote,
     IReadOnlyList<ModifyRecommendationItemInput>? Items,
     string? Title,
     string? Description,
-    IReadOnlyList<string>? Steps) : IRequest<Unit>;
+    IReadOnlyList<string>? Steps,
+    Guid ClientGuid) : IRequest<Unit>, IIdempotentCommand;
 
 /// <summary>
 /// Ítem propuesto en una modificación de recomendación.

@@ -26,6 +26,25 @@ public static class RecommendationsMappings
     }
 
     /// <summary>
+    /// Proyecta una recomendación a la fila de la cola de revisión del nutricionista (acta A69).
+    /// </summary>
+    /// <param name="recommendation">Recomendación en revisión.</param>
+    /// <param name="patientFullName">Nombre completo del paciente al que pertenece.</param>
+    /// <returns>La fila de la cola.</returns>
+    public static PendingReviewRecommendationDto ToPendingReview(Recommendation recommendation, string patientFullName)
+    {
+        return new PendingReviewRecommendationDto(
+            recommendation.Id,
+            recommendation.PatientId,
+            patientFullName,
+            recommendation.Status,
+            recommendation.ConfidenceScore.Value,
+            recommendation.Items.Count,
+            recommendation.GeneratedAt,
+            recommendation.ExpiresAt);
+    }
+
+    /// <summary>
     /// Proyecta una recomendación a su detalle completo, enriqueciendo sus ítems con los nombres
     /// legibles de los alimentos.
     /// </summary>
@@ -65,7 +84,14 @@ public static class RecommendationsMappings
             recommendation.Feedback is null ? null : ToFeedbackDto(recommendation.Feedback),
             reviewedByNutritionistName,
             recommendation.Steps ?? [],
-            supportingData);
+            supportingData,
+            recommendation.Title,
+            recommendation.Description,
+            recommendation.Source,
+            recommendation.IsActive,
+            recommendation.ArchivedAt,
+            recommendation.ArchiveReason,
+            recommendation.ValidUntil);
     }
 
     /// <summary>

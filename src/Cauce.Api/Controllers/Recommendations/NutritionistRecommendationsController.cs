@@ -39,14 +39,15 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     }
 
     /// <summary>
-    /// Lista, paginadas, las recomendaciones pendientes de revisión de los pacientes asignados.
+    /// Lista, paginadas, las recomendaciones pendientes de revisión de los pacientes asignados. Cada fila
+    /// incluye el identificador y el nombre completo del paciente (acta A69).
     /// </summary>
     /// <param name="page">Número de página.</param>
     /// <param name="pageSize">Tamaño de página.</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>La página de recomendaciones pendientes de revisión.</returns>
     [HttpGet("pending-review")]
-    [ProducesResponseType(typeof(PagedResult<RecommendationSummaryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PagedResult<PendingReviewRecommendationDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ListPendingReview(
         [FromQuery] int page = 1,
@@ -129,10 +130,12 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     }
 
     /// <summary>
-    /// Aprueba una recomendación en revisión tras modificar sus ítems y/o su contenido (US17 CA03).
+    /// Aprueba una recomendación en revisión tras modificar sus ítems y/o su contenido (US17 CA03). Requiere
+    /// el header <c>Idempotency-Key</c>, como aprobar y rechazar (acta A69).
     /// </summary>
     /// <param name="id">Identificador de la recomendación.</param>
     /// <param name="request">Cambios y nota clínica de la modificación.</param>
+    /// <param name="idempotencyKey">Clave de idempotencia del header <c>Idempotency-Key</c>.</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Sin contenido.</returns>
     [HttpPost("{id:guid}/modify")]
@@ -140,11 +143,21 @@ public sealed class NutritionistRecommendationsController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Modify(Guid id, [FromBody] ModifyRecommendationRequest request, CancellationToken ct)
+    public async Task<IActionResult> Modify(
+        Guid id,
+        [FromBody] ModifyRecommendationRequest request,
+        [FromHeader(Name = "Idempotency-Key")] Guid idempotencyKey,
+        CancellationToken ct)
     {
         await _mediator.Send(
             new ModifyRecommendationCommand(
-                id, request.ClinicalNote, request.Items, request.Title, request.Description, request.Steps),
+                id,
+                request.ClinicalNote,
+                request.Items,
+                request.Title,
+                request.Description,
+                request.Steps,
+                idempotencyKey),
             ct);
         return NoContent();
     }

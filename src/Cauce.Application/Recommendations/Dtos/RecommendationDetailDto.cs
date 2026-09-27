@@ -25,6 +25,20 @@ namespace Cauce.Application.Recommendations.Dtos;
 /// <param name="ReviewedByNutritionistName">Nombre completo del nutricionista revisor, o <see langword="null"/> (bloque 2, US15 CA02).</param>
 /// <param name="Steps">Pasos accionables de la recomendación; vacío si no tiene (bloque 3).</param>
 /// <param name="SupportingData">Datos de respaldo clínico de la ventana de análisis (bloque 4).</param>
+/// <param name="Title">
+/// Título de la recomendación, o <see langword="null"/>. Lo tienen las recomendaciones manuales y las que el
+/// nutricionista modificó; las del motor no traen uno propio (acta A69).
+/// </param>
+/// <param name="Description">Descripción de la recomendación, o <see langword="null"/> (acta A69).</param>
+/// <param name="Source">Origen: generada por el motor o creada manualmente por el nutricionista.</param>
+/// <param name="IsActive">
+/// Indica si la recomendación sigue vigente. Archivar la marca inactiva sin cambiar su estado (acta A22).
+/// </param>
+/// <param name="ArchivedAt">Momento del archivado, en UTC, o <see langword="null"/> si sigue activa.</param>
+/// <param name="ArchiveReason">Motivo del archivado, o <see langword="null"/> si sigue activa.</param>
+/// <param name="ValidUntil">
+/// Fecha hasta la que rige, en UTC, o <see langword="null"/> si no caduca. Solo la fijan las manuales.
+/// </param>
 public sealed record RecommendationDetailDto(
     Guid RecommendationId,
     Guid PatientId,
@@ -44,4 +58,11 @@ public sealed record RecommendationDetailDto(
     RecommendationFeedbackDto? Feedback,
     string? ReviewedByNutritionistName,
     IReadOnlyList<string> Steps,
-    RecommendationSupportingDataDto SupportingData);
+    RecommendationSupportingDataDto SupportingData,
+    string? Title,
+    string? Description,
+    RecommendationSource Source,
+    bool IsActive,
+    DateTime? ArchivedAt,
+    ArchiveReason? ArchiveReason,
+    DateTime? ValidUntil);
