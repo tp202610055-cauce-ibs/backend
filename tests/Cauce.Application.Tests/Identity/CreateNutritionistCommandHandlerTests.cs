@@ -58,7 +58,7 @@ public sealed class CreateNutritionistCommandHandlerTests
             Arg.Is<User>(user => user.Status == UserStatus.PendingActivation && user.KeycloakId == KeycloakId),
             Arg.Any<CancellationToken>());
         // Ninguna contraseña: la define el propio nutricionista con el enlace de Keycloak (acta A52).
-        await _keycloakAdminClient.DidNotReceiveWithAnyArgs().SetTemporaryPasswordAsync(default!, default!, default);
+        await _keycloakAdminClient.DidNotReceiveWithAnyArgs().ResetPasswordAsync(default!, default!, default);
     }
 
     [Fact]

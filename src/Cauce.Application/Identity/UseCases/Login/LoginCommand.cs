@@ -1,3 +1,4 @@
+using Cauce.Application.Common.Identity;
 using MediatR;
 
 namespace Cauce.Application.Identity.UseCases.Login;
@@ -9,8 +10,18 @@ namespace Cauce.Application.Identity.UseCases.Login;
 /// </summary>
 /// <param name="Email">Correo electrónico.</param>
 /// <param name="Password">Contraseña.</param>
-/// <param name="ClientId">Identificador del cliente OIDC (móvil o portal web).</param>
-public sealed record LoginCommand(string Email, string Password, string ClientId) : IRequest<LoginResult>;
+/// <param name="ClientId">
+/// Identificador del cliente OIDC. Tiene que ser el del canal: <c>cauce-mobile</c> en el móvil y
+/// <c>cauce-web-portal</c> en el portal (acta A68).
+/// </param>
+/// <param name="Channel">
+/// Canal de la petición. El portal solo admite nutricionistas que no estén suspendidos ni inactivos.
+/// </param>
+public sealed record LoginCommand(
+    string Email,
+    string Password,
+    string ClientId,
+    LoginChannel Channel = LoginChannel.Mobile) : IRequest<LoginResult>;
 
 /// <summary>
 /// Resultado del inicio de sesión.

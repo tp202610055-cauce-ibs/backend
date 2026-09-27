@@ -15,8 +15,11 @@ public sealed class ClientUrlProvider : IClientUrlProvider
 {
     private const string PasswordResetPath = "auth/password-reset";
 
+    private const string PortalLoginPath = "login";
+
     private readonly string _mobileBaseUrl;
     private readonly string _portalBaseUrl;
+    private readonly bool _portalConfigured;
 
     /// <summary>
     /// Inicializa el proveedor con las URL base de la app móvil y del portal web.
@@ -26,6 +29,7 @@ public sealed class ClientUrlProvider : IClientUrlProvider
     {
         _mobileBaseUrl = NormalizeBaseUrl(emailOptions.Value.MobileAppBaseUrl);
         _portalBaseUrl = NormalizeBaseUrl(emailOptions.Value.PortalAppBaseUrl);
+        _portalConfigured = !string.IsNullOrWhiteSpace(emailOptions.Value.PortalAppBaseUrl);
     }
 
     /// <inheritdoc />
@@ -40,6 +44,12 @@ public sealed class ClientUrlProvider : IClientUrlProvider
         };
 
         return QueryHelpers.AddQueryString($"{baseUrl}{PasswordResetPath}", "token", plainToken);
+    }
+
+    /// <inheritdoc />
+    public string? BuildPortalLoginUrl()
+    {
+        return _portalConfigured ? $"{_portalBaseUrl}{PortalLoginPath}" : null;
     }
 
     /// <summary>

@@ -13,7 +13,8 @@ public static class OidcClients
     public const string Mobile = "cauce-mobile";
 
     /// <summary>
-    /// Portal web React para nutricionistas. Cliente confidencial.
+    /// Portal web React para nutricionistas. Cliente confidencial con Direct Access Grants: el backend
+    /// pide sus tokens con el secret, que nunca sale de la configuración del servidor (acta A68).
     /// </summary>
     public const string WebPortal = "cauce-web-portal";
 
@@ -25,5 +26,16 @@ public static class OidcClients
     public static bool IsKnown(string? clientId)
     {
         return clientId is Mobile or WebPortal;
+    }
+
+    /// <summary>
+    /// Devuelve el único cliente OIDC admitido en un canal de sesión. Las rutas del móvil solo aceptan
+    /// <see cref="Mobile"/> y las del portal solo <see cref="WebPortal"/> (acta A68).
+    /// </summary>
+    /// <param name="channel">Canal de la petición.</param>
+    /// <returns>El identificador del cliente OIDC del canal.</returns>
+    public static string ForChannel(LoginChannel channel)
+    {
+        return channel == LoginChannel.Portal ? WebPortal : Mobile;
     }
 }

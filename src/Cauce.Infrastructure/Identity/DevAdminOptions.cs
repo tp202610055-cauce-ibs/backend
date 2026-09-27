@@ -27,7 +27,9 @@ public sealed class DevAdminOptions
     public string FullName { get; init; } = string.Empty;
 
     /// <summary>
-    /// Contraseña temporal del nutricionista de prueba.
+    /// Contraseña permanente del nutricionista de prueba. Es permanente porque el portal inicia sesión
+    /// a través del backend y nunca muestra una pantalla de Keycloak donde cambiar una temporal (acta A68).
+    /// Vive solo en la configuración de desarrollo y nunca se registra en los logs.
     /// </summary>
-    public string TemporaryPassword { get; init; } = string.Empty;
+    public string Password { get; init; } = string.Empty;
 }

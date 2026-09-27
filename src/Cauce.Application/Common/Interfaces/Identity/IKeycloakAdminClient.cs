@@ -28,19 +28,6 @@ public interface IKeycloakAdminClient
         CancellationToken ct = default);
 
     /// <summary>
-    /// Asigna una contraseña temporal que obliga al usuario a cambiarla en el
-    /// próximo inicio de sesión (required action <c>UPDATE_PASSWORD</c>).
-    /// </summary>
-    /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
-    /// <param name="password">Contraseña temporal.</param>
-    /// <param name="ct">Token de cancelación.</param>
-    /// <returns>Tarea que representa la operación asíncrona.</returns>
-    Task SetTemporaryPasswordAsync(
-        string keycloakUserId,
-        string password,
-        CancellationToken ct = default);
-
-    /// <summary>
     /// Establece una contraseña permanente para el usuario.
     /// </summary>
     /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
@@ -66,7 +53,8 @@ public interface IKeycloakAdminClient
     /// Pide a Keycloak que envíe al usuario el enlace para definir su contraseña
     /// (<c>execute-actions-email</c> con la acción <c>UPDATE_PASSWORD</c>). El enlace es de un solo uso y
     /// vence según <c>actionTokenGeneratedByAdminLifespan</c> del realm; el correo sale por el SMTP
-    /// configurado en el realm, no por el del backend (acta A52).
+    /// configurado en el realm, no por el del backend (acta A52). Si la URL del portal está configurada,
+    /// al terminar Keycloak ofrece volver al login del portal (acta A68).
     /// </summary>
     /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
     /// <param name="ct">Token de cancelación.</param>
@@ -130,6 +118,19 @@ public interface IKeycloakAdminClient
     Task<bool> GetUserEmailVerifiedAsync(string keycloakUserId, CancellationToken ct = default);
 
     /// <summary>
+    /// Consulta si el usuario está habilitado en Keycloak y qué acciones tiene pendientes. Se usa para
+    /// explicar, en la auditoría, por qué se rechazó un inicio de sesión sin interpretar los textos de
+    /// error de Keycloak (acta A68).
+    /// </summary>
+    /// <param name="keycloakUserId">Identificador del usuario en Keycloak.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El estado del usuario en Keycloak.</returns>
+    /// <exception cref="Cauce.Application.Common.Exceptions.KeycloakIntegrationException">
+    /// Si el usuario no existe en Keycloak o la Admin API responde con un error.
+    /// </exception>
+    Task<KeycloakUserState> GetUserStateAsync(string keycloakUserId, CancellationToken ct = default);
+
+    /// <summary>
     /// Busca un usuario por correo electrónico exacto.
     /// </summary>
     /// <param name="email">Correo electrónico a buscar.</param>
@@ -147,6 +148,16 @@ public interface IKeycloakAdminClient
 /// <param name="Email">Correo electrónico.</param>
 /// <param name="EmailVerified">Indica si el correo está verificado.</param>
 public sealed record KeycloakUserDto(string Id, string Email, bool EmailVerified);
+
+/// <summary>
+/// Estado de un usuario en Keycloak relevante para decidir si puede iniciar sesión.
+/// </summary>
+/// <param name="Enabled">Indica si el usuario está habilitado.</param>
+/// <param name="RequiredActions">
+/// Acciones que Keycloak exige completar antes de emitir tokens, como <c>UPDATE_PASSWORD</c> o
+/// <c>VERIFY_EMAIL</c>. Vacía si no hay ninguna.
+/// </param>
+public sealed record KeycloakUserState(bool Enabled, IReadOnlyList<string> RequiredActions);
 
 /// <summary>
 /// Estado de detección de fuerza bruta que Keycloak mantiene por usuario.

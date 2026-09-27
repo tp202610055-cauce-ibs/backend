@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Cauce.Api.Authorization;
 using Cauce.Application.Common.Exceptions;
 using Cauce.Domain.ClinicalRegistry.Exceptions;
 using Cauce.Domain.Common.Exceptions;
@@ -271,6 +272,16 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status401Unauthorized, "Credenciales inválidas", "invalid_credentials", exception.Message),
             InvalidRefreshTokenException => (
                 StatusCodes.Status401Unauthorized, "Token de refresco inválido", "invalid_refresh_token", exception.Message),
+            UnsupportedOidcClientException => (
+                StatusCodes.Status400BadRequest, "Cliente no admitido", "unsupported_client", exception.Message),
+            // Cliente OIDC rechazado por Keycloak: es configuración del servidor, no credenciales del usuario.
+            // 500 sin detalle interno; el cliente y el código OAuth quedan solo en el log (acta A68).
+            IdentityProviderMisconfiguredException => (
+                StatusCodes.Status500InternalServerError, "Error de configuración del proveedor de identidad",
+                "identity_provider_misconfigured", "No se pudo completar la operación con el proveedor de identidad."),
+            PortalCsrfHeaderMissingException => (
+                StatusCodes.Status403Forbidden, "Falta el header de sesión del portal", "csrf_header_missing",
+                exception.Message),
             // Va antes del caso general de DomainException, del que hereda. Es inconsistencia entre
             // Keycloak y la base local, no un error del cliente: 500 con detalle genérico.
             UserLocalMissingException => (

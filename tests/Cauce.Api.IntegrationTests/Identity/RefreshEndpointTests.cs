@@ -109,7 +109,7 @@ public sealed class RefreshEndpointTests
     }
 
     [SkippableFact]
-    public async Task Refresh_UnknownClientId_Returns400ValidationError()
+    public async Task Refresh_UnknownClientId_Returns400UnsupportedClientAndAudits()
     {
         SkipIfUnavailable();
         var client = Factory.CreateClient();
@@ -122,8 +122,11 @@ public sealed class RefreshEndpointTests
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
+        // Desde el acta A68 el rechazo lo decide el handler, que lo deja auditado con su causa.
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        document.RootElement.GetProperty("errorCode").GetString().Should().Be("validation_error");
-        document.RootElement.GetProperty("errors").TryGetProperty("clientId", out _).Should().BeTrue();
+        document.RootElement.GetProperty("errorCode").GetString().Should().Be("unsupported_client");
+
+        var log = (await AuditLogsAsync(action: AuditActionType.FailedTokenRefresh)).Should().ContainSingle().Subject;
+        ContextValue(log, "cause").Should().Be("unsupported_client");
     }
 }

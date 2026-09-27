@@ -52,6 +52,13 @@ builder.Services.AddHostedService<IbsSssReminderWorker>();
 builder.Services.Configure<AdminApiKeyOptions>(
     builder.Configuration.GetSection(AdminApiKeyOptions.SectionName));
 
+// Sesión del portal web: cookie del refresh token y header contra CSRF (acta A68).
+builder.Services.Configure<PortalSessionOptions>(
+    builder.Configuration.GetSection(PortalSessionOptions.SectionName));
+
+// Forwarded headers para correr detrás de un proxy inverso; apagados por defecto (acta A68).
+builder.Services.AddCauceForwardedHeaders();
+
 // Opciones de Keycloak para configurar la validación de JWT.
 var keycloakOptions = builder.Configuration
     .GetSection(KeycloakOptions.SectionName)
@@ -89,21 +96,32 @@ builder.Services.AddAuthorizationBuilder()
     .AddPolicy("Patient", policy => policy.RequireRole("patient"))
     .AddPolicy("Nutritionist", policy => policy.RequireRole("nutritionist"));
 
-// 7. CORS según DEC-B3-02.
-var allowedOrigins = (builder.Configuration["Cors:AllowedOrigins"] ?? string.Empty)
-    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("CaucePortalPolicy", policy =>
+// 7. CORS según DEC-B3-02. Los orígenes salen de la configuración de cada ambiente: en desarrollo solo el
+// portal en localhost:5173; en el despliegue, los que se configuren (acta A68). Se leen al construir las
+// opciones y no aquí, para que valga la configuración que se agregue después, como la de las pruebas. El
+// header del portal va en la lista porque la renovación y el cierre de su sesión lo exigen contra CSRF.
+builder.Services.AddCors();
+builder.Services
+    .AddOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>()
+    .Configure<IConfiguration>((options, configuration) =>
     {
-        policy
-            .WithOrigins(allowedOrigins)
-            .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-            .WithHeaders("Authorization", "Content-Type", "Idempotency-Key", "X-Client-Guid")
-            .AllowCredentials();
+        var allowedOrigins = (configuration["Cors:AllowedOrigins"] ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        options.AddPolicy("CaucePortalPolicy", policy =>
+        {
+            policy
+                .WithOrigins(allowedOrigins)
+                .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                .WithHeaders(
+                    "Authorization",
+                    "Content-Type",
+                    "Idempotency-Key",
+                    "X-Client-Guid",
+                    PortalSessionOptions.CsrfHeaderName)
+                .AllowCredentials();
+        });
     });
-});
 
 // 8. Rate limiting según DEC-B3-03.
 builder.Services.AddRateLimiter(RateLimitingPolicies.Configure);
@@ -209,6 +227,10 @@ builder.Services.AddHealthChecks();
 
 // 13. Construcción de la aplicación.
 var app = builder.Build();
+
+// Primero del pipeline: el log de peticiones, el rate limiting y la auditoría tienen que ver la IP del
+// usuario y no la del proxy (acta A68).
+app.UseCauceForwardedHeaders();
 
 // 14. Pipeline de middleware.
 app.UseSerilogRequestLogging();

@@ -1,5 +1,6 @@
 using Cauce.Api.Configuration;
 using Cauce.Api.Contracts.Identity;
+using Cauce.Application.Common.Identity;
 using Cauce.Application.Identity.UseCases.ConfirmPasswordReset;
 using Cauce.Application.Identity.UseCases.Login;
 using Cauce.Application.Identity.UseCases.Logout;
@@ -79,6 +80,8 @@ public sealed class AuthController : BaseApiController
     /// <summary>
     /// Inicia sesión haciendo passthrough a Keycloak y devuelve los tokens emitidos. Ante
     /// credenciales inválidas responde 401 con un mensaje genérico (no revela si la cuenta existe).
+    /// Es la ruta del móvil: solo admite el cliente <c>cauce-mobile</c>, y cualquier otro responde 400
+    /// <c>unsupported_client</c>. El portal usa <c>/auth/portal/login</c> (acta A68).
     /// </summary>
     /// <param name="request">Credenciales y cliente OIDC.</param>
     /// <param name="ct">Token de cancelación.</param>
@@ -93,14 +96,17 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
-        var result = await _mediator.Send(new LoginCommand(request.Email, request.Password, request.ClientId), ct);
+        var result = await _mediator.Send(
+            new LoginCommand(request.Email, request.Password, request.ClientId, LoginChannel.Mobile),
+            ct);
         return Ok(result);
     }
 
     /// <summary>
     /// Renueva la sesión a partir de un refresh token vigente. Devuelve un juego de tokens nuevo,
     /// incluida la identidad del usuario. El realm rota los refresh tokens: el enviado aquí queda
-    /// revocado y el cliente debe persistir el que recibe.
+    /// revocado y el cliente debe persistir el que recibe. Solo admite el cliente <c>cauce-mobile</c>
+    /// (acta A68).
     /// </summary>
     /// <param name="request">Refresh token y cliente OIDC.</param>
     /// <param name="ct">Token de cancelación.</param>
@@ -114,12 +120,15 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken ct)
     {
-        var result = await _mediator.Send(new RefreshTokenCommand(request.RefreshToken, request.ClientId), ct);
+        var result = await _mediator.Send(
+            new RefreshTokenCommand(request.RefreshToken, request.ClientId, LoginChannel.Mobile),
+            ct);
         return Ok(result);
     }
 
     /// <summary>
-    /// Cierra sesión revocando el refresh token en Keycloak.
+    /// Cierra sesión revocando el refresh token en Keycloak. Solo admite el cliente <c>cauce-mobile</c>
+    /// (acta A68).
     /// </summary>
     /// <param name="request">Refresh token y cliente OIDC.</param>
     /// <param name="ct">Token de cancelación.</param>
@@ -131,7 +140,9 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout([FromBody] LogoutRequest request, CancellationToken ct)
     {
-        await _mediator.Send(new LogoutCommand(request.RefreshToken, request.ClientId), ct);
+        await _mediator.Send(
+            new LogoutCommand(request.RefreshToken, request.ClientId, LoginChannel.Mobile),
+            ct);
         return NoContent();
     }
 

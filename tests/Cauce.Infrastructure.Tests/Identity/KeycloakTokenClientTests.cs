@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Cauce.Application.Common.Exceptions;
 using Cauce.Domain.Identity.Exceptions;
 using Cauce.Infrastructure.Identity;
 using FluentAssertions;
@@ -17,6 +18,8 @@ namespace Cauce.Infrastructure.Tests.Identity;
 public sealed class KeycloakTokenClientTests
 {
     private const string Subject = "b8ebd09c-3bb3-4e7b-90dd-a55124bae0fd";
+
+    private const string PortalSecret = "portal-secret";
 
     [Fact]
     public async Task LoginAsync_MobileClient_RequestsOfflineAccessScope()
@@ -113,7 +116,130 @@ public sealed class KeycloakTokenClientTests
         handler.LastForm["refresh_token"].Should().Be("token-vencido");
     }
 
-    private static KeycloakTokenClient CreateClient(CapturingHandler handler)
+    [Fact]
+    public async Task LoginAsync_WebPortalClient_SendsItsClientSecret()
+    {
+        var handler = new CapturingHandler(TokenResponse());
+        var client = CreateClient(handler);
+
+        await client.LoginAsync("n@cauce.local", "Correct123!", "cauce-web-portal");
+
+        // El cliente del portal es confidencial: el secret viaja desde el backend y nunca desde el
+        // navegador (acta A68).
+        handler.LastForm["client_id"].Should().Be("cauce-web-portal");
+        handler.LastForm["client_secret"].Should().Be(PortalSecret);
+    }
+
+    [Fact]
+    public async Task LoginAsync_MobileClient_DoesNotSendAnySecret()
+    {
+        var handler = new CapturingHandler(TokenResponse());
+        var client = CreateClient(handler);
+
+        await client.LoginAsync("p@cauce.local", "Correct123!", "cauce-mobile");
+
+        handler.LastForm.Should().NotContainKey("client_secret");
+    }
+
+    [Fact]
+    public async Task LoginAsync_WebPortalWithoutSecret_ThrowsMisconfiguredWithoutCallingKeycloak()
+    {
+        var handler = new CapturingHandler(TokenResponse());
+        var client = CreateClient(handler, webPortalSecret: string.Empty);
+
+        var act = async () => await client.LoginAsync("n@cauce.local", "Correct123!", "cauce-web-portal");
+
+        (await act.Should().ThrowAsync<IdentityProviderMisconfiguredException>())
+            .Which.OAuthError.Should().Be("missing_client_secret");
+        handler.CallCount.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "unauthorized_client")]
+    [InlineData(HttpStatusCode.BadRequest, "unauthorized_client")]
+    [InlineData(HttpStatusCode.Unauthorized, "invalid_client")]
+    public async Task LoginAsync_ClientRejected_ThrowsMisconfiguredInsteadOfInvalidCredentials(
+        HttpStatusCode status,
+        string error)
+    {
+        var client = CreateClient(new CapturingHandler(ErrorResponse(status, error)));
+
+        var act = async () => await client.LoginAsync("n@cauce.local", "Correct123!", "cauce-web-portal");
+
+        (await act.Should().ThrowAsync<IdentityProviderMisconfiguredException>())
+            .Which.OAuthError.Should().Be(error);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.BadRequest)]
+    public async Task LoginAsync_InvalidGrant_ThrowsInvalidCredentials(HttpStatusCode status)
+    {
+        var client = CreateClient(new CapturingHandler(ErrorResponse(status, "invalid_grant")));
+
+        var act = async () => await client.LoginAsync("p@cauce.local", "Incorrecta1", "cauce-mobile");
+
+        await act.Should().ThrowAsync<InvalidCredentialsException>();
+    }
+
+    [Fact]
+    public async Task LoginAsync_ErrorBodyNotJson_ThrowsInvalidCredentials()
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.Unauthorized)
+        {
+            Content = new StringContent("no es json", Encoding.UTF8, "text/plain")
+        };
+        var client = CreateClient(new CapturingHandler(response));
+
+        var act = async () => await client.LoginAsync("p@cauce.local", "Incorrecta1", "cauce-mobile");
+
+        await act.Should().ThrowAsync<InvalidCredentialsException>();
+    }
+
+    [Fact]
+    public async Task RefreshAsync_WebPortalClient_SendsItsClientSecret()
+    {
+        var handler = new CapturingHandler(TokenResponse());
+        var client = CreateClient(handler);
+
+        await client.RefreshAsync("refresh-abc", "cauce-web-portal");
+
+        handler.LastForm["client_secret"].Should().Be(PortalSecret);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_ClientRejected_ThrowsMisconfiguredInsteadOfInvalidRefreshToken()
+    {
+        var client = CreateClient(new CapturingHandler(ErrorResponse(HttpStatusCode.Unauthorized, "unauthorized_client")));
+
+        var act = async () => await client.RefreshAsync("refresh-abc", "cauce-web-portal");
+
+        await act.Should().ThrowAsync<IdentityProviderMisconfiguredException>();
+    }
+
+    [Fact]
+    public async Task LogoutAsync_WebPortalClient_SendsItsClientSecret()
+    {
+        var handler = new CapturingHandler(new HttpResponseMessage(HttpStatusCode.NoContent));
+        var client = CreateClient(handler);
+
+        await client.LogoutAsync("refresh-abc", "cauce-web-portal");
+
+        handler.LastForm["client_secret"].Should().Be(PortalSecret);
+    }
+
+    [Fact]
+    public async Task LogoutAsync_ClientRejected_DoesNotThrow()
+    {
+        var client = CreateClient(new CapturingHandler(ErrorResponse(HttpStatusCode.Unauthorized, "unauthorized_client")));
+
+        var act = async () => await client.LogoutAsync("refresh-abc", "cauce-web-portal");
+
+        // Sigue siendo best-effort para el usuario; el error de configuración queda en el log.
+        await act.Should().NotThrowAsync();
+    }
+
+    private static KeycloakTokenClient CreateClient(CapturingHandler handler, string webPortalSecret = PortalSecret)
     {
         var httpClient = new HttpClient(handler);
         var options = Options.Create(new KeycloakOptions
@@ -122,7 +248,8 @@ public sealed class KeycloakTokenClientTests
             Realm = "cauce",
             Audience = "cauce-backend",
             ClientId = "cauce-backend",
-            ClientSecret = "test-secret"
+            ClientSecret = "test-secret",
+            WebPortalClientSecret = webPortalSecret
         });
 
         return new KeycloakTokenClient(httpClient, options, NullLogger<KeycloakTokenClient>.Instance);
@@ -149,6 +276,14 @@ public sealed class KeycloakTokenClientTests
         };
     }
 
+    private static HttpResponseMessage ErrorResponse(HttpStatusCode status, string error)
+    {
+        return new HttpResponseMessage(status)
+        {
+            Content = new StringContent($$"""{"error":"{{error}}"}""", Encoding.UTF8, "application/json")
+        };
+    }
+
     private static string Base64Url(string json)
     {
         return Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
@@ -171,10 +306,13 @@ public sealed class KeycloakTokenClientTests
 
         public Dictionary<string, string> LastForm { get; private set; } = [];
 
+        public int CallCount { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
+            CallCount++;
             var body = await request.Content!.ReadAsStringAsync(cancellationToken);
             LastForm = body
                 .Split('&', StringSplitOptions.RemoveEmptyEntries)

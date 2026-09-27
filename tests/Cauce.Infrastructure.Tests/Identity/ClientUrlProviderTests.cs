@@ -67,4 +67,26 @@ public sealed class ClientUrlProviderTests
 
         act.Should().Throw<ArgumentException>().WithParameterName("clientId");
     }
+
+    [Theory]
+    [InlineData("http://localhost:5173")]
+    [InlineData("http://localhost:5173/")]
+    public void BuildPortalLoginUrl_PortalConfigured_ReturnsTheLoginRoute(string portalBaseUrl)
+    {
+        var url = CreateProvider(portalBaseUrl: portalBaseUrl).BuildPortalLoginUrl();
+
+        url.Should().Be("http://localhost:5173/login");
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void BuildPortalLoginUrl_PortalNotConfigured_ReturnsNull(string portalBaseUrl)
+    {
+        // Sin URL del portal no se pide redirección: el enlace de activación sigue funcionando y la
+        // última pantalla de Keycloak solo confirma el cambio (acta A68).
+        var url = CreateProvider(portalBaseUrl: portalBaseUrl).BuildPortalLoginUrl();
+
+        url.Should().BeNull();
+    }
 }

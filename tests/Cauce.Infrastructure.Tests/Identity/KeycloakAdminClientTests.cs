@@ -1,10 +1,13 @@
 using System.Net;
 using System.Text;
 using Cauce.Application.Common.Exceptions;
+using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Infrastructure.Identity;
 using FluentAssertions;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using NSubstitute;
 
 namespace Cauce.Infrastructure.Tests.Identity;
 
@@ -156,10 +159,71 @@ public sealed class KeycloakAdminClientTests
         handler.LastAdminRequestUri.Query.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task SendUpdatePasswordEmailAsync_PortalConfigured_SendsPortalClientAndLoginRedirect()
+    {
+        var handler = new RoutingHandler(new HttpResponseMessage(HttpStatusCode.NoContent));
+        var client = CreateClient(handler, portalLoginUrl: "http://localhost:5173/login");
+
+        await client.SendUpdatePasswordEmailAsync(KeycloakId);
+
+        // El enlace del correo termina en el login del portal (acta A68). Sigue sin lifespan: la vigencia
+        // la fija el realm.
+        var query = QueryHelpers.ParseQuery(handler.LastAdminRequestUri!.Query);
+        query["client_id"].ToString().Should().Be("cauce-web-portal");
+        query["redirect_uri"].ToString().Should().Be("http://localhost:5173/login");
+        query.Should().NotContainKey("lifespan");
+        handler.LastAdminRequestBody.Should().Be("""["UPDATE_PASSWORD"]""");
+    }
+
+    [Fact]
+    public async Task GetUserStateAsync_DisabledWithRequiredActions_ReturnsBoth()
+    {
+        var client = CreateClient(UserResponse("""{"id":"x","enabled":false,"requiredActions":["UPDATE_PASSWORD"]}"""));
+
+        var state = await client.GetUserStateAsync(KeycloakId);
+
+        state.Enabled.Should().BeFalse();
+        state.RequiredActions.Should().Equal("UPDATE_PASSWORD");
+    }
+
+    [Fact]
+    public async Task GetUserStateAsync_EnabledWithoutActions_ReturnsEnabledAndEmptyActions()
+    {
+        var client = CreateClient(UserResponse("""{"id":"x","enabled":true,"requiredActions":[]}"""));
+
+        var state = await client.GetUserStateAsync(KeycloakId);
+
+        state.Enabled.Should().BeTrue();
+        state.RequiredActions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetUserStateAsync_PropertiesMissing_AssumesEnabledWithoutActions()
+    {
+        // El dato explica un rechazo y no decide ningún acceso: ante la duda, habilitado.
+        var client = CreateClient(UserResponse("""{"id":"x"}"""));
+
+        var state = await client.GetUserStateAsync(KeycloakId);
+
+        state.Enabled.Should().BeTrue();
+        state.RequiredActions.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task GetUserStateAsync_UserNotFound_ThrowsKeycloakIntegrationException()
+    {
+        var client = CreateClient(new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var act = async () => await client.GetUserStateAsync(KeycloakId);
+
+        await act.Should().ThrowAsync<KeycloakIntegrationException>();
+    }
+
     private static KeycloakAdminClient CreateClient(HttpResponseMessage adminResponse) =>
         CreateClient(new RoutingHandler(adminResponse));
 
-    private static KeycloakAdminClient CreateClient(RoutingHandler handler)
+    private static KeycloakAdminClient CreateClient(RoutingHandler handler, string? portalLoginUrl = null)
     {
         var httpClient = new HttpClient(handler);
         var options = Options.Create(new KeycloakOptions
@@ -171,7 +235,10 @@ public sealed class KeycloakAdminClientTests
             ClientSecret = "test-secret"
         });
 
-        return new KeycloakAdminClient(httpClient, options, NullLogger<KeycloakAdminClient>.Instance);
+        var clientUrlProvider = Substitute.For<IClientUrlProvider>();
+        clientUrlProvider.BuildPortalLoginUrl().Returns(portalLoginUrl);
+
+        return new KeycloakAdminClient(httpClient, options, clientUrlProvider, NullLogger<KeycloakAdminClient>.Instance);
     }
 
     private static HttpResponseMessage UserResponse(string json) =>

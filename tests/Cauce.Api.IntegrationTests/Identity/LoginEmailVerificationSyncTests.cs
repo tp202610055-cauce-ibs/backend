@@ -80,20 +80,27 @@ public sealed class LoginEmailVerificationSyncTests
         // mientras que el doble de Keycloak lo reporta como no verificado.
         var nutritionist = await SeedNutritionistAsync();
 
-        var user = await LoginAndReadUserAsync(nutritionist.Email, "cauce-web-portal");
+        var user = await LoginAndReadUserAsync(nutritionist.Email, portal: true);
 
         user.GetProperty("emailVerified").GetBoolean().Should().BeTrue();
     }
 
-    private async Task<JsonElement> LoginAndReadUserAsync(string email, string clientId = "cauce-mobile")
+    private async Task<JsonElement> LoginAndReadUserAsync(string email, bool portal = false)
     {
+        // El nutricionista entra por la ruta del portal: /auth/login solo admite el cliente móvil (acta A68).
         var client = Factory.CreateClient();
-        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new
-        {
-            email,
-            password = Factory.TokenClient.ValidPassword,
-            clientId
-        });
+        var response = portal
+            ? await client.PostAsJsonAsync("/api/v1/auth/portal/login", new
+            {
+                email,
+                password = Factory.TokenClient.ValidPassword
+            })
+            : await client.PostAsJsonAsync("/api/v1/auth/login", new
+            {
+                email,
+                password = Factory.TokenClient.ValidPassword,
+                clientId = "cauce-mobile"
+            });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 

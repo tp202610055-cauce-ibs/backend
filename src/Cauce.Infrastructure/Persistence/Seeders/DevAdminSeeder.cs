@@ -9,7 +9,10 @@ namespace Cauce.Infrastructure.Persistence.Seeders;
 
 /// <summary>
 /// Seeder de desarrollo que provisiona un nutricionista de prueba con credenciales
-/// fijas. Es idempotente y solo debe ejecutarse en el entorno de desarrollo.
+/// fijas. Es idempotente y solo debe ejecutarse en el entorno de desarrollo. La contraseña es
+/// permanente para que el nutricionista pueda entrar al portal, que inicia sesión por el backend
+/// (acta A68). Las bases sembradas antes de ese cambio conservan la temporal hasta que se corra el
+/// paso único de <c>infrastructure/keycloak/dev-demo-nutritionist-password.sh</c>.
 /// </summary>
 public sealed class DevAdminSeeder
 {
@@ -63,14 +66,14 @@ public sealed class DevAdminSeeder
             .ConfigureAwait(false);
 
         await _keycloakAdminClient
-            .SetTemporaryPasswordAsync(keycloakId, options.TemporaryPassword, ct)
+            .ResetPasswordAsync(keycloakId, options.Password, ct)
             .ConfigureAwait(false);
 
         var user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, options.Email, options.FullName, nutritionistRoleId);
 
-        // El nutricionista de desarrollo no pasa por el enlace de Keycloak: usa una contraseña temporal
-        // fija. Se activa aquí porque DemoPatientSeeder solo asigna el paciente demo a un nutricionista
-        // activo (acta A51).
+        // El nutricionista de desarrollo no pasa por el enlace de Keycloak: usa una contraseña fija. Se
+        // activa aquí porque DemoPatientSeeder solo asigna el paciente demo a un nutricionista activo
+        // (acta A51).
         user.Activate();
         await _userRepository.AddAsync(user, ct).ConfigureAwait(false);
         await _unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);

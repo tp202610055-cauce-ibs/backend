@@ -40,6 +40,14 @@ public sealed class KeycloakOptions
     public required string ClientSecret { get; init; }
 
     /// <summary>
+    /// Secreto del cliente confidencial del portal (<c>cauce-web-portal</c>), con el que el backend pide
+    /// los tokens del canal portal (acta A68). Igual que <see cref="ClientSecret"/>, se provee vía User
+    /// Secrets o variables de entorno y nunca llega al navegador. Vacío deshabilita el login del portal:
+    /// cada intento responde como error de configuración.
+    /// </summary>
+    public string WebPortalClientSecret { get; init; } = string.Empty;
+
+    /// <summary>
     /// Indica si la obtención de metadatos OIDC exige HTTPS. Es <see langword="false"/>
     /// en desarrollo y <see langword="true"/> en producción.
     /// </summary>

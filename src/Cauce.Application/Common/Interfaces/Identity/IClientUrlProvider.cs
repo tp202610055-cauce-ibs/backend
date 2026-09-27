@@ -15,4 +15,14 @@ public interface IClientUrlProvider
     /// <returns>El enlace absoluto de restablecimiento.</returns>
     /// <exception cref="ArgumentException">Si el cliente OIDC no es conocido.</exception>
     string BuildPasswordResetLink(string plainToken, string clientId);
+
+    /// <summary>
+    /// Construye la URL del login del portal web, adonde Keycloak lleva al nutricionista después de
+    /// definir su contraseña con el enlace de activación (acta A68).
+    /// </summary>
+    /// <returns>
+    /// La URL absoluta del login del portal, o <see langword="null"/> si la URL base del portal no está
+    /// configurada.
+    /// </returns>
+    string? BuildPortalLoginUrl();
 }
