@@ -66,11 +66,11 @@ public sealed class LoginResponseShapeTests
         var nutritionist = await SeedNutritionistAsync();
         var client = Factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        // Por la ruta del portal: /auth/login solo admite el cliente móvil (acta A68).
+        var response = await client.PostAsJsonAsync("/api/v1/auth/portal/login", new
         {
             email = nutritionist.Email,
-            password = Factory.TokenClient.ValidPassword,
-            clientId = "cauce-web-portal"
+            password = Factory.TokenClient.ValidPassword
         });
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);

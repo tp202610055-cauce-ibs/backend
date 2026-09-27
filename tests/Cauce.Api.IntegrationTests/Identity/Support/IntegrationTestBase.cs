@@ -233,6 +233,24 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     // ----- Auditoría -----
 
     /// <summary>
+    /// Lee una clave del contexto adicional (jsonb) de una fila de auditoría. La base normaliza el JSON
+    /// (reordena claves, agrega espacios), así que se compara por valor y no por texto.
+    /// </summary>
+    /// <param name="log">Fila de auditoría.</param>
+    /// <param name="key">Clave del contexto adicional.</param>
+    /// <returns>El valor de la clave, o <see langword="null"/> si no está.</returns>
+    protected static string? ContextValue(AuditLog log, string key)
+    {
+        if (string.IsNullOrEmpty(log.AdditionalContext))
+        {
+            return null;
+        }
+
+        using var document = System.Text.Json.JsonDocument.Parse(log.AdditionalContext);
+        return document.RootElement.TryGetProperty(key, out var value) ? value.GetString() : null;
+    }
+
+    /// <summary>
     /// Devuelve las filas de <c>audit_logs</c> del tipo de entidad y (opcionalmente) el identificador
     /// indicados, ordenadas por ocurrencia.
     /// </summary>

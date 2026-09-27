@@ -8,7 +8,8 @@ namespace Cauce.Application.Common.Interfaces.Identity;
 public interface IKeycloakTokenClient
 {
     /// <summary>
-    /// Solicita tokens a Keycloak con las credenciales del usuario.
+    /// Solicita tokens a Keycloak con las credenciales del usuario. Con el cliente del portal, que es
+    /// confidencial, la petición incluye su secret (acta A68).
     /// </summary>
     /// <param name="email">Correo electrónico (username del realm).</param>
     /// <param name="password">Contraseña.</param>
@@ -16,6 +17,9 @@ public interface IKeycloakTokenClient
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los tokens emitidos.</returns>
     /// <exception cref="Cauce.Domain.Identity.Exceptions.InvalidCredentialsException">Si las credenciales son inválidas.</exception>
+    /// <exception cref="Cauce.Application.Common.Exceptions.IdentityProviderMisconfiguredException">
+    /// Si Keycloak rechaza al cliente OIDC (<c>unauthorized_client</c> o <c>invalid_client</c>).
+    /// </exception>
     Task<KeycloakTokenResult> LoginAsync(string email, string password, string clientId, CancellationToken ct = default);
 
     /// <summary>
@@ -38,6 +42,9 @@ public interface IKeycloakTokenClient
     /// <returns>Los tokens renovados.</returns>
     /// <exception cref="Cauce.Domain.Identity.Exceptions.InvalidRefreshTokenException">
     /// Si el refresh token expiró, fue revocado o ya se consumió.
+    /// </exception>
+    /// <exception cref="Cauce.Application.Common.Exceptions.IdentityProviderMisconfiguredException">
+    /// Si Keycloak rechaza al cliente OIDC (<c>unauthorized_client</c> o <c>invalid_client</c>).
     /// </exception>
     Task<KeycloakTokenResult> RefreshAsync(string refreshToken, string clientId, CancellationToken ct = default);
 }

@@ -421,7 +421,8 @@ public sealed class RecommendationsApiTests
         await AssignAsync(nutritionist.Id, patient.Id);
         var recommendationId = await GenerateAsync(patient.KeycloakId);
 
-        var response = await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+        var response = await PostWithKey(
+            NutritionistClient(nutritionist.KeycloakId),
             $"/api/v1/recommendations/{recommendationId}/modify",
             new
             {
@@ -434,6 +435,155 @@ public sealed class RecommendationsApiTests
 
         response.StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await GetDetail(patient.KeycloakId, recommendationId)).GetProperty("status").GetString().Should().Be("ModifiedApproved");
+    }
+
+    [SkippableFact]
+    public async Task Modify_WithoutIdempotencyKey_Returns400OnClientGuid()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+
+        var response = await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            $"/api/v1/recommendations/{recommendationId}/modify",
+            new { clinicalNote = "Modificada sin clave de idempotencia." });
+
+        // Cambio incompatible del acta A69: modify exige Idempotency-Key, como aprobar y rechazar.
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("errors").GetProperty("clientGuid").EnumerateArray().Should().NotBeEmpty();
+        (await GetRecommendationFromDbAsync(recommendationId)).Status.Should().Be(RecommendationStatus.PendingReview);
+    }
+
+    [SkippableFact]
+    public async Task Modify_ReplayWithSameKey_Returns204WithoutConflict()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        var key = Guid.NewGuid();
+        var body = new { clinicalNote = "Modificada una sola vez aunque se reintente." };
+        var url = $"/api/v1/recommendations/{recommendationId}/modify";
+
+        var first = await PostWithKey(NutritionistClient(nutritionist.KeycloakId), url, body, key);
+        var second = await PostWithKey(NutritionistClient(nutritionist.KeycloakId), url, body, key);
+
+        // Sin idempotencia, el reintento sobre una ModifiedApproved respondería 409 conflict_state.
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        second.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [SkippableFact]
+    public async Task GetDetail_ManualRecommendation_ExposesTitleDescriptionSourceAndValidity()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var validUntil = DateTime.UtcNow.AddDays(30);
+
+        var created = await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            "/api/v1/recommendations/manual",
+            new
+            {
+                patientId = patient.Id,
+                title = "Reducir lácteos",
+                description = "Cambiar leche por bebida sin lactosa.",
+                steps = new[] { "Revisar etiquetas" },
+                clinicalNote = "Nota clínica suficiente para la creación manual.",
+                validUntil
+            });
+        var recommendationId = (await created.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("recommendationId").GetGuid();
+
+        var detail = await GetDetail(patient.KeycloakId, recommendationId);
+
+        // Acta A69: título y descripción llegan al DTO, que antes los perdía.
+        detail.GetProperty("title").GetString().Should().Be("Reducir lácteos");
+        detail.GetProperty("description").GetString().Should().Be("Cambiar leche por bebida sin lactosa.");
+        detail.GetProperty("source").GetString().Should().Be("Manual");
+        detail.GetProperty("isActive").GetBoolean().Should().BeTrue();
+        detail.GetProperty("archivedAt").ValueKind.Should().Be(JsonValueKind.Null);
+        detail.GetProperty("archiveReason").ValueKind.Should().Be(JsonValueKind.Null);
+        detail.GetProperty("validUntil").GetDateTime().Should().BeCloseTo(validUntil, TimeSpan.FromSeconds(1));
+        // La nota del nutricionista sí le llega al paciente al crear manual (HU0015 CA2).
+        detail.GetProperty("nutritionistNote").GetString().Should().Be("Nota clínica suficiente para la creación manual.");
+    }
+
+    [SkippableFact]
+    public async Task GetDetail_ArchivedRecommendation_ExposesArchiveDataToTheNutritionist()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        await Approve(nutritionist.KeycloakId, recommendationId);
+        await NutritionistClient(nutritionist.KeycloakId).PostAsJsonAsync(
+            $"/api/v1/recommendations/{recommendationId}/archive", new { reason = "ObjectiveMet" });
+
+        var response = await NutritionistClient(nutritionist.KeycloakId)
+            .GetAsync($"/api/v1/recommendations/{recommendationId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var detail = await response.Content.ReadFromJsonAsync<JsonElement>();
+        detail.GetProperty("source").GetString().Should().Be("EngineGenerated");
+        detail.GetProperty("isActive").GetBoolean().Should().BeFalse();
+        detail.GetProperty("archiveReason").GetString().Should().Be("ObjectiveMet");
+        detail.GetProperty("archivedAt").ValueKind.Should().Be(JsonValueKind.String);
+        detail.GetProperty("title").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [SkippableFact]
+    public async Task PendingReview_EachRowCarriesThePatientButNotItsCode()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+
+        var response = await NutritionistClient(nutritionist.KeycloakId).GetAsync("/api/v1/recommendations/pending-review");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var row = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("items").EnumerateArray()
+            .Single(item => item.GetProperty("recommendationId").GetGuid() == recommendationId);
+        row.GetProperty("patientId").GetGuid().Should().Be(patient.Id);
+        row.GetProperty("patientFullName").GetString().Should().Be("Paciente");
+        // Acta A59: el código de paciente no va a las vistas de atención, donde quedaría junto al nombre.
+        row.TryGetProperty("patientCode", out _).Should().BeFalse();
+    }
+
+    [SkippableFact]
+    public async Task Rejected_NeverReachesThePatient_NeitherInListNorDetail()
+    {
+        SkipIfUnavailable();
+        const string reason = "Motivo interno de rechazo que el paciente no debe leer.";
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+
+        var reject = await PostWithKey(
+            NutritionistClient(nutritionist.KeycloakId),
+            $"/api/v1/recommendations/{recommendationId}/reject",
+            new { reason });
+        reject.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        // HU0017 CA2: el motivo del rechazo nunca le llega al paciente.
+        var list = await PatientClient(patient.KeycloakId).GetAsync("/api/v1/recommendations/me?page=1&pageSize=50");
+        list.StatusCode.Should().Be(HttpStatusCode.OK);
+        var listBody = await list.Content.ReadAsStringAsync();
+        listBody.Should().NotContain(recommendationId.ToString());
+        listBody.Should().NotContain(reason);
+
+        var detail = await PatientClient(patient.KeycloakId).GetAsync($"/api/v1/recommendations/{recommendationId}");
+        detail.StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await detail.Content.ReadAsStringAsync()).Should().NotContain(reason);
     }
 
     [SkippableFact]

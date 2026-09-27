@@ -64,6 +64,19 @@ public static class RateLimitingPolicies
     public const string AuthVerifyResend = "auth-verify-resend";
 
     /// <summary>
+    /// Política para el inicio de sesión del portal web: 10 peticiones por minuto por IP, igual que el
+    /// móvil pero en un contador propio, para que las dos puertas no se agoten entre sí (acta A68). Admite
+    /// los cinco intentos fallidos que llevan al bloqueo de Keycloak y el sexto que lo muestra (CP015).
+    /// </summary>
+    public const string AuthPortalLogin = "auth-portal-login";
+
+    /// <summary>
+    /// Política para la renovación de sesión del portal web: 20 peticiones por minuto por IP, igual que la
+    /// del móvil pero en un contador propio (acta A68).
+    /// </summary>
+    public const string AuthPortalRefresh = "auth-portal-refresh";
+
+    /// <summary>
     /// Registra las ocho políticas de limitación de tasa y el comportamiento de
     /// rechazo (respuesta 429 con detalle de problema RFC 7807).
     /// </summary>
@@ -78,6 +91,8 @@ public static class RateLimitingPolicies
         AddIpFixedWindow(options, ConsentCurrent, permitLimit: 60, window: TimeSpan.FromMinutes(1));
         AddIpFixedWindow(options, AuthRefresh, permitLimit: 20, window: TimeSpan.FromMinutes(1));
         AddEmailFixedWindow(options, AuthVerifyResend, permitLimit: 3, window: TimeSpan.FromHours(1));
+        AddIpFixedWindow(options, AuthPortalLogin, permitLimit: 10, window: TimeSpan.FromMinutes(1));
+        AddIpFixedWindow(options, AuthPortalRefresh, permitLimit: 20, window: TimeSpan.FromMinutes(1));
         AddUserFixedWindow(options, DefaultAuthenticated, permitLimit: 60, window: TimeSpan.FromMinutes(1));
         AddUserFixedWindow(options, Sync, permitLimit: 120, window: TimeSpan.FromMinutes(1));
 

@@ -1,3 +1,4 @@
+using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Identity.UseCases.Login;
@@ -23,11 +24,23 @@ public sealed class LoginCommandHandlerLockoutTests
     private readonly IKeycloakAdminClient _adminClient = Substitute.For<IKeycloakAdminClient>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
     private readonly INutritionistActivationService _activationService = Substitute.For<INutritionistActivationService>();
+    private readonly AuthenticationAttemptContext _attemptContext = new();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<LoginCommandHandler> _logger = Substitute.For<ILogger<LoginCommandHandler>>();
 
+    /// <summary>
+    /// Por defecto Keycloak informa al usuario habilitado y sin acciones pendientes, que es el estado
+    /// de una contraseña incorrecta a secas (acta A68).
+    /// </summary>
+    public LoginCommandHandlerLockoutTests()
+    {
+        _adminClient
+            .GetUserStateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new KeycloakUserState(Enabled: true, RequiredActions: []));
+    }
+
     private LoginCommandHandler CreateHandler() =>
-        new(_tokenClient, _adminClient, _userRepository, _activationService, _unitOfWork, _logger);
+        new(_tokenClient, _adminClient, _userRepository, _activationService, _attemptContext, _unitOfWork, _logger);
 
     private static LoginCommand Command() => new(Email, "wrong", "cauce-mobile");
 

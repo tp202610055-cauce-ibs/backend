@@ -3,7 +3,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Cauce.Application.Common.Exceptions;
+using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -23,6 +25,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 
     private readonly HttpClient _httpClient;
     private readonly KeycloakOptions _options;
+    private readonly IClientUrlProvider _clientUrlProvider;
     private readonly ILogger<KeycloakAdminClient> _logger;
     private readonly SemaphoreSlim _tokenLock = new(1, 1);
 
@@ -34,14 +37,17 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     /// </summary>
     /// <param name="httpClient">Cliente HTTP tipado.</param>
     /// <param name="options">Opciones de Keycloak.</param>
+    /// <param name="clientUrlProvider">Proveedor de las URL de los clientes, para el retorno al portal.</param>
     /// <param name="logger">Logger de la categoría del cliente.</param>
     public KeycloakAdminClient(
         HttpClient httpClient,
         IOptions<KeycloakOptions> options,
+        IClientUrlProvider clientUrlProvider,
         ILogger<KeycloakAdminClient> logger)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _clientUrlProvider = clientUrlProvider;
         _logger = logger;
     }
 
@@ -99,15 +105,21 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     }
 
     /// <inheritdoc />
-    public Task SetTemporaryPasswordAsync(string keycloakUserId, string password, CancellationToken ct = default)
+    public async Task ResetPasswordAsync(string keycloakUserId, string newPassword, CancellationToken ct = default)
     {
-        return ResetPasswordInternalAsync(keycloakUserId, password, temporary: true, ct);
-    }
+        var payload = new { type = "password", value = newPassword, temporary = false };
 
-    /// <inheritdoc />
-    public Task ResetPasswordAsync(string keycloakUserId, string newPassword, CancellationToken ct = default)
-    {
-        return ResetPasswordInternalAsync(keycloakUserId, newPassword, temporary: false, ct);
+        using var response = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Put, $"{AdminBaseUrl}/users/{keycloakUserId}/reset-password")
+            {
+                Content = JsonContent.Create(payload)
+            },
+            ct).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BuildExceptionAsync(response, "establecer la contraseña", ct).ConfigureAwait(false);
+        }
     }
 
     /// <inheritdoc />
@@ -127,10 +139,22 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     public async Task SendUpdatePasswordEmailAsync(string keycloakUserId, CancellationToken ct = default)
     {
         // Sin el parámetro lifespan: rige actionTokenGeneratedByAdminLifespan del realm, para que la vigencia
-        // del enlace se configure en un solo lugar. Sin client_id ni redirect_uri, la última pantalla solo
-        // confirma la actualización, sin redirigir a una aplicación.
+        // del enlace se configure en un solo lugar. Con client_id y redirect_uri, la última pantalla ofrece
+        // volver al login del portal (acta A68); Keycloak rechaza la petición si la URI no está entre las
+        // redirect URIs del cliente del portal.
+        var url = $"{AdminBaseUrl}/users/{keycloakUserId}/execute-actions-email";
+        var portalLoginUrl = _clientUrlProvider.BuildPortalLoginUrl();
+        if (portalLoginUrl is not null)
+        {
+            url = QueryHelpers.AddQueryString(url, new Dictionary<string, string?>
+            {
+                ["client_id"] = OidcClients.WebPortal,
+                ["redirect_uri"] = portalLoginUrl
+            });
+        }
+
         using var response = await SendAsync(
-            () => new HttpRequestMessage(HttpMethod.Put, $"{AdminBaseUrl}/users/{keycloakUserId}/execute-actions-email")
+            () => new HttpRequestMessage(HttpMethod.Put, url)
             {
                 Content = JsonContent.Create(new[] { UpdatePasswordAction })
             },
@@ -225,6 +249,36 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     }
 
     /// <inheritdoc />
+    public async Task<KeycloakUserState> GetUserStateAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        using var response = await SendAsync(
+            () => new HttpRequestMessage(HttpMethod.Get, $"{AdminBaseUrl}/users/{keycloakUserId}"),
+            ct).ConfigureAwait(false);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw await BuildExceptionAsync(response, "consultar el estado del usuario", ct).ConfigureAwait(false);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
+        var root = document.RootElement;
+
+        // Keycloak omite "enabled" solo en representaciones parciales; ante la duda se asume habilitado,
+        // porque este dato explica un rechazo y no decide ningún acceso.
+        var enabled = !root.TryGetProperty("enabled", out var enabledElement) || enabledElement.GetBoolean();
+        var requiredActions = root.TryGetProperty("requiredActions", out var actionsElement)
+            && actionsElement.ValueKind == JsonValueKind.Array
+                ? actionsElement.EnumerateArray()
+                    .Select(action => action.GetString())
+                    .OfType<string>()
+                    .ToList()
+                : [];
+
+        return new KeycloakUserState(enabled, requiredActions);
+    }
+
+    /// <inheritdoc />
     public async Task<BruteForceStatus?> GetBruteForceStatusAsync(string keycloakUserId, CancellationToken ct = default)
     {
         using var response = await SendAsync(
@@ -267,23 +321,6 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         var lockedUntil = lockedFrom.AddSeconds(_options.WaitIncrementSeconds);
 
         return new BruteForceStatus(disabled, numFailures, lastFailure, lastIpFailure, lockedUntil);
-    }
-
-    private async Task ResetPasswordInternalAsync(string keycloakUserId, string password, bool temporary, CancellationToken ct)
-    {
-        var payload = new { type = "password", value = password, temporary };
-
-        using var response = await SendAsync(
-            () => new HttpRequestMessage(HttpMethod.Put, $"{AdminBaseUrl}/users/{keycloakUserId}/reset-password")
-            {
-                Content = JsonContent.Create(payload)
-            },
-            ct).ConfigureAwait(false);
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw await BuildExceptionAsync(response, "establecer la contraseña", ct).ConfigureAwait(false);
-        }
     }
 
     private async Task AssignRealmRoleAsync(string keycloakUserId, string roleName, CancellationToken ct)

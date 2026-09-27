@@ -44,7 +44,9 @@ public sealed class NutritionistsController : BaseApiController
 
     /// <summary>
     /// Devuelve el detalle clínico de un paciente asignado. Requiere una asignación
-    /// activa con el paciente; de lo contrario responde 403.
+    /// activa con el paciente; de lo contrario responde 403. Si el paciente todavía no completó
+    /// su perfil, responde 200 con <c>onboardingCompleted: false</c> y los campos clínicos en null
+    /// (acta A69).
     /// </summary>
     /// <param name="patientUserId">Identificador de la cuenta del paciente.</param>
     /// <param name="ct">Token de cancelación.</param>

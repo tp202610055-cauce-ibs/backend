@@ -654,7 +654,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Inicia sesión haciendo passthrough a Keycloak y devuelve los tokens emitidos. Ante\r\ncredenciales inválidas responde 401 con un mensaje genérico (no revela si la cuenta existe).",
+        "summary": "Inicia sesión haciendo passthrough a Keycloak y devuelve los tokens emitidos. Ante\r\ncredenciales inválidas responde 401 con un mensaje genérico (no revela si la cuenta existe).\r\nEs la ruta del móvil: solo admite el cliente `cauce-mobile`, y cualquier otro responde 400\r\n`unsupported_client`. El portal usa `/auth/portal/login` (acta A68).",
         "requestBody": {
           "description": "Credenciales y cliente OIDC.",
           "content": {
@@ -804,7 +804,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Renueva la sesión a partir de un refresh token vigente. Devuelve un juego de tokens nuevo,\r\nincluida la identidad del usuario. El realm rota los refresh tokens: el enviado aquí queda\r\nrevocado y el cliente debe persistir el que recibe.",
+        "summary": "Renueva la sesión a partir de un refresh token vigente. Devuelve un juego de tokens nuevo,\r\nincluida la identidad del usuario. El realm rota los refresh tokens: el enviado aquí queda\r\nrevocado y el cliente debe persistir el que recibe. Solo admite el cliente `cauce-mobile`\r\n(acta A68).",
         "requestBody": {
           "description": "Refresh token y cliente OIDC.",
           "content": {
@@ -934,7 +934,7 @@
         "tags": [
           "Auth"
         ],
-        "summary": "Cierra sesión revocando el refresh token en Keycloak.",
+        "summary": "Cierra sesión revocando el refresh token en Keycloak. Solo admite el cliente `cauce-mobile`\r\n(acta A68).",
         "requestBody": {
           "description": "Refresh token y cliente OIDC.",
           "content": {
@@ -4223,7 +4223,7 @@
         "tags": [
           "NutritionistRecommendations"
         ],
-        "summary": "Lista, paginadas, las recomendaciones pendientes de revisión de los pacientes asignados.",
+        "summary": "Lista, paginadas, las recomendaciones pendientes de revisión de los pacientes asignados. Cada fila\r\nincluye el identificador y el nombre completo del paciente (acta A69).",
         "parameters": [
           {
             "name": "page",
@@ -4332,17 +4332,17 @@
             "content": {
               "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecommendationSummaryDtoPagedResult"
+                  "$ref": "#/components/schemas/PendingReviewRecommendationDtoPagedResult"
                 }
               },
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecommendationSummaryDtoPagedResult"
+                  "$ref": "#/components/schemas/PendingReviewRecommendationDtoPagedResult"
                 }
               },
               "text/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RecommendationSummaryDtoPagedResult"
+                  "$ref": "#/components/schemas/PendingReviewRecommendationDtoPagedResult"
                 }
               }
             }
@@ -4913,13 +4913,22 @@
         "tags": [
           "NutritionistRecommendations"
         ],
-        "summary": "Aprueba una recomendación en revisión tras modificar sus ítems y/o su contenido (US17 CA03).",
+        "summary": "Aprueba una recomendación en revisión tras modificar sus ítems y/o su contenido (US17 CA03). Requiere\r\nel header `Idempotency-Key`, como aprobar y rechazar (acta A69).",
         "parameters": [
           {
             "name": "id",
             "in": "path",
             "description": "Identificador de la recomendación.",
             "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Clave de idempotencia del header `Idempotency-Key`.",
             "schema": {
               "type": "string",
               "format": "uuid"
@@ -5382,7 +5391,7 @@
         "tags": [
           "Nutritionists"
         ],
-        "summary": "Devuelve el detalle clínico de un paciente asignado. Requiere una asignación\r\nactiva con el paciente; de lo contrario responde 403.",
+        "summary": "Devuelve el detalle clínico de un paciente asignado. Requiere una asignación\r\nactiva con el paciente; de lo contrario responde 403. Si el paciente todavía no completó\r\nsu perfil, responde 200 con `onboardingCompleted: false` y los campos clínicos en null\r\n(acta A69).",
         "parameters": [
           {
             "name": "patientUserId",
@@ -8118,6 +8127,339 @@
         }
       }
     },
+    "/api/v1/auth/portal/login": {
+      "post": {
+        "tags": [
+          "PortalAuth"
+        ],
+        "summary": "Inicia sesión en el portal. Devuelve el access token en el cuerpo y deja el refresh token en la\r\ncookie `cauce_portal_rt`. Un paciente, una cuenta deshabilitada, pendiente de activación,\r\nsuspendida o inactiva, y una contraseña incorrecta reciben el mismo 401 `invalid_credentials`;\r\nla causa queda solo en la auditoría. La cuenta bloqueada por intentos fallidos recibe 423\r\n`account_locked` con `lockedUntil`.",
+        "requestBody": {
+          "description": "Credenciales del nutricionista.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalLoginRequest"
+              }
+            },
+            "text/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalLoginRequest"
+              }
+            },
+            "application/*+json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalLoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSessionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSessionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSessionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "423": {
+            "description": "Locked",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/portal/refresh": {
+      "post": {
+        "tags": [
+          "PortalAuth"
+        ],
+        "summary": "Renueva la sesión del portal con el refresh token de la cookie. Exige el header\r\n`X-Cauce-Portal`. Rota la cookie y devuelve un access token nuevo. Sin cookie, o con un token\r\nvencido, revocado o de un nutricionista que ya no puede usar el portal, responde 401\r\n`invalid_refresh_token`: el portal debe volver al login.",
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSessionResult"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSessionResult"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalSessionResult"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/portal/logout": {
+      "post": {
+        "tags": [
+          "PortalAuth"
+        ],
+        "summary": "Cierra la sesión del portal: revoca en Keycloak el refresh token de la cookie y la borra. Exige el\r\naccess token del nutricionista y el header `X-Cauce-Portal`. Sin cookie, igual responde 204.",
+        "responses": {
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              },
+              "text/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/recommendations/{id}": {
       "get": {
         "tags": [
@@ -9146,7 +9488,7 @@
         "properties": {
           "note": {
             "type": "string",
-            "description": "Nota clínica de aprobación (entre 10 y 2000 caracteres).",
+            "description": "Nota clínica de aprobación (entre 20 y 2000 caracteres, US17 CA01).",
             "nullable": true
           }
         },
@@ -9526,7 +9868,7 @@
           },
           "clinicalNote": {
             "type": "string",
-            "description": "Nota clínica del nutricionista.",
+            "description": "Nota clínica del nutricionista (entre 10 y 2000 caracteres, US29).",
             "nullable": true
           },
           "validUntil": {
@@ -10148,11 +10490,13 @@
           },
           "age": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "nullable": true
           },
           "bmi": {
             "type": "number",
-            "format": "double"
+            "format": "double",
+            "nullable": true
           },
           "bmiCategory": {
             "type": "string",
@@ -10169,6 +10513,18 @@
             "items": {
               "$ref": "#/components/schemas/PatientAllergySummary"
             },
+            "nullable": true
+          },
+          "biologicalSex": {
+            "$ref": "#/components/schemas/BiologicalSex"
+          },
+          "diagnosisDate": {
+            "type": "string",
+            "format": "date",
+            "nullable": true
+          },
+          "medications": {
+            "type": "string",
             "nullable": true
           }
         },
@@ -10670,7 +11026,7 @@
         "properties": {
           "clinicalNote": {
             "type": "string",
-            "description": "Nota clínica de la modificación.",
+            "description": "Nota clínica de la modificación (entre 10 y 2000 caracteres, US17 CA03).",
             "nullable": true
           },
           "items": {
@@ -10893,6 +11249,111 @@
         },
         "additionalProperties": false
       },
+      "PendingReviewRecommendationDto": {
+        "type": "object",
+        "properties": {
+          "recommendationId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "patientId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "patientFullName": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/RecommendationStatus"
+          },
+          "confidenceScore": {
+            "type": "number",
+            "format": "double"
+          },
+          "itemsCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false
+      },
+      "PendingReviewRecommendationDtoPagedResult": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingReviewRecommendationDto"
+            },
+            "nullable": true
+          },
+          "page": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "totalCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "additionalProperties": false
+      },
+      "PortalLoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "Correo electrónico.",
+            "nullable": true
+          },
+          "password": {
+            "type": "string",
+            "description": "Contraseña.",
+            "nullable": true
+          }
+        },
+        "additionalProperties": false,
+        "description": "Cuerpo de la petición de inicio de sesión del portal web. No lleva cliente OIDC: el canal lo define\r\nla ruta, y el backend usa siempre `cauce-web-portal` (acta A68)."
+      },
+      "PortalSessionResult": {
+        "type": "object",
+        "properties": {
+          "accessToken": {
+            "type": "string",
+            "description": "Token de acceso JWT, para el header `Authorization: Bearer`.",
+            "nullable": true
+          },
+          "expiresIn": {
+            "type": "integer",
+            "description": "Vigencia del token de acceso, en segundos.",
+            "format": "int32"
+          },
+          "tokenType": {
+            "type": "string",
+            "description": "Tipo de token, `Bearer`.",
+            "nullable": true
+          },
+          "user": {
+            "$ref": "#/components/schemas/AuthenticatedUser"
+          }
+        },
+        "additionalProperties": false,
+        "description": "Respuesta del inicio de sesión y de la renovación del portal web. A diferencia de la del móvil, no\r\ntrae el refresh token: viaja en la cookie `HttpOnly``cauce_portal_rt`, fuera del alcance del\r\nJavaScript del portal (acta A68). El portal guarda el access token solo en memoria."
+      },
       "PriorityLevel": {
         "enum": [
           "None",
@@ -11012,6 +11473,33 @@
           },
           "supportingData": {
             "$ref": "#/components/schemas/RecommendationSupportingDataDto"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "source": {
+            "$ref": "#/components/schemas/RecommendationSource"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "archivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "archiveReason": {
+            "$ref": "#/components/schemas/ArchiveReason"
+          },
+          "validUntil": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
           }
         },
         "additionalProperties": false
@@ -11077,6 +11565,13 @@
           }
         },
         "additionalProperties": false
+      },
+      "RecommendationSource": {
+        "enum": [
+          "EngineGenerated",
+          "Manual"
+        ],
+        "type": "string"
       },
       "RecommendationStatus": {
         "enum": [

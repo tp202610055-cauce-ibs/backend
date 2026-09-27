@@ -106,13 +106,17 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
         return Task.FromResult(id);
     }
 
-    /// <inheritdoc />
-    public Task SetTemporaryPasswordAsync(string keycloakUserId, string password, CancellationToken ct = default)
-        => Task.CompletedTask;
+    /// <summary>
+    /// Identificadores de Keycloak a los que se les fijó una contraseña permanente.
+    /// </summary>
+    public List<string> PasswordResets { get; } = [];
 
     /// <inheritdoc />
     public Task ResetPasswordAsync(string keycloakUserId, string newPassword, CancellationToken ct = default)
-        => Task.CompletedTask;
+    {
+        PasswordResets.Add(keycloakUserId);
+        return Task.CompletedTask;
+    }
 
     /// <inheritdoc />
     public Task SendVerifyEmailAsync(string keycloakUserId, CancellationToken ct = default)
@@ -155,6 +159,20 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
     {
         DisabledUsers.Add(keycloakUserId);
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Estado de Keycloak por identificador, para ejercitar las causas de rechazo del inicio de sesión
+    /// (acta A68). Sin entrada, el usuario figura habilitado salvo que esté en <see cref="DisabledUsers"/>.
+    /// </summary>
+    public ConcurrentDictionary<string, KeycloakUserState> UserStates { get; } = new();
+
+    /// <inheritdoc />
+    public Task<KeycloakUserState> GetUserStateAsync(string keycloakUserId, CancellationToken ct = default)
+    {
+        return Task.FromResult(UserStates.TryGetValue(keycloakUserId, out var state)
+            ? state
+            : new KeycloakUserState(!DisabledUsers.Contains(keycloakUserId), []));
     }
 
     /// <inheritdoc />

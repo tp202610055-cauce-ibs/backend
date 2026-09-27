@@ -88,4 +88,21 @@ public sealed class UserRepository : IUserRepository
             ? roleName
             : throw new InvalidOperationException($"El rol con identificador {roleId} no existe en el catálogo.");
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<Guid, string>> GetFullNamesAsync(
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken ct = default)
+    {
+        if (userIds.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        return await _context.Set<User>()
+            .AsNoTracking()
+            .Where(user => userIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.FullName, ct)
+            .ConfigureAwait(false);
+    }
 }

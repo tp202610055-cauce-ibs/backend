@@ -1,17 +1,25 @@
 using System.Security.Claims;
 using System.Text.Json;
+using Cauce.Api.Authorization;
+using Cauce.Application.Common.Exceptions;
+using Cauce.Application.Common.Identity;
+using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Auditing;
 using Cauce.Domain.Auditing.Enums;
+using Cauce.Domain.Identity.Exceptions;
 using Cauce.Infrastructure.Persistence;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cauce.Api.Middleware;
 
 /// <summary>
 /// Middleware de auditoría de la capa HTTP (capa 1 de DEC-B5-01): registra los eventos de
-/// autenticación (LOGIN, FAILED_LOGIN, LOGOUT) que no corresponden a un cambio en una tabla con
-/// trigger. Escribe en su propio <see cref="IServiceScope"/> con su propio <c>SaveChanges</c>, para
-/// no acoplarse a la transacción del endpoint. No registra credenciales.
+/// autenticación (LOGIN, FAILED_LOGIN, ACCOUNT_LOCKED, LOGOUT, FAILED_LOGOUT) que no corresponden a un
+/// cambio en una tabla con trigger. Cubre las rutas del móvil y las del portal, y guarda en el contexto
+/// adicional el canal y, si hubo rechazo, su causa interna (acta A68). Escribe en su propio
+/// <see cref="IServiceScope"/> con su propio <c>SaveChanges</c>, para no acoplarse a la transacción del
+/// endpoint. No registra credenciales.
 /// </summary>
 public sealed class AuditingMiddleware
 {
@@ -38,16 +46,20 @@ public sealed class AuditingMiddleware
     /// <summary>
     /// Ejecuta el middleware: clasifica el evento de autenticación por ruta y estado, y lo audita.
     /// </summary>
-    /// <param name="context">Contexto HTTP.</param>
+    /// <param name="context">Contexto HTTP de la petición.</param>
     /// <returns>Tarea que representa la operación asíncrona.</returns>
     public async Task InvokeAsync(HttpContext context)
     {
-        var path = context.Request.Path.Value ?? string.Empty;
-        var isLogin = context.Request.Method == HttpMethods.Post && path.EndsWith("/auth/login", StringComparison.OrdinalIgnoreCase);
-        var isLogout = context.Request.Method == HttpMethods.Post && path.EndsWith("/auth/logout", StringComparison.OrdinalIgnoreCase);
+        var sessionEvent = ClassifyRoute(context.Request);
+        if (sessionEvent is null)
+        {
+            await _next(context).ConfigureAwait(false);
+            return;
+        }
 
+        var (kind, channel) = sessionEvent.Value;
         string? loginEmail = null;
-        if (isLogin)
+        if (kind == SessionEventKind.Login)
         {
             context.Request.EnableBuffering();
             loginEmail = await TryReadEmailAsync(context).ConfigureAwait(false);
@@ -57,23 +69,39 @@ public sealed class AuditingMiddleware
         {
             await _next(context).ConfigureAwait(false);
         }
-        catch when (isLogin)
+        catch (Exception exception)
         {
-            // Un login que lanza (por ejemplo, credenciales inválidas) igual debe auditarse como
-            // FAILED_LOGIN antes de que la excepción llegue al middleware de manejo de errores (acta A14).
-            await SafeAuditAsync(() => AuditLoginAsync(context, loginEmail, success: false)).ConfigureAwait(false);
+            // Un intento que lanza (por ejemplo, credenciales inválidas) igual debe auditarse antes de que
+            // la excepción llegue al middleware de manejo de errores (acta A14).
+            await SafeAuditAsync(() => AuditAsync(context, kind, channel, loginEmail, exception))
+                .ConfigureAwait(false);
             throw;
         }
 
-        if (isLogin)
+        await SafeAuditAsync(() => AuditAsync(context, kind, channel, loginEmail, exception: null))
+            .ConfigureAwait(false);
+    }
+
+    private static (SessionEventKind Kind, LoginChannel Channel)? ClassifyRoute(HttpRequest request)
+    {
+        if (request.Method != HttpMethods.Post)
         {
-            var success = context.Response.StatusCode is >= 200 and < 300;
-            await SafeAuditAsync(() => AuditLoginAsync(context, loginEmail, success)).ConfigureAwait(false);
+            return null;
         }
-        else if (isLogout && context.Response.StatusCode is >= 200 and < 300)
+
+        var path = request.Path.Value ?? string.Empty;
+        return path switch
         {
-            await SafeAuditAsync(() => AuditLogoutAsync(context)).ConfigureAwait(false);
-        }
+            _ when path.EndsWith("/auth/portal/login", StringComparison.OrdinalIgnoreCase)
+                => (SessionEventKind.Login, LoginChannel.Portal),
+            _ when path.EndsWith("/auth/portal/logout", StringComparison.OrdinalIgnoreCase)
+                => (SessionEventKind.Logout, LoginChannel.Portal),
+            _ when path.EndsWith("/auth/login", StringComparison.OrdinalIgnoreCase)
+                => (SessionEventKind.Login, LoginChannel.Mobile),
+            _ when path.EndsWith("/auth/logout", StringComparison.OrdinalIgnoreCase)
+                => (SessionEventKind.Logout, LoginChannel.Mobile),
+            _ => null
+        };
     }
 
     private async Task SafeAuditAsync(Func<Task> audit)
@@ -89,54 +117,43 @@ public sealed class AuditingMiddleware
         }
     }
 
-    private async Task AuditLoginAsync(HttpContext context, string? email, bool success)
+    private async Task AuditAsync(
+        HttpContext context,
+        SessionEventKind kind,
+        LoginChannel channel,
+        string? loginEmail,
+        Exception? exception)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
-
-        Guid? actorId = null;
-        if (!string.IsNullOrWhiteSpace(email))
-        {
-            actorId = await dbContext.Users
-                .AsNoTracking()
-                .Where(user => user.Email == email)
-                .Select(user => (Guid?)user.Id)
-                .FirstOrDefaultAsync(context.RequestAborted)
-                .ConfigureAwait(false);
-        }
-
-        var actionType = success ? AuditActionType.Login : AuditActionType.FailedLogin;
-        await WriteAuditAsync(dbContext, actorId, actionType, context).ConfigureAwait(false);
-    }
-
-    private async Task AuditLogoutAsync(HttpContext context)
-    {
-        var keycloakSubject = context.User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? context.User.FindFirstValue("sub");
+        var succeeded = exception is null && context.Response.StatusCode is >= 200 and < 300;
+        var cause = succeeded ? null : ResolveCause(context, exception);
 
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
 
-        Guid? actorId = null;
-        if (!string.IsNullOrWhiteSpace(keycloakSubject))
+        var actorId = kind == SessionEventKind.Login
+            ? await ResolveActorByEmailAsync(dbContext, loginEmail, context.RequestAborted).ConfigureAwait(false)
+            : await ResolveActorByPrincipalAsync(dbContext, context.User, context.RequestAborted).ConfigureAwait(false);
+
+        var actionType = (kind, succeeded) switch
         {
-            actorId = await dbContext.Users
-                .AsNoTracking()
-                .Where(user => user.KeycloakId == keycloakSubject)
-                .Select(user => (Guid?)user.Id)
-                .FirstOrDefaultAsync(context.RequestAborted)
-                .ConfigureAwait(false);
+            (SessionEventKind.Login, true) => AuditActionType.Login,
+            (SessionEventKind.Login, false) when cause == AuthFailureCauses.AccountLocked
+                => AuditActionType.AccountLocked,
+            (SessionEventKind.Login, false) => AuditActionType.FailedLogin,
+            (SessionEventKind.Logout, true) => AuditActionType.Logout,
+            _ => AuditActionType.FailedLogout
+        };
+
+        if (actionType == AuditActionType.AccountLocked)
+        {
+            // CP015 pide el bloqueo como alerta de seguridad: además de la fila, un evento de nivel Warning
+            // que el monitoreo puede filtrar sin leer la base.
+            _logger.LogWarning(
+                "SecurityEvent account_locked: login attempt on a locked account (actor {ActorId}, channel {Channel}).",
+                actorId,
+                AuthAuditContext.ChannelName(channel));
         }
 
-        await WriteAuditAsync(dbContext, actorId, AuditActionType.Logout, context).ConfigureAwait(false);
-    }
-
-    private static async Task WriteAuditAsync(
-        CauceDbContext dbContext,
-        Guid? actorId,
-        AuditActionType actionType,
-        HttpContext context)
-    {
         var auditLog = AuditLog.Record(
             actorId,
             actionType,
@@ -146,11 +163,77 @@ public sealed class AuditingMiddleware
             newValuesHash: null,
             ipAddress: context.Connection.RemoteIpAddress?.ToString(),
             userAgent: context.Request.Headers.UserAgent.ToString() is { Length: > 0 } agent ? agent : null,
-            additionalContext: null,
+            additionalContext: AuthAuditContext.Build(channel, cause),
             occurredAtUtc: DateTime.UtcNow);
 
         await dbContext.AuditLogs.AddAsync(auditLog, context.RequestAborted).ConfigureAwait(false);
         await dbContext.SaveChangesAsync(context.RequestAborted).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Determina la causa interna de un intento rechazado. Prefiere la que registró el handler, que es la
+    /// única que conoce el estado de la cuenta; si el rechazo ocurrió antes de llegar al handler, la
+    /// deduce de la excepción o del código de estado.
+    /// </summary>
+    /// <param name="context">Contexto HTTP de la petición.</param>
+    /// <param name="exception">Excepción del intento, si la hubo.</param>
+    /// <returns>Una de las causas de <see cref="AuthFailureCauses"/>.</returns>
+    private static string ResolveCause(HttpContext context, Exception? exception)
+    {
+        var attemptContext = context.RequestServices.GetService<IAuthenticationAttemptContext>();
+        if (attemptContext?.FailureCause is { } recorded)
+        {
+            return recorded;
+        }
+
+        return exception switch
+        {
+            AccountLockedException => AuthFailureCauses.AccountLocked,
+            ValidationException => AuthFailureCauses.InvalidRequest,
+            UnsupportedOidcClientException => AuthFailureCauses.UnsupportedClient,
+            IdentityProviderMisconfiguredException => AuthFailureCauses.ClientMisconfigured,
+            PortalCsrfHeaderMissingException => AuthFailureCauses.CsrfHeaderMissing,
+            null when context.Response.StatusCode == StatusCodes.Status400BadRequest
+                => AuthFailureCauses.InvalidRequest,
+            _ => AuthFailureCauses.Undetermined
+        };
+    }
+
+    private static async Task<Guid?> ResolveActorByEmailAsync(
+        CauceDbContext dbContext,
+        string? email,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return null;
+        }
+
+        return await dbContext.Users
+            .AsNoTracking()
+            .Where(user => user.Email == email)
+            .Select(user => (Guid?)user.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<Guid?> ResolveActorByPrincipalAsync(
+        CauceDbContext dbContext,
+        ClaimsPrincipal principal,
+        CancellationToken ct)
+    {
+        var keycloakSubject = principal.FindFirstValue(ClaimTypes.NameIdentifier) ?? principal.FindFirstValue("sub");
+        if (string.IsNullOrWhiteSpace(keycloakSubject))
+        {
+            return null;
+        }
+
+        return await dbContext.Users
+            .AsNoTracking()
+            .Where(user => user.KeycloakId == keycloakSubject)
+            .Select(user => (Guid?)user.Id)
+            .FirstOrDefaultAsync(ct)
+            .ConfigureAwait(false);
     }
 
     private static async Task<string?> TryReadEmailAsync(HttpContext context)
@@ -158,7 +241,9 @@ public sealed class AuditingMiddleware
         try
         {
             context.Request.Body.Position = 0;
-            using var document = await JsonDocument.ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted).ConfigureAwait(false);
+            using var document = await JsonDocument
+                .ParseAsync(context.Request.Body, cancellationToken: context.RequestAborted)
+                .ConfigureAwait(false);
             context.Request.Body.Position = 0;
 
             if (document.RootElement.TryGetProperty("email", out var emailElement)
@@ -170,9 +255,16 @@ public sealed class AuditingMiddleware
         catch (JsonException)
         {
             // Cuerpo no JSON o malformado: se audita el intento sin actor.
+            context.Request.Body.Position = 0;
         }
 
         return null;
+    }
+
+    private enum SessionEventKind
+    {
+        Login,
+        Logout
     }
 }
 
@@ -182,10 +274,10 @@ public sealed class AuditingMiddleware
 public static class AuditingMiddlewareExtensions
 {
     /// <summary>
-    /// Añade el middleware de auditoría de autenticación al pipeline de peticiones.
+    /// Agrega el middleware de auditoría de autenticación al pipeline.
     /// </summary>
-    /// <param name="app">Constructor del pipeline de la aplicación.</param>
-    /// <returns>El mismo constructor para encadenamiento.</returns>
+    /// <param name="app">Constructor de la aplicación.</param>
+    /// <returns>El mismo constructor, para encadenar llamadas.</returns>
     public static IApplicationBuilder UseAuditingMiddleware(this IApplicationBuilder app)
     {
         return app.UseMiddleware<AuditingMiddleware>();

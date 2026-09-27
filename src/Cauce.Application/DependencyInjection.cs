@@ -1,5 +1,6 @@
 using Cauce.Application.Common.Behaviors;
 using Cauce.Application.Common.Idempotency;
+using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Identity.Services;
@@ -57,6 +58,10 @@ public static class DependencyInjection
 
         // Regla única de activación de nutricionistas, compartida por el login y el behavior (acta A51).
         services.AddScoped<INutritionistActivationService, NutritionistActivationService>();
+
+        // Causa interna de un rechazo de sesión: la escriben los handlers y la lee el middleware de
+        // auditoría en la misma petición (acta A68).
+        services.AddScoped<IAuthenticationAttemptContext, AuthenticationAttemptContext>();
 
         var typeAdapterConfig = TypeAdapterConfig.GlobalSettings;
         typeAdapterConfig.Scan(applicationAssembly);

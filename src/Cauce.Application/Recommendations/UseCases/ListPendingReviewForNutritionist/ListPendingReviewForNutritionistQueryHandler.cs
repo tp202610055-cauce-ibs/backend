@@ -11,10 +11,11 @@ namespace Cauce.Application.Recommendations.UseCases.ListPendingReviewForNutriti
 /// <summary>
 /// Handler de la consulta de recomendaciones pendientes de revisión del nutricionista. Es de
 /// solo lectura: no transita las expiradas (responsabilidad del worker del Prompt 5; ver
-/// DEC-B4-06), únicamente las excluye del resultado.
+/// DEC-B4-06), únicamente las excluye del resultado. Cada fila lleva el paciente al que pertenece,
+/// resuelto en una sola consulta para toda la página (acta A69).
 /// </summary>
 public sealed class ListPendingReviewForNutritionistQueryHandler
-    : IRequestHandler<ListPendingReviewForNutritionistQuery, PagedResult<RecommendationSummaryDto>>
+    : IRequestHandler<ListPendingReviewForNutritionistQuery, PagedResult<PendingReviewRecommendationDto>>
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
@@ -34,7 +35,7 @@ public sealed class ListPendingReviewForNutritionistQueryHandler
     }
 
     /// <inheritdoc />
-    public async Task<PagedResult<RecommendationSummaryDto>> Handle(
+    public async Task<PagedResult<PendingReviewRecommendationDto>> Handle(
         ListPendingReviewForNutritionistQuery request,
         CancellationToken cancellationToken)
     {
@@ -47,7 +48,16 @@ public sealed class ListPendingReviewForNutritionistQueryHandler
             .ListPendingReviewByNutritionistAsync(nutritionistId, request.Page, request.PageSize, now, cancellationToken)
             .ConfigureAwait(false);
 
-        var items = page.Items.Select(RecommendationsMappings.ToSummary).ToList();
-        return new PagedResult<RecommendationSummaryDto>(items, page.Page, page.PageSize, page.TotalCount);
+        var patientIds = page.Items.Select(recommendation => recommendation.PatientId).Distinct().ToList();
+        var patientNames = await _userRepository
+            .GetFullNamesAsync(patientIds, cancellationToken)
+            .ConfigureAwait(false);
+
+        var items = page.Items
+            .Select(recommendation => RecommendationsMappings.ToPendingReview(
+                recommendation,
+                patientNames.GetValueOrDefault(recommendation.PatientId, string.Empty)))
+            .ToList();
+        return new PagedResult<PendingReviewRecommendationDto>(items, page.Page, page.PageSize, page.TotalCount);
     }
 }

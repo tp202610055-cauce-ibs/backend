@@ -13,6 +13,7 @@ public sealed class ModifyRecommendationCommandValidator : AbstractValidator<Mod
     public ModifyRecommendationCommandValidator()
     {
         RuleFor(x => x.RecommendationId).NotEmpty();
+        RuleFor(x => x.ClientGuid).NotEmpty();
         RuleFor(x => x.ClinicalNote)
             .NotEmpty()
             .MinimumLength(10)

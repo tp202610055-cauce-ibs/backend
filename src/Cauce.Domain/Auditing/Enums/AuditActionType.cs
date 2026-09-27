@@ -23,7 +23,9 @@ public enum AuditActionType
     FailedLogin,
 
     /// <summary>
-    /// Bloqueo de cuenta por superar el número de intentos permitidos.
+    /// Intento de inicio de sesión rechazado porque la cuenta está bloqueada por intentos fallidos
+    /// consecutivos (respuesta 423). Se registra aparte de <see cref="FailedLogin"/> como alerta de
+    /// seguridad (acta A68).
     /// </summary>
     AccountLocked,
 
@@ -140,5 +142,11 @@ public enum AuditActionType
     /// hashes, y esta fila guarda en el contexto adicional qué comida había antes y cuál quedó, que es lo que
     /// hace falta para reconstruir la decisión clínica.
     /// </summary>
-    MealAssociationCorrection
+    MealAssociationCorrection,
+
+    /// <summary>
+    /// Cierre de sesión rechazado, por ejemplo porque la ruta del móvil recibió un cliente OIDC que no le
+    /// corresponde. Lo escribe el middleware de auditoría con el canal y la causa interna (acta A68).
+    /// </summary>
+    FailedLogout
 }

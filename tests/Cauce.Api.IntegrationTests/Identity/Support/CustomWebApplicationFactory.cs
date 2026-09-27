@@ -1,6 +1,8 @@
+using System.Net;
 using System.Security.Claims;
 using Cauce.Application.Common.Interfaces.Identity;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -47,6 +49,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     private readonly string? _onnxModelPath;
     private readonly string? _minioPublicEndpoint;
     private readonly bool _rateLimitingEnabled;
+    private readonly IReadOnlyDictionary<string, string?>? _additionalSettings;
+    private readonly IPAddress? _remoteIpAddress;
 
     /// <summary>
     /// Inicializa la fábrica con las cadenas de conexión de los contenedores.
@@ -67,6 +71,11 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     /// contrato de 429 sigan valiendo; se apaga solo en las pruebas que necesitan emitir más
     /// peticiones de las que la política permite y que no están probando la política.
     /// </param>
+    /// <param name="additionalSettings">Configuración extra que se aplica al final, opcional.</param>
+    /// <param name="remoteIpAddress">
+    /// IP de origen que ve la aplicación, opcional. El servidor de pruebas no asigna ninguna; se usa para
+    /// simular el proxy inverso en las pruebas de forwarded headers (acta A68).
+    /// </param>
     public CustomWebApplicationFactory(
         string connectionString,
         string? redisConnectionString = null,
@@ -79,7 +88,9 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         string? engineKind = null,
         string? onnxModelPath = null,
         string? minioPublicEndpoint = null,
-        bool rateLimitingEnabled = true)
+        bool rateLimitingEnabled = true,
+        IReadOnlyDictionary<string, string?>? additionalSettings = null,
+        IPAddress? remoteIpAddress = null)
     {
         _connectionString = connectionString;
         _redisConnectionString = redisConnectionString ?? "localhost:6379";
@@ -93,6 +104,8 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
         _onnxModelPath = onnxModelPath;
         _minioPublicEndpoint = minioPublicEndpoint;
         _rateLimitingEnabled = rateLimitingEnabled;
+        _additionalSettings = additionalSettings;
+        _remoteIpAddress = remoteIpAddress;
     }
 
     /// <summary>
@@ -191,11 +204,24 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 settings["Email:SmtpPort"] = _smtpPort?.ToString(System.Globalization.CultureInfo.InvariantCulture);
             }
 
+            if (_additionalSettings is not null)
+            {
+                foreach (var (key, value) in _additionalSettings)
+                {
+                    settings[key] = value;
+                }
+            }
+
             configuration.AddInMemoryCollection(settings);
         });
 
         builder.ConfigureTestServices(services =>
         {
+            if (_remoteIpAddress is not null)
+            {
+                services.AddSingleton<IStartupFilter>(new RemoteIpStartupFilter(_remoteIpAddress));
+            }
+
             services.RemoveAll<IKeycloakAdminClient>();
             services.AddSingleton<IKeycloakAdminClient>(KeycloakClient);
 
@@ -230,5 +256,37 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
                 };
             });
         });
+    }
+}
+
+/// <summary>
+/// Filtro de arranque que fija la IP de origen de cada petición antes de todo el pipeline, como la vería
+/// la API detrás de un proxy inverso.
+/// </summary>
+internal sealed class RemoteIpStartupFilter : IStartupFilter
+{
+    private readonly IPAddress _remoteIpAddress;
+
+    /// <summary>
+    /// Inicializa el filtro con la IP de origen a simular.
+    /// </summary>
+    /// <param name="remoteIpAddress">IP de origen.</param>
+    public RemoteIpStartupFilter(IPAddress remoteIpAddress)
+    {
+        _remoteIpAddress = remoteIpAddress;
+    }
+
+    /// <inheritdoc />
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next)
+    {
+        return app =>
+        {
+            app.Use((context, nextMiddleware) =>
+            {
+                context.Connection.RemoteIpAddress = _remoteIpAddress;
+                return nextMiddleware(context);
+            });
+            next(app);
+        };
     }
 }

@@ -10,7 +10,8 @@ namespace Cauce.Application.Patients.UseCases.GetAssignedPatientDetail;
 
 /// <summary>
 /// Handler que devuelve el detalle clínico de un paciente asignado. Rechaza el
-/// acceso si el nutricionista no tiene una asignación activa con el paciente.
+/// acceso si el nutricionista no tiene una asignación activa con el paciente. Si el paciente todavía
+/// no tiene perfil, responde con los campos clínicos en null (acta A69).
 /// </summary>
 public sealed class GetAssignedPatientDetailQueryHandler : IRequestHandler<GetAssignedPatientDetailQuery, GetAssignedPatientDetailResult>
 {
@@ -71,11 +72,29 @@ public sealed class GetAssignedPatientDetailQueryHandler : IRequestHandler<GetAs
         var patient = await _userRepository.FindByIdAsync(request.PatientUserId, cancellationToken).ConfigureAwait(false)
             ?? throw new PatientProfileNotFoundException();
 
-        var profile = await _patientProfileRepository.FindByUserIdAsync(request.PatientUserId, cancellationToken).ConfigureAwait(false)
-            ?? throw new PatientProfileNotFoundException();
-
         var declarations = await _patientAllergyRepository.ListByPatientAsync(request.PatientUserId, cancellationToken).ConfigureAwait(false);
         var allergies = await PatientAllergyMapper.MapAsync(declarations, _allergyRepository, cancellationToken).ConfigureAwait(false);
+
+        // Sin perfil no es un error: el paciente vinculado aparece en el panel antes de completar el
+        // onboarding, y el detalle responde con los campos clínicos en null (acta A69).
+        var profile = await _patientProfileRepository
+            .FindByUserIdAsync(request.PatientUserId, cancellationToken)
+            .ConfigureAwait(false);
+        if (profile is null)
+        {
+            return new GetAssignedPatientDetailResult(
+                patient.Id,
+                patient.FullName,
+                Age: null,
+                Bmi: null,
+                BmiCategory: null,
+                IbsSubtype: null,
+                OnboardingCompleted: false,
+                allergies,
+                BiologicalSex: null,
+                DiagnosisDate: null,
+                Medications: null);
+        }
 
         var bmi = _bmiCalculator.Calculate(profile.WeightKg, profile.HeightCm);
 
@@ -87,6 +106,9 @@ public sealed class GetAssignedPatientDetailQueryHandler : IRequestHandler<GetAs
             _bmiCalculator.Categorize(bmi),
             profile.IbsSubtype,
             profile.OnboardingCompleted,
-            allergies);
+            allergies,
+            profile.BiologicalSex,
+            profile.DiagnosisDate,
+            profile.Medications);
     }
 }
