@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.6.0 · **Actualizado:** 2026-09-25 · **Contrato:** [`openapi-v1.5.0.json`](openapi-v1.5.0.json) (333 KB, 65 operaciones, 57 paths)
+**Versión:** 1.7.0 · **Actualizado:** 2026-09-26 · **Contrato:** [`openapi-v1.6.0.json`](openapi-v1.6.0.json) (349 KB, 68 operaciones, 60 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -9,8 +9,36 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 
 > **Nota.** `CLAUDE.md` es un documento operativo local: está en el `.gitignore` del backend y no viaja en
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
-> Para el detalle de los siete endpoints de identidad, la fuente autoritativa versionada es
-> [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.3.
+> Para el detalle de los endpoints de identidad, la fuente autoritativa versionada es
+> [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.4.
+
+**Novedades de la v1.7.0 (bloque Portal listo 1, actas A68 y A69).**
+- **Sesión del portal web**, nueva sección [2.b](#2b-sesión-del-portal-web): `POST /auth/portal/login`,
+  `POST /auth/portal/refresh` y `POST /auth/portal/logout`. El portal se autentica contra el backend, nunca
+  contra Keycloak. Solo entra el rol `nutritionist`. El refresh token viaja en la cookie `HttpOnly`
+  `cauce_portal_rt` y nunca en el cuerpo, y la renovación y el cierre exigen el header `X-Cauce-Portal`.
+- **`/auth/login`, `/auth/refresh` y `/auth/logout` solo aceptan `clientId: "cauce-mobile"`**: cualquier
+  otro responde **400 `unsupported_client`** y queda auditado. Su esquema no cambió: el diff del OpenAPI
+  contra la v1.5.0 da operaciones y esquemas idénticos, con solo la descripción ampliada. En `/auth/refresh`,
+  un `clientId` desconocido respondía antes `validation_error`; ahora responde `unsupported_client`.
+- **Cliente OIDC mal configurado:** si Keycloak rechaza al cliente (`unauthorized_client` o
+  `invalid_client`, por ejemplo por falta de secret), el login y la renovación responden **500
+  `identity_provider_misconfigured`** en lugar de disfrazarlo de `invalid_credentials`.
+- **`GET /recommendations/{id}`** suma `title`, `description`, `source`, `isActive`, `archivedAt`,
+  `archiveReason` y `validUntil`. Es aditivo.
+- **`GET /recommendations/pending-review`** devuelve `PendingReviewRecommendationDto`, que agrega
+  `patientId` y `patientFullName` al resumen anterior. Es aditivo a nivel del JSON; cambia el nombre del
+  esquema.
+- **`GET /nutritionists/me/patients/{patientUserId}`** suma `biologicalSex`, `diagnosisDate` y
+  `medications`. Sin perfil, responde **200** con `onboardingCompleted: false` y los campos clínicos en
+  `null`; antes respondía 404 `patient_profile_not_found`. `age`, `bmi`, `bmiCategory` e `ibsSubtype`
+  pasan a ser anulables.
+- **`POST /recommendations/{id}/modify` exige `Idempotency-Key`** como aprobar y rechazar. **Cambio
+  incompatible:** sin la clave responde 400 con `errors.clientGuid`. Fuera de las pruebas nadie lo llamaba.
+- **Mínimos de la nota clínica**, sin cambios de comportamiento pero ahora escritos: 20 caracteres al
+  aprobar (HU0017 CA1), 10 al rechazar, al modificar (HU0017 CA3) y en la manual (HU0029).
+- El **código de paciente no se expone** en la cola de revisión, el panel ni el detalle: el acta A59 lo
+  deja fuera de las vistas de atención por seudonimización.
 
 **Novedades de la v1.6.0.** Nuevo `PUT /symptoms/{id}/meal-association`, para que el nutricionista
 asignado corrija a mano la comida asociada a un síntoma: la fija a una comida del mismo paciente, sin la
@@ -63,8 +91,9 @@ cliente, y el paso de las claves de `errors` a camelCase.
   `"PendingReview"`, `"AbdominalPain"`, `"IbsD"`); en base de datos se persisten en snake_case. Ver
   [CLAUDE.md → Enums](../../CLAUDE.md#enums-y-valores-controlados).
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
-  `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.5.0.json` bajo
+  `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`. El móvil obtiene los tokens por
+  `/auth/login`; el portal, por `/auth/portal/login` (§2.b). Ninguno de los dos habla con Keycloak.
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.6.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -85,6 +114,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
 
 1. [Públicos / Transversales](#1-públicos--transversales)
 2. [Autenticación](#2-autenticación)
+   - 2.b [Sesión del portal web](#2b-sesión-del-portal-web)
 3. [Paciente / Perfil clínico](#3-paciente--perfil-clínico)
 4. [Paciente / Registro diario](#4-paciente--registro-diario)
 5. [Paciente / IBS-SSS y evolución](#5-paciente--ibs-sss-y-evolución)
@@ -113,9 +143,11 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `invalid_ibs_sss_dimension` | 400 | Dimensión IBS-SSS fuera de 0–100. |
 | `invalid_clinical_note_association` | 400 | La nota no se asocia a exactamente una comida o un síntoma. |
 | `invalid_credentials` | 401 | Login fallido (mensaje genérico; no revela si la cuenta existe). |
-| `invalid_refresh_token` | 401 | Refresh token vencido, revocado o ya consumido (el realm rota y no permite reuso). |
+| `invalid_refresh_token` | 401 | Refresh token vencido, revocado o ya consumido (el realm rota y no permite reuso). En el portal, también cookie ausente o sesión de una cuenta que ya no puede usar el portal. |
+| `unsupported_client` | 400 | Una ruta de sesión recibió un cliente OIDC que no es el de su canal: las rutas del móvil solo aceptan `cauce-mobile`. |
 | *(sin `errorCode`)* | 401 | Falta/expira el Bearer JWT, o falta `X-Admin-Api-Key` en `/admin/*`. |
 | `forbidden` | 403 | Rol incorrecto para la política del endpoint. |
+| `csrf_header_missing` | 403 | Falta el header `X-Cauce-Portal` en la renovación o el cierre de sesión del portal. |
 | `unauthorized_patient_access` | 403 | El nutricionista no está asignado a ese paciente. |
 | `patient_resource_access_denied` | 403 | El recurso (comida/alimento) no pertenece al paciente autenticado. En la corrección manual de un nutricionista: la comida no es del paciente del síntoma. |
 | `recommendation_access_denied` | 403 | Sin autorización sobre la recomendación. |
@@ -143,6 +175,7 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | *(sin `errorCode`)* | 429 | Rate limit superado. Extensión `retryAfterSeconds`. |
 | `keycloak_integration_error` | 502 | Falla del proveedor de identidad al provisionar el usuario. |
 | `user_local_missing` | 500 | El token es válido en Keycloak pero no hay fila local en `users` para ese `sub`. Inconsistencia de identidad, no error del cliente. |
+| `identity_provider_misconfigured` | 500 | Keycloak rechazó al cliente OIDC del backend (`unauthorized_client` / `invalid_client`): falta o sobra el secret, o el cliente no admite el grant. Error de configuración del servidor; el detalle queda solo en el log. |
 | `internal_server_error` | 500 | Error inesperado. |
 
 ---
@@ -193,6 +226,12 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | Rate limit | `default-auth` (60/min·usuario) |
 | Respuestas | **200** `RecommendationDetailDto` · 401 · **403** (nutri no asignado) · **404** (paciente no propietario / no visible — evita revelar existencia) · 429 · 500 |
 
+Desde la v1.7.0, el detalle trae además `title` y `description` (los de las manuales y las modificadas; las
+del motor llegan en `null`), `source` (`EngineGenerated` o `Manual`), `isActive`, `archivedAt`,
+`archiveReason` y `validUntil`. `nutritionistNote` es la nota de aprobación, modificación o creación manual,
+visible para el paciente; el motivo de un rechazo nunca llega al paciente porque la rechazada no le es
+visible.
+
 > Nota: para el paciente, una recomendación no visible o archivada responde **404** (no 403), para no revelar
 > su existencia. El listado del paciente es `GET /recommendations/me` (§6).
 
@@ -200,9 +239,13 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 
 ## 2. Autenticación
 
-Los siete endpoints de identidad tienen contrato detallado y versionado en
-[`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.1, incluida la lista completa de `errorCode` por
+Los endpoints de identidad tienen contrato detallado y versionado en
+[`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.4, incluida la lista completa de `errorCode` por
 flujo. Lo de aquí es el resumen operativo.
+
+Cada intento de iniciar sesión, renovarla o cerrarla queda en `audit_logs` con fecha, IP de origen, canal
+(`mobile` o `portal`) y, si fue rechazado, su causa interna en `additional_context`. La causa nunca viaja
+al cliente. Un 423 se registra como `account_locked`, aparte de los `failed_login` (acta A68).
 
 ### `GET /api/v1/consent/current`
 | Campo | Valor |
@@ -237,10 +280,10 @@ consultar este endpoint y devolver los dos valores sin tocarlos.
 | Resumen | Passthrough a Keycloak (`grant_type=password`). Devuelve los tokens y la identidad del usuario. |
 | US/TS | US05, US06 |
 | Autorización | Anónimo |
-| Request body | `LoginRequest` (email, password, clientId) |
+| Request body | `LoginRequest` (email, password, clientId). `clientId` tiene que ser `cauce-mobile`. |
 | Idempotencia | — |
 | Rate limit | `auth-login` (10/min·IP) |
-| Respuestas | **200** `LoginResult` (accessToken, refreshToken, expiresIn, refreshExpiresIn, tokenType, **user**) · 400 · 401 `invalid_credentials` · **423** `account_locked` · 429 · 500 |
+| Respuestas | **200** `LoginResult` (accessToken, refreshToken, expiresIn, refreshExpiresIn, tokenType, **user**) · 400 (`validation_error`, `unsupported_client`) · 401 `invalid_credentials` · **423** `account_locked` · 429 · 500 (`identity_provider_misconfigured`, `user_local_missing`) |
 
 El objeto `user` (`AuthenticatedUser`) trae `userId`, `keycloakId`, `email`, `role`, `fullName`,
 `emailVerified` e `isInActivePilot`. **`isInActivePilot` no viaja en ningún claim del JWT:** login y refresh
@@ -256,7 +299,7 @@ indistinguible de una contraseña incorrecta, lo que hacía imposible cumplir US
 | `clientId` | `scope` | Motivo |
 | --- | --- | --- |
 | `cauce-mobile` | `openid offline_access` | Sin `offline_access` el refresh token queda atado a la sesión SSO del realm, cuyo `ssoSessionIdleTimeout` es de 30 minutos, y la sesión moriría por inactividad mucho antes de los 30 días previstos para el piloto (DEC-B3-01). |
-| cualquier otro | `openid` | El portal web usa sesiones cortas y no lo necesita. |
+| `cauce-web-portal` (solo por `/auth/portal/login`) | `openid` | El portal usa las sesiones de su cliente: 30 minutos de inactividad y 8 horas en total. |
 
 ### `POST /api/v1/auth/refresh`
 | Campo | Valor |
@@ -264,10 +307,10 @@ indistinguible de una contraseña incorrecta, lo que hacía imposible cumplir US
 | Resumen | Renueva la sesión con un refresh token vigente. Devuelve un juego de tokens nuevo, con la misma forma que el login. |
 | US/TS | US08 (continuidad de sesión) |
 | Autorización | Anónimo (la credencial es el propio refresh token) |
-| Request body | `RefreshTokenRequest` (refreshToken, clientId) |
+| Request body | `RefreshTokenRequest` (refreshToken, clientId). `clientId` tiene que ser `cauce-mobile`. |
 | Idempotencia | — |
 | Rate limit | `auth-refresh` (20/min·IP) |
-| Respuestas | **200** `LoginResult` (mismo shape que login, `user` incluido) · 400 · 401 `invalid_refresh_token` · 429 · 500 |
+| Respuestas | **200** `LoginResult` (mismo shape que login, `user` incluido) · 400 (`validation_error`, `unsupported_client`) · 401 `invalid_refresh_token` · 429 · 500 (`identity_provider_misconfigured`) |
 
 **Rotación obligatoria.** El realm tiene `revokeRefreshToken: true` y `refreshTokenMaxReuse: 0`. Cada
 renovación emite un refresh token nuevo e invalida el anterior de inmediato. El cliente **debe** persistir
@@ -284,10 +327,12 @@ Ambos desenlaces quedan auditados: `TokenRefresh` en el éxito y `FailedTokenRef
 | Resumen | Revoca el refresh token en Keycloak. |
 | US/TS | US08 |
 | Autorización | Autenticado |
-| Request body | `LogoutRequest` (refreshToken, clientId) |
+| Request body | `LogoutRequest` (refreshToken, clientId). `clientId` tiene que ser `cauce-mobile`. |
 | Idempotencia | — |
 | Rate limit | — |
-| Respuestas | **204** · 400 · 401 · 500 |
+| Respuestas | **204** · 400 (`validation_error`, `unsupported_client`) · 401 · 500 |
+
+Un cierre rechazado queda auditado como `failed_logout` con su causa.
 
 ### `POST /api/v1/auth/password-reset/request`
 | Campo | Valor |
@@ -338,6 +383,74 @@ La ventana se cuenta por correo en minúsculas y sin espacios envolventes: dos c
 misma IP no se estorban, y el mismo correo en distinta caja cae en la misma cubeta. Si el cuerpo llega
 inutilizable, la partición cae a la IP de origen (acta A44). El envío a Keycloak es best-effort: si falla,
 la respuesta sigue siendo 200.
+
+---
+
+## 2.b Sesión del portal web
+
+El portal se autentica **contra el backend, como el móvil, y nunca contra Keycloak** (acta A68). El backend
+pide los tokens con el cliente confidencial `cauce-web-portal` y su secret, que nunca sale de la
+configuración del servidor. **Solo entra el rol `nutritionist`.**
+
+**Cookie del refresh token.** `cauce_portal_rt`, con `HttpOnly`, `SameSite=Strict`,
+`Path=/api/v1/auth/portal` y `Max-Age` igual a la vigencia del refresh token (30 minutos, que se renuevan con
+cada refresh, y como máximo 8 horas de sesión). `Secure` se configura con `PortalSession:CookieSecure`: está
+activo en todos los ambientes salvo Development, donde la API corre sobre `http://localhost`. El refresh
+token **nunca aparece en el cuerpo**. El access token vive solo en memoria del portal.
+
+**Defensa contra CSRF.** `refresh` y `logout` exigen el header `X-Cauce-Portal` con cualquier valor no vacío,
+por convención `1`. Sin él responden **403 `csrf_header_missing`**. El portal tiene que llamar con
+`credentials: "include"` para que el navegador envíe la cookie. La cookie es `SameSite=Strict`, así que el
+portal y la API tienen que ser del mismo sitio: `localhost` con cualquier puerto en desarrollo, y el mismo
+dominio registrable en el despliegue.
+
+**Mismo 401 para todo rechazo.** Un paciente, una cuenta deshabilitada, pendiente de activación, suspendida
+o inactiva, una contraseña incorrecta y un correo inexistente reciben el mismo **401 `invalid_credentials`**
+con el mismo mensaje. La causa queda solo en `audit_logs`. El bloqueo por intentos fallidos conserva su
+**423 `account_locked`** con `lockedUntil`.
+
+### `POST /api/v1/auth/portal/login`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Inicia sesión en el portal. Devuelve el access token y deja el refresh token en la cookie. |
+| US/TS | US05, US06 (portal), CP006, CP015, CP016, CP017 |
+| Autorización | Anónimo |
+| Request body | `PortalLoginRequest` (email, password). Sin `clientId`: lo define la ruta. |
+| Idempotencia | — |
+| Rate limit | `auth-portal-login` (10/min·IP, contador propio) |
+| Respuestas | **200** `PortalSessionResult` (accessToken, expiresIn, tokenType, **user**) + `Set-Cookie: cauce_portal_rt` · 400 `validation_error` · 401 `invalid_credentials` · **423** `account_locked` · 429 · 500 (`identity_provider_misconfigured`, `user_local_missing`) |
+
+La respuesta lleva `Cache-Control: no-store`. Un nutricionista pendiente de activación que ya definió su
+contraseña entra, y ese primer inicio de sesión activa la cuenta (acta A51).
+
+### `POST /api/v1/auth/portal/refresh`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Renueva la sesión con la cookie. Rota la cookie y devuelve un access token nuevo. |
+| US/TS | US08 (portal) |
+| Autorización | Anónimo (la credencial es la cookie) + header `X-Cauce-Portal` |
+| Request body | — |
+| Idempotencia | — |
+| Rate limit | `auth-portal-refresh` (20/min·IP, contador propio) |
+| Respuestas | **200** `PortalSessionResult` + `Set-Cookie` rotada · 401 `invalid_refresh_token` · 403 `csrf_header_missing` · 429 · 500 `identity_provider_misconfigured` |
+
+Sin cookie, con un token vencido o ya rotado, o con la sesión de una cuenta que dejó de poder usar el
+portal (por ejemplo, suspendida después de entrar), responde 401: el portal debe volver al login. Es la
+llamada que hace el portal al cargar, para recuperar la sesión sin guardar nada en el navegador.
+
+### `POST /api/v1/auth/portal/logout`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Revoca en Keycloak el refresh token de la cookie y borra la cookie. |
+| US/TS | US08 (portal) |
+| Autorización | `Policy = Nutritionist` (Bearer) + header `X-Cauce-Portal` |
+| Request body | — |
+| Idempotencia | — |
+| Rate limit | — |
+| Respuestas | **204** + `Set-Cookie` que borra `cauce_portal_rt` · 401 · 403 (`forbidden`, `csrf_header_missing`) · 500 |
+
+Exige el Bearer para que la fila `logout` de la auditoría tenga actor. Si el access token ya venció, el
+portal renueva primero y cierra después. Sin cookie responde igual 204.
 
 ---
 
@@ -773,12 +886,17 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 ### `GET /api/v1/nutritionists/me/patients/{patientUserId}`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Detalle clínico de un paciente asignado. Requiere asignación activa. |
+| Resumen | Detalle clínico de un paciente asignado: edad, IMC y su categoría, subtipo, sexo biológico, fecha de diagnóstico, medicación, onboarding y alergias. Requiere asignación activa. |
 | US/TS | US18 |
 | Request body | — |
 | Idempotencia | — |
 | Rate limit | — |
-| Respuestas | **200** `GetAssignedPatientDetailResult` · 404 `patient_profile_not_found` · 401 · 403 `unauthorized_patient_access` · 500 |
+| Respuestas | **200** `GetAssignedPatientDetailResult` · 401 · 403 `unauthorized_patient_access` · 500 |
+
+Si el paciente todavía no creó su perfil, responde **200** con `onboardingCompleted: false`, `allergies: []`
+y `age`, `bmi`, `bmiCategory`, `ibsSubtype`, `biologicalSex`, `diagnosisDate` y `medications` en `null`. Pasa
+con los vínculos por canje post-registro (acta A41), que aparecen en el panel antes del perfil. **No incluye
+el código de paciente** (acta A59).
 
 ### `GET /api/v1/nutritionists/me/patients/{patientId}/evolution`
 | Campo | Valor |
@@ -813,17 +931,17 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 ### `GET /api/v1/recommendations/pending-review`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Recomendaciones pendientes de revisión de los pacientes asignados, paginadas. |
+| Resumen | Recomendaciones pendientes de revisión de los pacientes asignados, paginadas, de la más antigua a la más nueva. Cada fila trae el paciente (`patientId`, `patientFullName`), sin su código (acta A59). |
 | US/TS | US17 |
 | Query | `page=1`, `pageSize=20` |
 | Idempotencia | — |
 | Rate limit | `default-auth` |
-| Respuestas | **200** `PagedResult<RecommendationSummaryDto>` · 400 · 401 · 403 · 429 · 500 |
+| Respuestas | **200** `PagedResult<PendingReviewRecommendationDto>` (recommendationId, patientId, patientFullName, status, confidenceScore, itemsCount, generatedAt, expiresAt) · 400 · 401 · 403 · 429 · 500 |
 
 ### `POST /api/v1/recommendations/{id}/approve`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Aprueba con nota clínica (≥ 20 caracteres). |
+| Resumen | Aprueba con nota clínica de **20 a 2000 caracteres** (HU0017 CA1). La nota es visible para el paciente en el detalle (HU0015 CA2). |
 | US/TS | US17 (CA01) |
 | Request body | `ApproveRecommendationRequest` (note) |
 | Idempotencia | **Sí — requerido** |
@@ -833,7 +951,7 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 ### `POST /api/v1/recommendations/{id}/reject`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Rechaza con motivo. |
+| Resumen | Rechaza con motivo de **10 a 2000 caracteres**. El motivo nunca le llega al paciente: la recomendación rechazada no aparece en su listado ni en su detalle, y el push no lo incluye (HU0017 CA2). |
 | US/TS | US17 |
 | Request body | `RejectRecommendationRequest` (reason) |
 | Idempotencia | **Sí — requerido** |
@@ -843,17 +961,17 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 ### `POST /api/v1/recommendations/{id}/modify`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Aprueba tras modificar ítems y/o contenido (`PendingReview → ModifiedApproved`). |
+| Resumen | Aprueba tras modificar ítems y/o contenido (`PendingReview → ModifiedApproved`). Nota clínica de **10 a 2000 caracteres** (HU0017 CA3), visible para el paciente. |
 | US/TS | US17 CA03 |
 | Request body | `ModifyRecommendationRequest` (clinicalNote, items?, title?, description?, steps?) |
-| Idempotencia | — |
+| Idempotencia | **Sí — requerido** (desde la v1.7.0; sin la clave, 400 con `errors.clientGuid`) |
 | Rate limit | `default-auth` |
-| Respuestas | **204** · 400 · 404 `recommendation_not_found` · 409 (`conflict_state`, `recommendation_expired`) · 401 · 403 `recommendation_access_denied` · 429 · 500 |
+| Respuestas | **204** · 400 · 404 `recommendation_not_found` · 409 (`conflict_state`, `recommendation_expired`, `idempotency_mismatch`) · 401 · 403 `recommendation_access_denied` · 429 · 500 |
 
 ### `POST /api/v1/recommendations/manual`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Crea manualmente una recomendación para un paciente asignado (queda `ManualApproved`). |
+| Resumen | Crea manualmente una recomendación para un paciente asignado (queda `ManualApproved`). Nota clínica de **10 a 2000 caracteres** (HU0029), visible para el paciente. Título hasta 200 caracteres, descripción hasta 4000 y cada paso hasta 500. |
 | US/TS | US29 |
 | Request body | `CreateManualRecommendationRequest` (patientId, title, description, steps?, clinicalNote, validUntil?) |
 | Idempotencia | — |

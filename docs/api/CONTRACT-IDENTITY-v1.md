@@ -1,11 +1,20 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.3.1 · **Fecha:** 22 de septiembre de 2026 · **Backend:** rama `feature/backend-pilot-readiness`
-**Alcance:** endpoints de identidad que consume la app móvil Flutter (US01, US05, US07, US08, US19, US20).
+**Versión:** 1.4.0 · **Fecha:** 26 de septiembre de 2026 · **Backend:** rama `feature/backend-portal-ready-1`
+**Alcance:** endpoints de identidad que consumen la app móvil Flutter (US01, US05, US07, US08, US19, US20) y,
+desde v1.4, el portal web de nutricionistas (§2.12).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
 `src/Cauce.Application/Identity/`. Cada afirmación de este documento lleva su evidencia en `archivo:línea`.
 
+> **v1.4.0 (Portal listo 1, acta A68).** El portal web tiene su propio canal de sesión:
+> `POST /auth/portal/login`, `/auth/portal/refresh` y `/auth/portal/logout` (§2.12), con el refresh token en
+> una cookie `HttpOnly` y un header contra CSRF. **Las tres rutas del móvil conservan su contrato**, verificado
+> con un diff del OpenAPI, pero ahora **solo aceptan `clientId: "cauce-mobile"`**: cualquier otro responde 400
+> `unsupported_client`. Cada intento queda auditado con canal y causa interna, un 423 se audita aparte como
+> `account_locked`, y un cliente OIDC rechazado por Keycloak responde 500 `identity_provider_misconfigured`
+> en lugar de `invalid_credentials`.
+>
 > **v1.3.1 (Backend-Pilot-Readiness).** Sin cambios de contrato en los nueve endpoints de identidad. Se
 > actualizan las citas `archivo:línea` de `RegisterPatientCommandHandler.cs`, desplazadas siete líneas al
 > inyectar el generador del código de paciente (acta A59). El registro ahora asigna un `patient_code`
@@ -14,7 +23,8 @@ Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y 
 > reporte clínico.
 
 **Decisión de arquitectura vigente:** el móvil autentica contra `POST /api/v1/auth/login` del backend
-(passthrough a Keycloak). No usa Authorization Code + PKCE directo contra Keycloak. Motivo: el
+(passthrough a Keycloak), y desde v1.4 el portal hace lo mismo contra `POST /api/v1/auth/portal/login`
+(acta A68). Ninguno usa Authorization Code + PKCE directo contra Keycloak. Motivo: el
 `AuditingMiddleware` detecta el login solo por la ruta `POST /auth/login`
 (`src/Cauce.Api/Middleware/AuditingMiddleware.cs:46`), y `LoginCommandHandler` es el único que escribe
 `users.last_login_at` (`src/Cauce.Application/Identity/UseCases/Login/LoginCommandHandler.cs:45`). Con PKCE
@@ -30,6 +40,9 @@ directo, `audit_logs` quedaría sin registro de accesos.
 | POST | `/api/v1/auth/login` | Anónimo | `auth-login` 10/min por IP | 200, 400, 401, **423**, 429, 500 |
 | POST | `/api/v1/auth/refresh` **(nuevo, v1.1)** | Anónimo | `auth-refresh` 20/min por IP | 200, 400, 401, 429, 500 |
 | POST | `/api/v1/auth/logout` | Bearer JWT | Sin política | 204, 400, 401, 500 |
+| POST | `/api/v1/auth/portal/login` **(nuevo, v1.4)** | Anónimo | `auth-portal-login` 10/min por IP | 200, 400, 401, **423**, 429, 500 |
+| POST | `/api/v1/auth/portal/refresh` **(nuevo, v1.4)** | Anónimo + cookie + `X-Cauce-Portal` | `auth-portal-refresh` 20/min por IP | 200, 401, 403, 429, 500 |
+| POST | `/api/v1/auth/portal/logout` **(nuevo, v1.4)** | Bearer JWT · `Policy=Nutritionist` + `X-Cauce-Portal` | Sin política | 204, 401, 403, 500 |
 | POST | `/api/v1/auth/password-reset/request` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
 | POST | `/api/v1/auth/verification-email/resend` **(nuevo, v1.2)** | Anónimo | `auth-verify-resend` 3/h por **correo** | 200, 400, 429, 500 |
@@ -135,7 +148,7 @@ Passthrough a Keycloak con `grant_type=password` (Direct Access Grants).
 |---|---|---|---|
 | `email` | string | Sí | No vacío, formato de correo, máx 320 |
 | `password` | string | Sí | No vacío, máx 200 |
-| `clientId` | string | Sí | No vacío, máx 100. La app móvil envía `cauce-mobile` |
+| `clientId` | string | Sí | No vacío, máx 100. **Tiene que ser `cauce-mobile`** desde v1.4: otro valor responde 400 `unsupported_client` y queda auditado. El portal usa §2.12 |
 
 **Response 200** (`src/Cauce.Application/Identity/UseCases/Login/LoginCommand.cs:4-9`)
 
@@ -183,35 +196,43 @@ mismos códigos, mismo cuerpo.
 | HTTP | `errorCode` | Cuándo |
 |---|---|---|
 | 400 | `validation_error` | Falla una regla de FluentValidation |
-| 401 | `invalid_credentials` | Keycloak respondió 400 o 401. Mensaje genérico, no revela si la cuenta existe (`KeycloakTokenClient.cs:61-65`) |
+| 400 | `unsupported_client` | *(v1.4)* El `clientId` no es `cauce-mobile` |
+| 401 | `invalid_credentials` | Keycloak rechazó las credenciales (`invalid_grant`). Mensaje genérico, no revela si la cuenta existe |
+| 423 | `account_locked` | Cuenta bloqueada por intentos fallidos, con `lockedUntil` (§6) |
 | 429 | *(sin `errorCode`)* | Se superó el límite |
+| 500 | `identity_provider_misconfigured` | *(v1.4)* Keycloak rechazó al cliente OIDC (`unauthorized_client` o `invalid_client`). Error de configuración del servidor; antes llegaba disfrazado de 401 `invalid_credentials` |
 | 500 | `user_local_missing` | Keycloak autenticó pero no existe la cuenta local. Inconsistencia de aprovisionamiento, no error del cliente; antes del fix 5 pasaba en silencio y se devolvían tokens de una identidad que el backend no conoce |
-| 500 | `internal_server_error` | Keycloak respondió un status inesperado (`KeycloakTokenClient.cs:67-73`) |
+| 500 | `internal_server_error` | Keycloak respondió un status inesperado |
 
-**No se declara 423.** `AccountLockedException` existe y está mapeada a 423 `account_locked`
-(`src/Cauce.Api/Middleware/ExceptionHandlingMiddleware.cs:163-164`), pero **ningún código la lanza**
-(0 sitios de `throw` en `src/` y `tests/`). El bloqueo por fuerza bruta lo aplica Keycloak y llega al móvil
-como 401 `invalid_credentials`. Ver sección 6.
+> Hasta v1.3.1 este apartado decía que no se declaraba el 423 porque nadie lanzaba `AccountLockedException`.
+> Era falso desde v1.1, cuando se implementó el bloqueo que describe la §6.
 
 **Llamada a Keycloak** (`src/Cauce.Infrastructure/Identity/KeycloakTokenClient.cs:45-52`)
 
 | Parámetro del form | Valor |
 |---|---|
 | `grant_type` | `password` |
-| `client_id` | El `clientId` que envió el cliente |
+| `client_id` | `cauce-mobile` |
 | `username` | El `email` |
 | `password` | La contraseña |
-| `scope` | `openid` |
+| `scope` | `openid offline_access` (§5.1) |
 
-**`client_secret`: no se envía.** El cliente `cauce-mobile` es público, así que no aplica.
+**`client_secret`: no se envía.** El cliente `cauce-mobile` es público, así que no aplica. El del portal sí
+lo lleva, desde la configuración del backend (§2.12).
 
 **Efectos secundarios del login exitoso**
 
 | Efecto | Evidencia |
 |---|---|
 | Escribe `users.last_login_at`, resetea `failed_login_attempts` a 0 y `locked_until` a null | `LoginCommandHandler.cs:45` → `User.cs:206-211` |
-| Registra `LOGIN` en `audit_logs` | `AuditingMiddleware.cs:68-72, 108` |
-| Un login fallido registra `FAILED_LOGIN` en `audit_logs` | `AuditingMiddleware.cs:60-66, 108` |
+| Registra `LOGIN` en `audit_logs`, con `{"channel":"mobile"}` en el contexto | `AuditingMiddleware` |
+| Un login fallido registra `FAILED_LOGIN` con canal y causa interna; un 423 registra `ACCOUNT_LOCKED` *(v1.4)* | `AuditingMiddleware`, `AuthFailureCauses` |
+
+**Causas internas de un rechazo** *(v1.4)*. Salen del estado local de la cuenta y de la Admin API, nunca del
+texto de error de Keycloak, y se guardan en `additional_context.cause`. Nunca viajan al cliente:
+`wrong_password`, `unknown_account`, `account_disabled`, `pending_activation`, `required_action_pending`,
+`account_locked`, `role_not_allowed`, `account_suspended`, `account_inactive`, `unsupported_client`,
+`client_misconfigured`, `local_account_missing`, `invalid_request`, `undetermined`.
 
 ---
 
@@ -238,10 +259,12 @@ Revoca el refresh token en Keycloak.
 | HTTP | `errorCode` | Cuándo |
 |---|---|---|
 | 400 | `validation_error` | Falla una regla de FluentValidation |
+| 400 | `unsupported_client` | *(v1.4)* El `clientId` no es `cauce-mobile` |
 | 401 | *(sin `errorCode`)* | Falta el Bearer o el JWT es inválido o expiró |
 | 500 | `internal_server_error` | Error inesperado |
 
-Registra `LOGOUT` en `audit_logs` (`AuditingMiddleware.cs:73-76, 131`).
+Registra `LOGOUT` en `audit_logs` con el canal; un cierre rechazado registra `FAILED_LOGOUT` con su causa
+*(v1.4)*.
 
 ---
 
@@ -398,7 +421,7 @@ Renueva la sesión a partir de un refresh token vigente.
 | Campo | Tipo | Obligatorio | Validación |
 |---|---|---|---|
 | `refreshToken` | string | Sí | No vacío |
-| `clientId` | string | Sí | No vacío, máx 100, uno de `cauce-mobile` o `cauce-web-portal` |
+| `clientId` | string | Sí | No vacío, máx 100. **Tiene que ser `cauce-mobile`** desde v1.4 |
 
 **Response 200.** Idéntico al de `POST /auth/login`, incluido el objeto `user`.
 
@@ -410,14 +433,17 @@ que recibe**; reintentar con el anterior devuelve 401. Verificado end-to-end con
 
 | HTTP | `errorCode` | Cuándo |
 |---|---|---|
-| 400 | `validation_error` | Falta un campo o el `clientId` no es conocido |
+| 400 | `validation_error` | Falta un campo |
+| 400 | `unsupported_client` | *(v1.4)* El `clientId` no es `cauce-mobile`. Hasta v1.3.1, un cliente desconocido respondía `validation_error` y el intento no quedaba auditado |
 | 401 | `invalid_refresh_token` | El token expiró, fue revocado por un logout, o ya se consumió por una renovación previa |
 | 429 | *(sin `errorCode`)* | Se superó el límite |
+| 500 | `identity_provider_misconfigured` | *(v1.4)* Keycloak rechazó al cliente OIDC |
 | 500 | `user_local_missing` | El token renovó pero no existe la cuenta local del sujeto |
 
 **Auditoría.** Una renovación exitosa escribe `token_refresh` en `audit_logs` con el actor resuelto;
 una fallida escribe `failed_token_refresh` **sin actor** (el token rechazado no permite identificar la
-cuenta con garantías), conservando IP y momento. Lo escribe el handler, no el `AuditingMiddleware`.
+cuenta con garantías), conservando IP y momento. Lo escribe el handler, no el `AuditingMiddleware`. Desde
+v1.4 el contexto adicional lleva `clientId`, `channel` y, en el fallo, `cause`.
 
 ---
 
@@ -529,6 +555,82 @@ con el mismo mecanismo que usa el registro. El texto distingue ambos casos.
 **Auditoría.** Tanto el canje efectivo como el rechazado por nutricionista no disponible escriben
 `nutritionist_assignment` en `audit_logs`, sobre `invitation_codes`, con el desenlace y el estado exacto
 del nutricionista en el contexto. La fila de `nutritionist_patient` la audita su trigger de PostgreSQL.
+
+---
+
+### 2.12 Sesión del portal web *(nuevo en v1.4)*
+
+El portal de nutricionistas se autentica **contra el backend, como el móvil**, y nunca habla con Keycloak
+(acta A68). El backend pide los tokens con el cliente confidencial `cauce-web-portal` y su secret
+(`Keycloak:WebPortalClientSecret`), que nunca sale del servidor. **Solo entra el rol `nutritionist`**; un
+nutricionista suspendido o inactivo tampoco entra. Keycloak abre la sesión antes de que el backend pueda
+aplicar esas reglas, así que un rechazo la revoca en el acto.
+
+**Cookie del refresh token.** `cauce_portal_rt` · `HttpOnly` · `SameSite=Strict` · `Path=/api/v1/auth/portal` ·
+`Max-Age` = `refresh_expires_in` de Keycloak · `Secure` según `PortalSession:CookieSecure` (activo salvo en
+Development). El refresh token **nunca viaja en el cuerpo**. El access token vive en memoria del portal.
+
+**CSRF.** `refresh` y `logout` exigen el header `X-Cauce-Portal` no vacío (por convención `1`); sin él, 403
+`csrf_header_missing`. El header está en la lista de CORS. La cookie es `SameSite=Strict`: portal y API
+tienen que ser del mismo sitio.
+
+**Sesión.** Sin `offline_access`: rige el cliente del portal, 30 minutos de inactividad y 8 horas en total.
+El access token dura 15 minutos. Cada renovación rota el refresh token y la cookie.
+
+#### `POST /api/v1/auth/portal/login`
+
+| Campo | Valor |
+|---|---|
+| Auth | Anónimo |
+| Rate limit | `auth-portal-login`, 10 por minuto por IP, contador propio |
+| Request | `PortalLoginRequest`: `email` (no vacío, formato de correo, máx 320), `password` (no vacío, máx 200). Sin `clientId` |
+| Response 200 | `PortalSessionResult`: `accessToken`, `expiresIn`, `tokenType`, `user` (mismo `AuthenticatedUser` que el móvil) + `Set-Cookie: cauce_portal_rt=…` + `Cache-Control: no-store` |
+
+| HTTP | `errorCode` | Cuándo |
+|---|---|---|
+| 400 | `validation_error` | Falta un campo o no cumple la validación |
+| 401 | `invalid_credentials` | **Todo rechazo, con el mismo mensaje:** contraseña incorrecta, correo inexistente, paciente, cuenta deshabilitada en Keycloak, pendiente de activación sin contraseña, suspendida o inactiva. La causa queda solo en `audit_logs` |
+| 423 | `account_locked` | Bloqueo por intentos fallidos, con `lockedUntil` (§6) |
+| 429 | *(sin `errorCode`)* | Se superó el límite |
+| 500 | `identity_provider_misconfigured` | Falta el secret del cliente del portal o Keycloak lo rechazó |
+| 500 | `user_local_missing` | Keycloak autenticó pero no existe la cuenta local |
+
+Un nutricionista pendiente de activación que ya definió su contraseña con el enlace de Keycloak entra, y
+ese primer inicio de sesión activa la cuenta (acta A51).
+
+#### `POST /api/v1/auth/portal/refresh`
+
+| Campo | Valor |
+|---|---|
+| Auth | Anónimo; la credencial es la cookie. Exige `X-Cauce-Portal` |
+| Rate limit | `auth-portal-refresh`, 20 por minuto por IP, contador propio |
+| Request | Sin cuerpo. El navegador envía la cookie con `credentials: "include"` |
+| Response 200 | `PortalSessionResult` + `Set-Cookie` con el refresh token rotado |
+
+| HTTP | `errorCode` | Cuándo |
+|---|---|---|
+| 401 | `invalid_refresh_token` | Sin cookie, token vencido, revocado o ya rotado, o sesión de una cuenta que dejó de poder usar el portal |
+| 403 | `csrf_header_missing` | Falta `X-Cauce-Portal` |
+| 429 | *(sin `errorCode`)* | Se superó el límite |
+| 500 | `identity_provider_misconfigured` | Keycloak rechazó al cliente del portal |
+
+Se audita igual que §2.9, con `channel: "portal"`. El portal la llama al cargar para recuperar la sesión.
+
+#### `POST /api/v1/auth/portal/logout`
+
+| Campo | Valor |
+|---|---|
+| Auth | Bearer JWT · `Policy=Nutritionist`. Exige `X-Cauce-Portal` |
+| Rate limit | Sin política |
+| Request | Sin cuerpo; lee la cookie |
+| Response 204 | Revoca el refresh token en Keycloak y borra la cookie (`Set-Cookie` con `expires` en 1970). Sin cookie, igual 204 |
+
+| HTTP | `errorCode` | Cuándo |
+|---|---|---|
+| 401 | *(sin `errorCode`)* | Falta el Bearer o venció: el portal renueva y reintenta |
+| 403 | `forbidden` / `csrf_header_missing` | El token no es de un nutricionista, o falta el header |
+
+Registra `LOGOUT` con `channel: "portal"`, o `FAILED_LOGOUT` con su causa.
 
 ---
 
@@ -649,6 +751,7 @@ campo obligatorio del record ausente, produce el `ValidationProblemDetails` auto
 | Obtención | `POST /api/v1/auth/login` | Devuelve `accessToken`, `refreshToken`, `expiresIn`, `refreshExpiresIn`, `tokenType` |
 | Duración del access token | Realm Keycloak | 900 segundos (15 minutos). `accessTokenLifespan: 900` y `access.token.lifespan: "900"` del cliente `cauce-mobile` en `infrastructure/keycloak/import/realm.json` |
 | Vida de la sesión del cliente móvil | Realm Keycloak | `client.session.max.lifespan: "2592000"` (30 días) |
+| Vida de la sesión del portal *(v1.4)* | Realm Keycloak | `client.session.idle.timeout: "1800"` (30 min sin uso) y `client.session.max.lifespan: "28800"` (8 h) del cliente `cauce-web-portal`, sin `offline_access` |
 | Rotación de refresh token | Realm Keycloak | `revokeRefreshToken: true`, `refreshTokenMaxReuse: 0` |
 | **Renovación** *(v1.1)* | `POST /api/v1/auth/refresh` | Ver §2.9. Devuelve el mismo cuerpo que el login, con tokens nuevos |
 | Revocación | `POST /api/v1/auth/logout` | Revoca el refresh token en Keycloak |
@@ -657,7 +760,8 @@ campo obligatorio del record ausente, produce el `ValidationProblemDetails` auto
 ### 5.1 El scope `offline_access` y por qué importa
 
 El login del cliente `cauce-mobile` solicita **`scope=openid offline_access`**; cualquier otro cliente
-recibe solo `openid` (`KeycloakTokenClient.ResolveScope`).
+recibe solo `openid` (`KeycloakTokenClient.ResolveScope`). Desde v1.4 ese otro cliente solo puede ser
+`cauce-web-portal`, por §2.12.
 
 Sin `offline_access`, el refresh token queda atado a la sesión SSO del realm, cuyo
 `ssoSessionIdleTimeout` es de **1800 segundos (30 minutos)**. Medido antes del fix, el login devolvía
@@ -709,6 +813,12 @@ convertir un login rechazado en un error del servidor ni revelar al cliente que 
 
 **Un correo no registrado nunca llega a consultar la Admin API:** responder distinto revelaría qué
 cuentas existen.
+
+**Portal y auditoría** *(v1.4)*. El portal usa el mismo bloqueo y la misma respuesta 423. Cada intento sobre
+una cuenta bloqueada se registra como `account_locked` en `audit_logs`, aparte de los `failed_login`, y
+además emite un `SecurityEvent account_locked` de nivel Warning en el log. Con `failureFactor: 5`, el quinto
+fallo consecutivo ya responde 423. El rate limiting de login (10 por minuto por IP, por canal) no se activa
+antes: CP015 llega al bloqueo sin toparse con un 429.
 
 > **Matiz observado en el stack real.** El bloqueo puede dispararse **antes** de los 5 intentos. El
 > realm tiene `quickLoginCheckMilliSeconds: 1000` y `minimumQuickLoginWaitSeconds: 60`: dos fallos
@@ -837,6 +947,9 @@ Recalcular el hash en el cliente sigue siendo válido como verificación defensi
 | US07 CA02 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | 200, 400, 429, 500 |
 | US08 CA01 | POST | `/api/v1/auth/logout` | Bearer | 204, 400, 401, 500 |
 | US08 CA02 | POST | `/api/v1/auth/refresh` | Anónimo | 200, 400, 401, 429, 500 |
+| US05 (portal) | POST | `/api/v1/auth/portal/login` | Anónimo | 200, 400, 401, 423, 429, 500 |
+| US08 (portal) | POST | `/api/v1/auth/portal/refresh` | Anónimo + cookie + header | 200, 401, 403, 429, 500 |
+| US08 (portal) | POST | `/api/v1/auth/portal/logout` | Bearer `Nutritionist` + header | 204, 401, 403, 500 |
 
 **Rutas que siguen faltando:** reenvío de verificación de correo, y canje de código de invitación
 después del registro (US20 CA02). El texto del consentimiento (US01), el estado de bloqueo con tiempo
@@ -849,6 +962,7 @@ de espera (US05 CA02) y la renovación de token (US08 CA02) quedaron cubiertos e
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 1.0 | 2026-07-13 | Versión inicial. Levantada del código en el tag `v0.6.2-dev-seed` para habilitar Mobile-1b. |
+| 1.4.0 | 2026-09-26 | Bloque Portal listo 1 (acta A68). Nuevo §2.12 con la sesión del portal: tres rutas, cookie `HttpOnly` del refresh token, header `X-Cauce-Portal` contra CSRF, solo rol `nutritionist`. Las rutas del móvil conservan su esquema y solo aceptan `cauce-mobile` (400 `unsupported_client`). Auditoría de sesión con canal y causa interna; `ACCOUNT_LOCKED` y `FAILED_LOGOUT` nuevos. `unauthorized_client` / `invalid_client` de Keycloak pasan a 500 `identity_provider_misconfigured`. Se corrige el párrafo de §2.2 que negaba el 423. |
 | 1.3 | 2026-09-11 | Bloque Nutritionist-Activation-1 (acta A53). `POST /auth/register` valida el estado del nutricionista dueño del código con la misma regla que el canje de §2.11: responde 409 `nutritionist_not_available` con la extensión `reason`, antes de crear el usuario en Keycloak y sin consumir el código (§2.1). El cliente móvil todavía no mapea este `errorCode`. |
 | 1.2 | 2026-09-07 | Cierre de las deudas A39, A40 y A41 (bloque Backend-Fix-2). Nuevos §2.10 `POST /auth/verification-email/resend`, con rate limit particionado por correo, y §2.11 `POST /patients/me/nutritionist-assignment`, con el invariante de que el código no se consume si el canje falla. `POST /auth/login` sincroniza `emailVerified` desde Keycloak de forma unidireccional y tolerante a fallos (§2.2). Nuevos `errorCode`: `patient_already_assigned` y `nutritionist_not_available`, este último con la extensión `reason` (§3). Se retiran de §1 los dos endpoints que figuraban como inexistentes. |
 | 1.1 | 2026-08-25 | Cierre de los 8 gaps del `REPORTE-VERIFICACION-03`. Nuevos §2.8 `GET /consent/current` y §2.9 `POST /auth/refresh`. `POST /auth/login` incorpora el objeto `user` (§2.2) y declara 423 `account_locked` con la extensión `lockedUntil` (§6). El login del móvil pide `offline_access`, llevando `refreshExpiresIn` de 1800 a 2591999 (§5.1). Las claves de `errors` pasan a camelCase (§4.1). El enlace de recuperación se parametriza por cliente de origen. |
