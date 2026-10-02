@@ -52,7 +52,10 @@ public sealed class DevAdminSeeder
             return;
         }
 
-        if (await _userRepository.ExistsByEmailAsync(options.Email, ct).ConfigureAwait(false))
+        // El mismo criterio que el registro, para la base local y para Keycloak (acta A70).
+        var email = EmailNormalization.Normalize(options.Email);
+
+        if (await _userRepository.ExistsByEmailAsync(email, ct).ConfigureAwait(false))
         {
             return;
         }
@@ -62,14 +65,14 @@ public sealed class DevAdminSeeder
             .ConfigureAwait(false);
 
         var keycloakId = await _keycloakAdminClient
-            .CreateUserAsync(options.Email, options.FullName, UserRoles.Nutritionist, requireEmailVerification: false, ct)
+            .CreateUserAsync(email, options.FullName, UserRoles.Nutritionist, requireEmailVerification: false, ct)
             .ConfigureAwait(false);
 
         await _keycloakAdminClient
             .ResetPasswordAsync(keycloakId, options.Password, ct)
             .ConfigureAwait(false);
 
-        var user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, options.Email, options.FullName, nutritionistRoleId);
+        var user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, email, options.FullName, nutritionistRoleId);
 
         // El nutricionista de desarrollo no pasa por el enlace de Keycloak: usa una contraseña fija. Se
         // activa aquí porque DemoPatientSeeder solo asigna el paciente demo a un nutricionista activo

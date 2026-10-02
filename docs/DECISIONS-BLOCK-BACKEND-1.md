@@ -3,7 +3,7 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A69, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+**Alcance:** actas A38 a A71, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
 trabajo posterior sobre el consentimiento, Backend-Pilot-Readiness y los bloques pequeños
 posteriores. Las decisiones DEC-B3 a DEC-B7B y las actas A1 a A29 viven en el repo `docs`, en
 `decisions/DECISIONS-BLOCK-01.md` a `decisions/DECISIONS-BLOCK-07B.md`; las actas A30 a A37 y A42,
@@ -14,7 +14,8 @@ A42 es un acta del repo `docs`; A50 no existe como acta.
 **Consolidado:** 2026-09-17, sin alterar el contenido de ninguna acta. Ampliado el 2026-09-22 con
 las actas A59 a A65. El 2026-09-25 se corrigieron este encabezado y una referencia de A58, que daban
 por inexistente el Bloque 3, y se agregó A67. El 2026-09-26 se agregaron A68 y A69, del bloque Portal
-listo 1.
+listo 1. El 2026-09-30 se agregó A70, del endurecimiento del registro tras el incidente del 28-sep, y el
+2026-10-01 la A71, sobre la baja de cuenta en Keycloak.
 
 ---
 
@@ -52,6 +53,8 @@ listo 1.
 | [A67](#acta-a67-desviación-de-dec-b3-06-la-asociación-entre-síntoma-y-comida-la-calcula-solo-el-servidor) | Desviación de DEC-B3-06, la asociación entre síntoma y comida la calcula solo el servidor | Aprobada. Corrige la redacción de DEC-B3-06 sin editar el Bloque 3 |
 | [A68](#acta-a68-autenticación-del-portal-web-a-través-del-backend) | Autenticación del portal web a través del backend | Aprobada, implementada en Portal listo 1. Desviación consciente de RFC 9700 §2.4 |
 | [A69](#acta-a69-contrato-del-portal-para-la-revisión-hitl-y-el-detalle-del-paciente) | Contrato del portal para la revisión HITL y el detalle del paciente | Aprobada, implementada en Portal listo 1. Cambio incompatible en `modify` |
+| [A70](#acta-a70-registro-sin-huérfanos-en-keycloak-correo-normalizado-y-logs-a-archivo) | Registro sin huérfanos en Keycloak, correo normalizado y logs a archivo | Aprobada e implementada. El cliente de tokens queda en backlog |
+| [A71](#acta-a71-baja-de-cuenta-la-identidad-en-keycloak-se-anonimiza-después-del-commit-local) | Baja de cuenta: la identidad en Keycloak se anonimiza después del commit local | Aprobada como diseño. Implementación diferida, obligatoria antes del primer paciente real |
 
 ---
 
@@ -2547,5 +2550,291 @@ v1.2.0 y la v1.3.0: se declaran en el historial. Se retiró la v1.5.0. `ENDPOINT
 - Actas [A41](#acta-a41-endpoint-de-canje-de-código-de-invitación-post-registro),
   [A59](#acta-a59-código-correlativo-de-paciente-para-exportaciones-y-reportes),
   [A68](#acta-a68-autenticación-del-portal-web-a-través-del-backend).
+
+---
+
+## Acta A70: Registro sin huérfanos en Keycloak, correo normalizado y logs a archivo
+
+**Estado:** Aprobada e implementada. El sink de archivo se activó después de corregir dos rastros de datos
+personales en logs y de verificarlo con el API real. El cliente de tokens queda en backlog y la baja de cuenta
+pasa a la [A71](#acta-a71-baja-de-cuenta-la-identidad-en-keycloak-se-anonimiza-después-del-commit-local)
+(ver "Decisiones del cierre")
+**Fecha:** 2026-09-30
+**Aprobado por:** Kiwicha, con la luz verde de Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend: registro de pacientes, provisión de nutricionistas, cliente de la Admin API de
+Keycloak, búsqueda de cuentas por correo, seeders de desarrollo y configuración de logs. Sin cambio de
+contrato: `openapi-v1.6.0.json` no cambia.
+
+---
+
+### Contexto
+
+El 2026-09-28, entre las 21:11 y las 21:13 de Lima, tres `POST /auth/register` respondieron 500 durante una
+prueba en el celular. La Fase 0 de solo lectura encontró la causa en los logs de los contenedores: Docker
+Desktop se había apagado solo a las 20:55, y Postgres y Keycloak volvieron recién a las 21:14. El registro
+falló en su primera consulta a la base, antes de llegar a Keycloak, y no dejó ningún huérfano: los 9 usuarios
+del realm coincidían con los 9 locales y la secuencia de códigos de paciente no tenía huecos.
+
+La misma Fase 0 encontró tres huecos que sí pueden dejar huérfanos y una causa real de `user_local_missing`
+que no depende de ellos:
+
+- **H1.** La asignación del rol ocurría dentro de `CreateUserAsync`, después del 201 de Keycloak y fuera de la
+  compensación del handler. Es el huérfano que describe el prerequisito 5 del `CLAUDE.md`.
+- **H2.** La compensación usaba el token de la petición. Si el cliente cortaba (el móvil corta a los 15 s),
+  el borrado salía ya cancelado y el error se tragaba.
+- **H3.** Una falla de transporte con Keycloak (conexión rechazada, timeout del `HttpClient`) respondía 500
+  `internal_server_error` en lugar de 502.
+- **Correo.** La base local guardaba y comparaba el correo con la capitalización con que se escribió, y
+  Keycloak lo guarda y lo compara en minúsculas. Registrarse como `Ana@…` y entrar como `ana@…` autenticaba
+  en Keycloak y respondía 500 `user_local_missing`.
+
+### Decisión
+
+**1. Compensación robusta y fallas de transporte a 502.**
+
+- `KeycloakCompensation.TryDeleteUserAsync` es el único punto de compensación. No hereda la cancelación de
+  la petición, tiene un tope propio de 10 s (`KeycloakCompensation.Timeout`) y nunca lanza: si falla, deja un
+  `LogCritical` con el identificador de Keycloak, que no es un dato personal, para la limpieza manual.
+- `KeycloakAdminClient.CreateUserAsync` borra el usuario recién creado si falla la asignación del rol,
+  porque el llamador todavía no conoce su identificador.
+- `CreateNutritionistCommandHandler` tenía el mismo defecto con el mismo arreglo, y se corrigió igual. Los
+  seeders heredan la corrección del cliente.
+- `KeycloakAdminClient` envía todo por un único punto que traduce `HttpRequestException` y el timeout del
+  `HttpClient` a `KeycloakIntegrationException`, que el middleware ya responde como 502
+  `keycloak_integration_error`. Si la cancelación la pidió el llamador, se propaga tal cual: el corte del
+  cliente no se disfraza de falla del proveedor. El alcance es la Admin API. `KeycloakTokenClient` (login,
+  refresh y logout) no cambia.
+
+**2. Correo normalizado con un criterio único.**
+
+- `EmailNormalization.Normalize`, en el dominio: `Trim()` más `ToLowerInvariant()`. Las minúsculas son
+  invariantes a propósito: con la cultura `tr-TR`, `ToLower()` convierte `I` en `ı`.
+- Se aplica en la entidad `User` al guardar; en `UserRepository.FindByEmailAsync` y `ExistsByEmailAsync` al
+  buscar; en `AuditingMiddleware`, al resolver el actor del login; en la partición del rate limit y el
+  controlador del reenvío, que ya normalizaban con código propio; y en cada flujo que manda el correo a
+  Keycloak: registro, login del móvil y del portal, provisión de nutricionistas y los tres seeders de
+  desarrollo. La recuperación de contraseña y el reenvío de verificación buscan por el repositorio y
+  envían al correo guardado.
+- La prueba que lo reproduce, `EmailCaseInsensitivityTests`, recorre la API real en 7 casos. Falló completa
+  antes del arreglo (500 `user_local_missing` en los logins, 201 en el duplicado, sin token de recuperación
+  ni reenvío) y pasa completa después.
+- **Sin migración.** Ninguna base al alcance tiene correos sin normalizar: `cauce_dev.users`, 0 de 9, y
+  `keycloak.user_entity`, 0 de 11. El índice único `ux_users_email` no cambia: con la escritura
+  normalizada, el índice común alcanza.
+- El registro y el login devuelven el correo normalizado. El esquema de la respuesta no cambia.
+
+**3. La colisión con un huérfano queda en backlog.** Mientras tanto, la limpieza es manual:
+
+1. Buscar en el log la línea `Compensation failed: Keycloak user <id>`. Cada una es un huérfano conocido.
+2. Detectar los demás con dos consultas sobre el Postgres de `infrastructure` y comparar los resultados:
+
+   ```sql
+   -- Base keycloak: usuarios del realm, sin cuentas de servicio
+   select u.id from user_entity u join realm r on r.id = u.realm_id
+   where r.name = 'cauce' and u.service_account_client_link is null;
+
+   -- Base cauce_dev: identidades con cuenta local
+   select keycloak_id from users;
+   ```
+
+   Un identificador que está en la primera y no en la segunda es un huérfano. Una cuenta dada de baja no
+   aparece: conserva su fila local, anonimizada, con el mismo `keycloak_id`.
+3. Antes de borrar, confirmar en la consola de Keycloak que el usuario no tiene el rol `nutritionist` y que
+   su fecha de creación coincide con un alta fallida.
+4. Borrarlo en la consola (realm `cauce`, Users, Delete). El siguiente registro con ese correo vuelve a
+   funcionar.
+5. Un identificador que está en la segunda y no en la primera es la inconsistencia inversa. No se borra
+   nada: se reporta.
+
+**4. Logs a archivo en Development.**
+
+- `logs/` entró al `.gitignore` con su motivo. La regla genérica `[Ll]ogs/` de la plantilla ya lo cubría.
+- `Serilog.Sinks.File` 5.0.0 quedó declarado con versión exacta en `Cauce.Api.csproj`. Es la versión que ya
+  llegaba transitiva con `Serilog.AspNetCore` 8.0.3, así que no suma código. Es la única excepción a la R5
+  de este bloque, aprobada por Kiwicha.
+- La configuración vive solo en `appsettings.Development.json`, con la consola y el archivo declarados
+  juntos, porque los arreglos de configuración se fusionan por índice: `logs/cauce-api-.log`, rotación
+  diaria, 7 archivos y 10 MB por archivo con `rollOnFileSizeLimit`. Production no tiene sink de archivo. Con
+  `dotnet run --project src/Cauce.Api` la carpeta queda en `src/Cauce.Api/logs/`.
+- La revisión de datos personales encontró dos caminos latentes, y el sink se activó recién después de
+  corregirlos (decisión del cierre 1):
+  - El evento de seguridad por manipulación de `audit_logs` registraba como actor el correo completo. Buscaba
+    el claim `sub`, que el mapeo de claims renombra a `NameIdentifier`, y caía en `Identity.Name`, que con
+    `NameClaimType = "preferred_username"` es el correo (`ExceptionHandlingMiddleware.cs`).
+  - `AllergyHeuristicMatcher` escribía el nombre de la alergia de un paciente cuando no tenía regla
+    heurística. Hoy las diez del catálogo tienen regla, así que solo se dispararía con una alergia nueva.
+- Lo demás salió limpio: `LoggingBehavior` registra solo el nombre del comando y su duración; no hay
+  destructuración `{@…}`; EF Core no activa `EnableSensitiveDataLogging` y muestra los parámetros como `?`;
+  `Microsoft.Extensions.Http` 9.0.20 redacta el query string, donde `FindByEmailAsync` lleva el correo (la
+  verificación empírica lo confirmó); la cadena de conexión no incluye `Include Error Detail`; `ShowPII` de
+  IdentityModel está apagado; y `KeycloakTokenClient` registra solo códigos de estado y de error.
+
+### Huecos que quedan
+
+- Si `POST /users` se corta después de que Keycloak creó el usuario (timeout o corte del cliente justo en
+  ese instante), el identificador nunca llega y no hay nada que compensar. Queda para la limpieza manual.
+- Si el commit local se confirma y la respuesta de la base se pierde, la compensación borra en Keycloak una
+  cuenta que sí quedó local. La ventana es mínima; la detecta el paso 5 del procedimiento.
+- Una base caída sigue respondiendo 500 `internal_server_error`, que fue la causa del incidente. No se tocó:
+  cambiarlo es global.
+
+### Consecuencias
+
+- Un alta a medias ya no deja un usuario en Keycloak, salvo en los huecos de arriba. Cuando la compensación
+  falla, queda una línea crítica con el identificador.
+- Cuando Keycloak no responde, el API devuelve 502 `keycloak_integration_error` en vez de 500 en todo lo que
+  usa la Admin API, incluidas la baja de cuenta y la confirmación del restablecimiento. El móvil muestra para
+  ese código "No pudimos crear tu cuenta", un texto que fuera del registro no corresponde.
+- Quien se registró con mayúsculas y entra con minúsculas, o al revés, inicia sesión. Un segundo registro
+  con otra capitalización responde 409 `duplicate_email` y no 502.
+- El prerequisito 5 del `CLAUDE.md` del backend describía el huérfano por falta de `view-realm`. Con este
+  cambio el alta se compensa sola; el texto se corrigió (decisión del cierre 7).
+
+### Decisiones del cierre (2026-10-01)
+
+Respuesta de Kiwicha a las siete preguntas abiertas del informe de cierre, con la numeración de ese informe.
+
+1. **Logs y datos personales: implementada.**
+   - El evento de manipulación de `audit_logs` toma el actor de `NameIdentifier` o de `sub`, igual que el
+     resto del código, y si no hay id registra el valor fijo `anonymous`. Nunca `Identity.Name` ni el correo.
+   - `AllergyHeuristicMatcher` registra solo cuántas alergias declaradas no tienen regla, nunca su nombre:
+     es dato de salud, sensible bajo la Ley 29733. El método recibe nombres y no identificadores del
+     catálogo, así que el conteo es lo único posible sin tocar otro archivo.
+   - Un test por arreglo, con un logger de captura propio y sin paquetes de pruebas nuevos. Los dos fallaron
+     antes del arreglo (el log decía el correo completo y `[AllergyName, Kiwi]`) y pasan después.
+   - Verificación empírica del 2026-10-01 con el API real y el Keycloak local, sobre una cuenta descartable
+     de correo, nombre y contraseñas reconocibles (`zenobia.canariopii.1001@cauce.local`): registro,
+     reenvío de verificación, verificación por el enlace real de Mailpit, login correcto, login con
+     contraseña errada, login con correo inexistente, restablecimiento completo, login con la contraseña
+     nueva y baja. En `logs/` (5362 líneas) hubo cero coincidencias del correo, del nombre, de las tres
+     contraseñas, de los seis tokens (acceso, refresco, verificación y restablecimiento) y del prefijo `eyJ`
+     de cualquier JWT. Las 1444 apariciones de `@` son marcadores de parámetros SQL, todos con valor `?`. Una
+     sonda adicional, el reenvío de activación al nutricionista pendiente de QA, confirmó la redacción del
+     query string: `execute-actions-email?client_id=…&redirect_uri=…` quedó registrado como
+     `execute-actions-email?*`. `FindByEmailAsync` sale por el mismo cliente tipado.
+2. **Cliente de tokens: backlog.** No se extiende el 502 a login, refresh y logout: es el camino crítico de
+   autenticación y el beneficio es cosmético.
+3. **Texto del móvil: cambio del mobile, lo registra Kiwicha.** Constancia: hoy la baja de cuenta y la
+   confirmación del restablecimiento también pueden devolver 502 `keycloak_integration_error`, y el móvil
+   muestra para ese código el texto del registro, "No pudimos crear tu cuenta".
+4. **Migración de correos: no se hace.** No existe otro entorno con datos y las bases al alcance tienen cero
+   correos sin normalizar. Para el runbook del entorno de certificación queda la consulta de detección; un
+   resultado distinto de cero exige normalizar esas filas, revisando colisiones, antes de desplegar:
+
+   ```sql
+   select count(*) from users where email <> lower(trim(email));
+   ```
+
+5. **Base caída: no se cambia el API a 503.** La mitigación es operativa y va al runbook del entorno de
+   certificación: reinicio automático de los contenedores y, ante 500 generalizados, revisar Postgres
+   primero.
+6. **Baja de cuenta: diseño aprobado, implementación diferida.** Ver la
+   [A71](#acta-a71-baja-de-cuenta-la-identidad-en-keycloak-se-anonimiza-después-del-commit-local).
+7. **Documentación: implementada.** `CONTRACT-IDENTITY-v1.md` documenta la normalización del correo y
+   corrige el 502, que ahora también figura en la confirmación del restablecimiento. Es solo texto: el
+   OpenAPI no cambia y la versión del documento tampoco. El prerequisito 5 del `CLAUDE.md` del backend se
+   corrigió en local, porque ese archivo está en el `.gitignore`.
+
+### Referencias
+
+- `src/Cauce.Application/Common/Identity/KeycloakCompensation.cs`
+- `src/Cauce.Infrastructure/Identity/KeycloakAdminClient.cs`
+- `src/Cauce.Application/Identity/UseCases/RegisterPatient/`, `CreateNutritionist/`, `Login/`
+- `src/Cauce.Domain/Identity/EmailNormalization.cs`, `User.cs`
+- `src/Cauce.Infrastructure/Persistence/Repositories/UserRepository.cs`, `Persistence/Seeders/`
+- `src/Cauce.Api/Middleware/AuditingMiddleware.cs`, `VerificationResendPartitionMiddleware.cs`,
+  `Controllers/AuthController.cs`
+- `src/Cauce.Api/Middleware/ExceptionHandlingMiddleware.cs`,
+  `src/Cauce.Infrastructure/Recommendations/Readers/AllergyHeuristicMatcher.cs`
+- `src/Cauce.Api/appsettings.Development.json`, `src/Cauce.Api/Cauce.Api.csproj`, `.gitignore`
+- `tests/Cauce.Api.IntegrationTests/Identity/EmailCaseInsensitivityTests.cs`,
+  `tests/Cauce.Api.IntegrationTests/Auditing/AuditTamperMiddlewareTests.cs`,
+  `tests/Cauce.Infrastructure.Tests/Identity/KeycloakAdminClientTests.cs`,
+  `tests/Cauce.Infrastructure.Tests/Recommendations/AllergyHeuristicMatcherTests.cs`,
+  `tests/Cauce.Application.Tests/Identity/KeycloakCompensationTests.cs`
+- `docs/api/CONTRACT-IDENTITY-v1.md`
+- Actas [A68](#acta-a68-autenticación-del-portal-web-a-través-del-backend),
+  [A69](#acta-a69-contrato-del-portal-para-la-revisión-hitl-y-el-detalle-del-paciente),
+  [A71](#acta-a71-baja-de-cuenta-la-identidad-en-keycloak-se-anonimiza-después-del-commit-local).
+
+---
+
+## Acta A71: Baja de cuenta: la identidad en Keycloak se anonimiza después del commit local
+
+**Estado:** Aprobada como diseño. Implementación y experimento diferidos a un bloque propio, después del
+arranque del portal. **Obligatorios antes del primer paciente real**
+**Fecha:** 2026-10-01
+**Aprobado por:** Kiwicha, con la luz verde de Flavio Eduardo Trigueros Chumacero
+**Aplicabilidad:** Backend: baja de cuenta (US26, Ley 29733), `DeleteMyAccountCommandHandler`,
+`KeycloakAdminClient` y outbox. Sin cambio de contrato.
+
+---
+
+### Contexto
+
+La baja anonimiza la cuenta local (`User.Anonymize`) y, antes del commit, deshabilita el usuario en Keycloak
+con `PUT /users/{id}` y el cuerpo `{ "enabled": false }`, que deja la baja reintentable (acta A17, repo
+`docs`). La Fase 0 del 2026-09-30 leyó en la base de Keycloak lo que ese `PUT` deja, y la verificación del
+2026-10-01 lo confirmó con una baja real por el API, sobre una cuenta descartable:
+
+| Dato | ¿Queda en Keycloak tras la baja? |
+|---|---|
+| Usuario y correo (el realm usa el correo como usuario) | Sí |
+| Nombre y apellido | Sí |
+| Hash de la contraseña | Sí |
+| Rol `patient` | Sí |
+| Sesiones offline | Sí. La cuenta descartable conservó las dos de sus dos logins. Guardan `ipAddress` e inicio, y viven hasta 60 días (`offlineSessionMaxLifespan`) |
+| Atributos | Ninguno: ningún usuario del realm los tiene |
+
+El derecho al olvido deja en Keycloak datos personales de la persona, y volver a registrarse con el mismo
+correo responde 502 para siempre, porque Keycloak rechaza el alta con 409.
+
+### Decisión
+
+1. Se mantiene el `disable` antes del commit local: es reversible y conserva la baja reintentable de la A17.
+2. En la misma transacción local se publica un mensaje de outbox con **solo** `userId` y `keycloakId`, sin
+   datos personales.
+3. Después del commit, el handler de ese mensaje anonimiza la identidad en Keycloak: correo y usuario a
+   `deleted-<userId>@anonymized.local`, nombre y apellido a un marcador, borrado de la credencial y cierre de
+   todas las sesiones, offline incluidas. Es idempotente y tolera el 404. El outbox reintenta hasta 10 veces
+   con backoff; después el mensaje queda envenenado y pasa a revisión manual.
+4. No hay `DELETE` en Keycloak ni se enmienda la regla "nunca DELETE" del `CLAUDE.md`: el usuario conserva su
+   id, que sigue ligando la cuenta local anonimizada.
+5. La ventana en que un access token emitido antes de la baja sigue valiendo, hasta 15 minutos, no se cierra
+   acá: es la misma deuda de la
+   [A55](#acta-a55-deuda-diferida--la-suspensión-no-corta-sesiones-ni-tokens-ya-emitidos).
+
+### Experimento pendiente
+
+Antes de implementar se confirma en local, con una cuenta descartable creada por la Admin API con
+`emailVerified=true`, sin registro ni Mailpit:
+
+- Si cambiar el correo arrastra el usuario, con `registrationEmailAsUsername` activo y
+  `editUsernameAllowed: false`.
+- Si `POST /users/{id}/logout` cierra también las sesiones offline.
+- Que después de la baja el mismo correo vuelva a registrarse (201) y la contraseña vieja no entre (401).
+
+### Condición de cierre
+
+Implementado y verificado **antes del primer paciente real** del piloto en el Complejo Hospitalario Guillermo
+Kaelín de la Fuente.
+
+### Riesgo residual
+
+- Mientras no se implemente, cada baja deja en Keycloak correo, nombre, hash de la contraseña, rol y
+  sesiones offline con IP, y bloquea un nuevo registro con ese correo. Con datos de prueba no hay daño; con un
+  paciente real sería incumplir el derecho al olvido.
+- Ya implementado, si el outbox agota sus reintentos la identidad queda deshabilitada pero sin anonimizar
+  hasta la revisión manual.
+- El access token emitido antes de la baja sigue valiendo hasta 15 minutos (A55).
+
+### Referencias
+
+- `src/Cauce.Application/Patients/UseCases/DeleteMyAccount/DeleteMyAccountCommandHandler.cs`
+- `src/Cauce.Infrastructure/Identity/KeycloakAdminClient.cs` (`DisableUserAsync`)
+- `src/Cauce.Domain/Outbox/OutboxMessage.cs` (10 intentos con backoff)
+- Acta A17, en el repo `docs` (`decisions/DECISIONS-BLOCK-06.md`).
+- Actas [A55](#acta-a55-deuda-diferida--la-suspensión-no-corta-sesiones-ni-tokens-ya-emitidos),
+  [A70](#acta-a70-registro-sin-huérfanos-en-keycloak-correo-normalizado-y-logs-a-archivo).
 
 ---

@@ -44,7 +44,7 @@ directo, `audit_logs` quedaría sin registro de accesos.
 | POST | `/api/v1/auth/portal/refresh` **(nuevo, v1.4)** | Anónimo + cookie + `X-Cauce-Portal` | `auth-portal-refresh` 20/min por IP | 200, 401, 403, 429, 500 |
 | POST | `/api/v1/auth/portal/logout` **(nuevo, v1.4)** | Bearer JWT · `Policy=Nutritionist` + `X-Cauce-Portal` | Sin política | 204, 401, 403, 500 |
 | POST | `/api/v1/auth/password-reset/request` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
-| POST | `/api/v1/auth/password-reset/confirm` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
+| POST | `/api/v1/auth/password-reset/confirm` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 502, 500 |
 | POST | `/api/v1/auth/verification-email/resend` **(nuevo, v1.2)** | Anónimo | `auth-verify-resend` 3/h por **correo** | 200, 400, 429, 500 |
 | GET | `/api/v1/consent/current` **(nuevo, v1.1)** | Anónimo | `consent-current` 60/min por IP | 200, 429, 500 |
 | GET | `/api/v1/patients/me/consent/pdf` | Bearer JWT · `Policy=Patient` | Sin política | 200 (`application/pdf`), 401, 403, 404, 500 |
@@ -72,6 +72,12 @@ había verificado.
 
 ## 2. Endpoints
 
+**Correo normalizado (acta A70).** El backend compara y guarda el correo sin espacios en los extremos y en
+minúsculas invariantes, que es como lo guarda Keycloak. Rige en el registro, el login del móvil y del portal,
+la recuperación de contraseña y el reenvío de verificación. Registrarse como `Ana@…` y entrar como `ana@…`
+encuentra la misma cuenta, un segundo registro con otra capitalización responde 409 `duplicate_email`, y las
+respuestas devuelven el correo normalizado. El esquema de ninguna respuesta cambia.
+
 ### 2.1 `POST /api/v1/auth/register`
 
 Registra un paciente. Devuelve el `userId` sin tokens. El paciente debe verificar su correo antes de poder
@@ -87,7 +93,7 @@ iniciar sesión.
 
 | Campo | Tipo | Obligatorio | Validación (`RegisterPatientCommandValidator.cs`) |
 |---|---|---|---|
-| `email` | string | Sí | No vacío, máx 150, formato de correo |
+| `email` | string | Sí | No vacío, máx 150, formato de correo. Se normaliza (ver §2) |
 | `fullName` | string | Sí | No vacío, longitud 2 a 150 |
 | `password` | string | Sí | No vacío, mín 8, al menos una mayúscula, una minúscula y un dígito |
 | `consentDocumentVersion` | string | Sí | No vacío |
@@ -101,7 +107,7 @@ La IP de origen no viaja en el body: el controller la toma de la conexión (`Aut
 | Campo | Tipo | Notas |
 |---|---|---|
 | `userId` | Guid | Id local del usuario |
-| `email` | string | |
+| `email` | string | Normalizado (ver §2) |
 | `status` | string (enum) | Siempre `"PendingActivation"` para un paciente nuevo (`src/Cauce.Domain/Identity/User.cs:124`) |
 | `emailVerificationRequired` | bool | Siempre `true` (`RegisterPatientCommandHandler.cs:142`) |
 
@@ -114,11 +120,11 @@ La IP de origen no viaja en el body: el controller la toma de la conexión (`Aut
 | 400 | `invalid_invitation_code` | El código no existe |
 | 400 | `expired_invitation_code` | El código venció |
 | 400 | `invitation_code_already_used` | El código ya se usó |
-| 409 | `duplicate_email` | El correo ya está registrado |
+| 409 | `duplicate_email` | El correo ya está registrado, con cualquier capitalización (acta A70) |
 | 409 | `nutritionist_not_available` *(v1.3)* | El nutricionista dueño del código no está activo. Extensión `reason` (§3). Se rechaza antes de crear el usuario en Keycloak, y el código no se consume |
 | 429 | *(sin `errorCode`)* | Se superó el límite. Ver sección 3 |
-| 502 | `keycloak_integration_error` | Falló el aprovisionamiento del usuario en Keycloak |
-| 500 | `internal_server_error` | Error inesperado |
+| 502 | `keycloak_integration_error` | Keycloak respondió con un error, no fue alcanzable o no respondió a tiempo (timeout del `HttpClient`) al crear el usuario, asignarle el rol o fijar su contraseña. Si el usuario alcanzó a crearse, el backend lo borra antes de responder; si ese borrado falla, queda registrado para la limpieza manual (acta A70) |
+| 500 | `internal_server_error` | Error inesperado. Incluye una base de datos inalcanzable (acta A70) |
 
 **Orden de validación en el handler** (importante para el móvil): consentimiento (línea 60), correo duplicado
 (línea 65), código de invitación (línea 70). Un registro con hash de consentimiento incorrecto falla con
@@ -146,7 +152,7 @@ Passthrough a Keycloak con `grant_type=password` (Direct Access Grants).
 
 | Campo | Tipo | Obligatorio | Validación (`LoginCommandValidator.cs:7-9`) |
 |---|---|---|---|
-| `email` | string | Sí | No vacío, formato de correo, máx 320 |
+| `email` | string | Sí | No vacío, formato de correo, máx 320. Se normaliza (ver §2) |
 | `password` | string | Sí | No vacío, máx 200 |
 | `clientId` | string | Sí | No vacío, máx 100. **Tiene que ser `cauce-mobile`** desde v1.4: otro valor responde 400 `unsupported_client` y queda auditado. El portal usa §2.12 |
 
@@ -168,7 +174,7 @@ Passthrough a Keycloak con `grant_type=password` (Direct Access Grants).
 |---|---|---|
 | `userId` | Guid | Identificador local de la cuenta |
 | `keycloakId` | string | Mismo valor que el claim `sub` del token |
-| `email` | string | |
+| `email` | string | Normalizado (ver §2) |
 | `role` | string | `patient` o `nutritionist`. Coincide con `realm_access.roles` del JWT |
 | `fullName` | string | |
 | `emailVerified` | bool | **Sincronizado desde Keycloak en cada login** desde v1.2. Ver abajo |
@@ -281,7 +287,7 @@ Solicita el restablecimiento. Responde 200 exista o no la cuenta, para no filtra
 
 | Campo | Tipo | Obligatorio | Validación (`RequestPasswordResetCommandValidator.cs:7-10`) |
 |---|---|---|---|
-| `email` | string | Sí | No vacío, máx 150, formato de correo |
+| `email` | string | Sí | No vacío, máx 150, formato de correo. La cuenta se busca normalizada (ver §2) |
 
 **Response 200.** Sin cuerpo tipado.
 
@@ -340,6 +346,7 @@ Confirma el restablecimiento con el token recibido por correo.
 | 400 | `invalid_password_reset_token` | El token no existe |
 | 400 | `expired_password_reset_token` | El token venció o ya se usó |
 | 429 | *(sin `errorCode`)* | Se superó el límite |
+| 502 | `keycloak_integration_error` | Keycloak respondió con un error, no fue alcanzable o no respondió a tiempo (timeout del `HttpClient`) al fijar la contraseña nueva (acta A70) |
 | 500 | `internal_server_error` | Error inesperado |
 
 El token viaja en claro y el backend lo compara por hash SHA-256 hex en minúscula
@@ -944,7 +951,7 @@ Recalcular el hash en el cliente sigue siendo válido como verificación defensi
 | US01 CA04 | GET | `/api/v1/patients/me/consent/pdf` | `Policy=Patient` | 200, 401, 403, 404, 500 |
 | US05 | POST | `/api/v1/auth/login` | Anónimo | 200, 400, 401, 423, 429, 500 |
 | US07 CA01 | POST | `/api/v1/auth/password-reset/request` | Anónimo | 200, 400, 429, 500 |
-| US07 CA02 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | 200, 400, 429, 500 |
+| US07 CA02 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | 200, 400, 429, 502, 500 |
 | US08 CA01 | POST | `/api/v1/auth/logout` | Bearer | 204, 400, 401, 500 |
 | US08 CA02 | POST | `/api/v1/auth/refresh` | Anónimo | 200, 400, 401, 429, 500 |
 | US05 (portal) | POST | `/api/v1/auth/portal/login` | Anónimo | 200, 400, 401, 423, 429, 500 |

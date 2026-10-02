@@ -220,12 +220,172 @@ public sealed class KeycloakAdminClientTests
         await act.Should().ThrowAsync<KeycloakIntegrationException>();
     }
 
+    // ----- Compensación del alta y fallas de transporte (acta A70) -----
+
+    [Fact]
+    public async Task CreateUserAsync_RoleAssigned_ReturnsTheIdentifierAndDeletesNothing()
+    {
+        var handler = new ScriptedHandler((request, _) => Task.FromResult(
+            IsCreateUser(request) ? Created(NewUserId)
+            : IsRoleLookup(request) ? RoleResponse()
+            : new HttpResponseMessage(HttpStatusCode.NoContent)));
+        var client = CreateClient(handler);
+
+        var keycloakId = await client.CreateUserAsync("paciente@cauce.local", "Ana Pérez", "patient", requireEmailVerification: true);
+
+        keycloakId.Should().Be(NewUserId);
+        handler.Requests.Should().NotContain(request => request.Method == HttpMethod.Delete);
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_RoleAssignmentFails_DeletesTheCreatedUserAndThrows()
+    {
+        // Es el huérfano que describe el prerequisito 5 del CLAUDE.md: el usuario se crea, el rol no se
+        // asigna y el llamador nunca llega a conocer el identificador para compensar.
+        var handler = new ScriptedHandler((request, _) => Task.FromResult(
+            IsCreateUser(request) ? Created(NewUserId)
+            : IsRoleLookup(request) ? new HttpResponseMessage(HttpStatusCode.InternalServerError)
+            : new HttpResponseMessage(HttpStatusCode.NoContent)));
+        var client = CreateClient(handler);
+
+        var act = async () => await client.CreateUserAsync("paciente@cauce.local", "Ana Pérez", "patient", requireEmailVerification: true);
+
+        await act.Should().ThrowAsync<KeycloakIntegrationException>();
+        handler.Requests.Should().ContainSingle(request => request.Method == HttpMethod.Delete)
+            .Which.Path.Should().EndWith($"/users/{NewUserId}");
+    }
+
+    [Fact]
+    public async Task CreateUserAsync_CallerCancelsDuringRoleAssignment_StillDeletesTheCreatedUser()
+    {
+        using var caller = new CancellationTokenSource();
+        var handler = new ScriptedHandler(async (request, token) =>
+        {
+            if (IsCreateUser(request))
+            {
+                return Created(NewUserId);
+            }
+
+            if (IsRoleLookup(request))
+            {
+                // El cliente corta la conexión mientras se asigna el rol.
+                await caller.CancelAsync();
+                await Task.Delay(Timeout.Infinite, token);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        var client = CreateClient(handler);
+
+        var act = async () => await client.CreateUserAsync(
+            "paciente@cauce.local", "Ana Pérez", "patient", requireEmailVerification: true, caller.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>("la cancelación del cliente no se disfraza de 502");
+        var delete = handler.Requests.Should().ContainSingle(request => request.Method == HttpMethod.Delete).Subject;
+        delete.Path.Should().EndWith($"/users/{NewUserId}");
+        delete.CancellationRequested.Should().BeFalse("la compensación no hereda la cancelación de la petición");
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_KeycloakUnreachable_ThrowsKeycloakIntegrationException()
+    {
+        var handler = new ScriptedHandler((_, _) => throw new HttpRequestException("Connection refused (keycloak:8080)"));
+        var client = CreateClient(handler);
+
+        var act = async () => await client.DeleteUserAsync(KeycloakId);
+
+        (await act.Should().ThrowAsync<KeycloakIntegrationException>())
+            .Which.InnerException.Should().BeOfType<HttpRequestException>();
+    }
+
+    [Fact]
+    public async Task GetUserStateAsync_TokenEndpointUnreachable_ThrowsKeycloakIntegrationException()
+    {
+        var handler = new ScriptedHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)))
+        {
+            TokenFailure = new HttpRequestException("Connection refused (keycloak:8080)")
+        };
+        var client = CreateClient(handler);
+
+        var act = async () => await client.GetUserStateAsync(KeycloakId);
+
+        await act.Should().ThrowAsync<KeycloakIntegrationException>();
+        handler.Requests.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_KeycloakDoesNotRespondInTime_ThrowsKeycloakIntegrationException()
+    {
+        var handler = new ScriptedHandler(async (_, token) =>
+        {
+            await Task.Delay(Timeout.Infinite, token);
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        var client = CreateClient(handler, timeout: TimeSpan.FromMilliseconds(200));
+
+        var act = async () => await client.DeleteUserAsync(KeycloakId);
+
+        await act.Should().ThrowAsync<KeycloakIntegrationException>();
+    }
+
+    [Fact]
+    public async Task DeleteUserAsync_CallerCancels_PropagatesTheCancellation()
+    {
+        using var caller = new CancellationTokenSource();
+        var handler = new ScriptedHandler(async (_, token) =>
+        {
+            await caller.CancelAsync();
+            await Task.Delay(Timeout.Infinite, token);
+            return new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        var client = CreateClient(handler);
+
+        var act = async () => await client.DeleteUserAsync(KeycloakId, caller.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private const string NewUserId = "7d3f0c52-2d4e-4a8e-9a57-0f6a3c1f9b11";
+
+    private static bool IsCreateUser(HttpRequestMessage request) =>
+        request.Method == HttpMethod.Post && request.RequestUri!.AbsolutePath.EndsWith("/users", StringComparison.Ordinal);
+
+    private static bool IsRoleLookup(HttpRequestMessage request) =>
+        request.Method == HttpMethod.Get && request.RequestUri!.AbsolutePath.Contains("/roles/", StringComparison.Ordinal);
+
+    private static HttpResponseMessage Created(string userId)
+    {
+        var response = new HttpResponseMessage(HttpStatusCode.Created);
+        response.Headers.Location = new Uri($"https://test.cauce.local/admin/realms/cauce/users/{userId}");
+        return response;
+    }
+
+    private static HttpResponseMessage RoleResponse() =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"id":"role-id","name":"patient"}""", Encoding.UTF8, "application/json")
+        };
+
+    private static HttpResponseMessage TokenResponse() =>
+        new(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"access_token":"admin-token","expires_in":300}""", Encoding.UTF8, "application/json")
+        };
+
     private static KeycloakAdminClient CreateClient(HttpResponseMessage adminResponse) =>
         CreateClient(new RoutingHandler(adminResponse));
 
-    private static KeycloakAdminClient CreateClient(RoutingHandler handler, string? portalLoginUrl = null)
+    private static KeycloakAdminClient CreateClient(
+        HttpMessageHandler handler,
+        string? portalLoginUrl = null,
+        TimeSpan? timeout = null)
     {
         var httpClient = new HttpClient(handler);
+        if (timeout is not null)
+        {
+            httpClient.Timeout = timeout.Value;
+        }
+
         var options = Options.Create(new KeycloakOptions
         {
             Authority = "https://test.cauce.local/realms/cauce",
@@ -273,13 +433,7 @@ public sealed class KeycloakAdminClientTests
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/protocol/openid-connect/token", StringComparison.Ordinal))
             {
-                return new HttpResponseMessage(HttpStatusCode.OK)
-                {
-                    Content = new StringContent(
-                        """{"access_token":"admin-token","expires_in":300}""",
-                        Encoding.UTF8,
-                        "application/json")
-                };
+                return TokenResponse();
             }
 
             LastAdminRequestUri = request.RequestUri;
@@ -288,6 +442,39 @@ public sealed class KeycloakAdminClientTests
                 ? null
                 : await request.Content.ReadAsStringAsync(cancellationToken);
             return _adminResponse;
+        }
+    }
+
+    /// <summary>
+    /// Manejador programable: el token de service account se concede siempre (salvo que la prueba programe
+    /// una falla) y cada petición a la Admin API la resuelve el guion. Registra método, ruta y si la
+    /// cancelación ya estaba pedida al salir, que es lo que distingue una compensación que hereda el token
+    /// de la petición de una que no.
+    /// </summary>
+    private sealed class ScriptedHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _script;
+
+        public ScriptedHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> script)
+        {
+            _script = script;
+        }
+
+        public Exception? TokenFailure { get; init; }
+
+        public List<(HttpMethod Method, string Path, bool CancellationRequested)> Requests { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request,
+            CancellationToken cancellationToken)
+        {
+            if (request.RequestUri!.AbsolutePath.EndsWith("/protocol/openid-connect/token", StringComparison.Ordinal))
+            {
+                return TokenFailure is null ? Task.FromResult(TokenResponse()) : throw TokenFailure;
+            }
+
+            Requests.Add((request.Method, request.RequestUri.AbsolutePath, cancellationToken.IsCancellationRequested));
+            return _script(request, cancellationToken);
         }
     }
 }

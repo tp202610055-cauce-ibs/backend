@@ -33,7 +33,9 @@ public sealed class UserRepository : IUserRepository
     /// <inheritdoc />
     public Task<User?> FindByEmailAsync(string email, CancellationToken ct = default)
     {
-        return _context.Set<User>().FirstOrDefaultAsync(x => x.Email == email, ct);
+        // Se busca con el mismo criterio con que se guarda: la columna ya está normalizada (acta A70).
+        var normalizedEmail = EmailNormalization.Normalize(email);
+        return _context.Set<User>().FirstOrDefaultAsync(x => x.Email == normalizedEmail, ct);
     }
 
     /// <inheritdoc />
@@ -51,7 +53,8 @@ public sealed class UserRepository : IUserRepository
     /// <inheritdoc />
     public Task<bool> ExistsByEmailAsync(string email, CancellationToken ct = default)
     {
-        return _context.Set<User>().AsNoTracking().AnyAsync(x => x.Email == email, ct);
+        var normalizedEmail = EmailNormalization.Normalize(email);
+        return _context.Set<User>().AsNoTracking().AnyAsync(x => x.Email == normalizedEmail, ct);
     }
 
     /// <inheritdoc />

@@ -74,7 +74,10 @@ public sealed class DemoPatientSeeder
             return;
         }
 
-        if (await _userRepository.ExistsByEmailAsync(options.Email, ct).ConfigureAwait(false))
+        // El mismo criterio que el registro, para la base local y para Keycloak (acta A70).
+        var email = EmailNormalization.Normalize(options.Email);
+
+        if (await _userRepository.ExistsByEmailAsync(email, ct).ConfigureAwait(false))
         {
             _logger.LogInformation("Demo patient already present; skipping seed (idempotent no-op).");
             return;
@@ -85,16 +88,16 @@ public sealed class DemoPatientSeeder
 
         // Identidad en Keycloak: reutiliza el usuario si un intento previo lo dejó creado; contraseña
         // permanente (sin required actions) para habilitar el Direct Access Grant. La password nunca se loguea.
-        var existing = await _keycloakAdminClient.FindByEmailAsync(options.Email, ct).ConfigureAwait(false);
+        var existing = await _keycloakAdminClient.FindByEmailAsync(email, ct).ConfigureAwait(false);
         var keycloakId = existing?.Id
             ?? await _keycloakAdminClient
-                .CreateUserAsync(options.Email, options.FullName, UserRoles.Patient, requireEmailVerification: false, ct)
+                .CreateUserAsync(email, options.FullName, UserRoles.Patient, requireEmailVerification: false, ct)
                 .ConfigureAwait(false);
         await _keycloakAdminClient.ResetPasswordAsync(keycloakId, options.Password, ct).ConfigureAwait(false);
 
         // Cuenta local: verificada, activa e inscrita en el piloto activo (US26 CA02 comprobable).
         var patientCode = await _patientCodeGenerator.NextAsync(ct).ConfigureAwait(false);
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, options.Email, options.FullName, patientRoleId, patientCode);
+        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, email, options.FullName, patientRoleId, patientCode);
         user.VerifyEmail();
         user.EnrollInActivePilot();
         await _userRepository.AddAsync(user, ct).ConfigureAwait(false);

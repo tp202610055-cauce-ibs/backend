@@ -127,6 +127,38 @@ public sealed class RegisterPatientCommandHandlerTests
         await _keycloakAdminClient.Received(1).DeleteUserAsync("kc-id", Arg.Any<CancellationToken>());
     }
 
+    [Fact]
+    public async Task Handle_RequestCancelledAfterKeycloakCreation_CompensatesWithoutInheritingTheCancellation()
+    {
+        _consentService.VerifyHash(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _userRepository.ExistsByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+        _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(1);
+        _keycloakAdminClient
+            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, true, Arg.Any<CancellationToken>())
+            .Returns("kc-id");
+        using var request = new CancellationTokenSource();
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            // El teléfono corta a los 15 s justo cuando se confirma la transacción: es el caso que dejaba
+            // al usuario en Keycloak, porque el borrado salía con el token ya cancelado.
+            request.Cancel();
+            return Task.FromException<int>(new OperationCanceledException(request.Token));
+        });
+        (bool Cancelled, bool Cancellable)? compensationToken = null;
+        _keycloakAdminClient
+            .When(client => client.DeleteUserAsync("kc-id", Arg.Any<CancellationToken>()))
+            .Do(call =>
+            {
+                var token = call.Arg<CancellationToken>();
+                compensationToken = (token.IsCancellationRequested, token.CanBeCanceled);
+            });
+
+        var act = () => CreateHandler().Handle(ValidCommand(), request.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        compensationToken.Should().Be((false, true), "la compensación sale igual y con su propio tope de tiempo (acta A70)");
+    }
+
     // ----- Estado del nutricionista dueño del código (acta A53) -----
 
     private const string Code = "ABCDEFGH";

@@ -1,5 +1,6 @@
 using Cauce.Infrastructure.Recommendations.Readers;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Cauce.Infrastructure.Tests.Recommendations;
@@ -67,5 +68,42 @@ public sealed class AllergyHeuristicMatcherTests
     public void UnknownAllergy_ExcludesNothing()
     {
         Forbidden("AlergiaInexistente", "Leche entera", "lacteos").Should().BeEmpty();
+    }
+
+    [Fact]
+    public void AllergyWithoutRule_LogsOnlyTheCountAndNeverTheAllergyName()
+    {
+        // El nombre de una alergia declarada es dato de salud del paciente (Ley 29733): el log solo dice
+        // cuántas no tienen regla (acta A70).
+        var logger = new CapturingLogger<AllergyHeuristicMatcher>();
+        var matcher = new AllergyHeuristicMatcher(logger);
+        var foods = new[] { new FoodCatalogEntry(Guid.NewGuid(), "Leche entera", "lacteos", null) };
+
+        matcher.GetForbiddenFoodIds(new[] { "Kiwi", "Lactosa" }, foods);
+
+        var warning = logger.Entries.Should().ContainSingle(entry => entry.Level == LogLevel.Warning).Subject;
+        warning.Properties.Should().Contain(new KeyValuePair<string, object?>("MissingRuleCount", 1));
+        logger.Entries.Should().NotContain(entry =>
+            entry.Message.Contains("Kiwi", StringComparison.OrdinalIgnoreCase)
+            || entry.Properties.Any(property => $"{property.Value}".Contains("Kiwi", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message, IReadOnlyList<KeyValuePair<string, object?>> Properties)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Entries.Add((logLevel, formatter(state, exception), state as IReadOnlyList<KeyValuePair<string, object?>> ?? []));
+        }
     }
 }

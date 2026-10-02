@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Auditing.Enums;
@@ -49,7 +50,10 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
     /// <inheritdoc />
     public async Task<CreateNutritionistResult> Handle(CreateNutritionistCommand request, CancellationToken cancellationToken)
     {
-        if (await _userRepository.ExistsByEmailAsync(request.Email, cancellationToken).ConfigureAwait(false))
+        // El mismo valor para la base local y para Keycloak (acta A70).
+        var email = EmailNormalization.Normalize(request.Email);
+
+        if (await _userRepository.ExistsByEmailAsync(email, cancellationToken).ConfigureAwait(false))
         {
             throw new DuplicateEmailException();
         }
@@ -61,13 +65,13 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
         // Sin contraseña: la define el propio nutricionista con el enlace de Keycloak. Hasta entonces no
         // puede autenticarse, y ninguna credencial viaja por correo.
         var keycloakId = await _keycloakAdminClient
-            .CreateUserAsync(request.Email, request.FullName, UserRoles.Nutritionist, requireEmailVerification: false, cancellationToken)
+            .CreateUserAsync(email, request.FullName, UserRoles.Nutritionist, requireEmailVerification: false, cancellationToken)
             .ConfigureAwait(false);
 
         User user;
         try
         {
-            user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, request.Email, request.FullName, nutritionistRoleId);
+            user = User.CreateNutritionist(Guid.NewGuid(), keycloakId, email, request.FullName, nutritionistRoleId);
             await _userRepository.AddAsync(user, cancellationToken).ConfigureAwait(false);
 
             // Auditoría explícita ANTES del SaveChanges: users no tiene trigger; una sola transacción
@@ -88,7 +92,9 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
             _logger.LogError(
                 exception,
                 "Nutritionist provisioning failed after Keycloak user creation; compensating by deleting Keycloak user.");
-            await CompensateKeycloakAsync(keycloakId, cancellationToken).ConfigureAwait(false);
+
+            // Sin el token de la petición y con tope propio, igual que el registro de pacientes (acta A70).
+            await KeycloakCompensation.TryDeleteUserAsync(_keycloakAdminClient, keycloakId, _logger).ConfigureAwait(false);
             throw;
         }
 
@@ -122,20 +128,6 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
                 "Could not request the activation link for nutritionist {UserId}; it can be resent.",
                 userId);
             return false;
-        }
-    }
-
-    private async Task CompensateKeycloakAsync(string keycloakId, CancellationToken ct)
-    {
-        try
-        {
-            await _keycloakAdminClient.DeleteUserAsync(keycloakId, ct).ConfigureAwait(false);
-        }
-        catch (Exception compensationException)
-        {
-            _logger.LogError(
-                compensationException,
-                "Compensation failed: could not delete Keycloak user after a failed provisioning.");
         }
     }
 }

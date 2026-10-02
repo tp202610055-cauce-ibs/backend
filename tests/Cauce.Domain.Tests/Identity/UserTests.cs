@@ -24,6 +24,16 @@ public sealed class UserTests
     }
 
     [Fact]
+    public void CreatePatient_EmailWithCapitalsAndSpaces_StoresItNormalized()
+    {
+        // Keycloak guarda el correo en minúsculas; la cuenta local tiene que coincidir (acta A70).
+        var user = User.CreatePatient(
+            Guid.NewGuid(), "kc-1", "  Ana.Perez@Cauce.Local ", "Ana Pérez", PatientRoleId, PatientCode.FromCorrelative(1));
+
+        user.Email.Should().Be("ana.perez@cauce.local");
+    }
+
+    [Fact]
     public void CreateNutritionist_ValidValues_CreatesPendingVerifiedUser()
     {
         var user = User.CreateNutritionist(Guid.NewGuid(), "kc-2", "n@cauce.local", "Nutri Uno", NutritionistRoleId);

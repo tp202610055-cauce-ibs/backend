@@ -434,3 +434,8 @@ FodyWeavers.xsd
 /CLAUDE.md
 /PROMPT-*.md
 /HANDOFF-*.md
+
+# Logs de la API escritos a archivo en Development (acta A70). El repo es público y un log puede
+# contener rastros operativos: nunca se versiona. La regla genérica [Ll]ogs/ de la plantilla ya lo
+# cubre; esta queda explícita para que recortar la plantilla no la borre.
+logs/

@@ -40,15 +40,14 @@ public sealed class AllergyHeuristicMatcher
         IReadOnlyCollection<FoodCatalogEntry> foods)
     {
         var forbidden = new HashSet<Guid>();
+        var missingRuleCount = 0;
 
         foreach (var allergyName in allergyNames)
         {
             var key = Normalize(allergyName);
             if (!_rules.TryGetValue(key, out var rule))
             {
-                _logger.LogWarning(
-                    "No hay regla heurística de alergia para '{AllergyName}'; no se excluye ningún alimento por ella.",
-                    allergyName);
+                missingRuleCount++;
                 continue;
             }
 
@@ -59,6 +58,15 @@ public sealed class AllergyHeuristicMatcher
                     forbidden.Add(food.Id);
                 }
             }
+        }
+
+        if (missingRuleCount > 0)
+        {
+            // Solo el conteo: el nombre de una alergia declarada es dato de salud del paciente, y dentro de su
+            // petición el log queda ligado a él (Ley 29733, acta A70).
+            _logger.LogWarning(
+                "{MissingRuleCount} alergia(s) declarada(s) sin regla heurística; no se excluye ningún alimento por ellas.",
+                missingRuleCount);
         }
 
         return forbidden;
