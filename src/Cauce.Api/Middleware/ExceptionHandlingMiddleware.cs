@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Claims;
 using System.Text.Json;
 using Cauce.Api.Authorization;
 using Cauce.Application.Common.Exceptions;
@@ -156,8 +157,11 @@ public sealed class ExceptionHandlingMiddleware
 
     private void LogAuditTamperAttempt(HttpContext context, Exception exception)
     {
-        var actor = context.User?.FindFirst("sub")?.Value
-            ?? context.User?.Identity?.Name
+        // El actor es el identificador del sujeto, leído igual que en el resto del código: el mapeo de claims
+        // renombra "sub" a NameIdentifier. Nunca Identity.Name, que con preferred_username es el correo
+        // (acta A70).
+        var actor = context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.User?.FindFirstValue("sub")
             ?? "anonymous";
         var ip = context.Connection?.RemoteIpAddress?.ToString() ?? "unknown";
 
