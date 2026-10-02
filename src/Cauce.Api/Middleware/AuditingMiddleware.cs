@@ -6,6 +6,7 @@ using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Auditing;
 using Cauce.Domain.Auditing.Enums;
+using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Exceptions;
 using Cauce.Infrastructure.Persistence;
 using FluentValidation;
@@ -209,9 +210,12 @@ public sealed class AuditingMiddleware
             return null;
         }
 
+        // El mismo criterio con que se guarda el correo, para que un login con otra capitalización no
+        // quede auditado sin actor (acta A70).
+        var normalizedEmail = EmailNormalization.Normalize(email);
         return await dbContext.Users
             .AsNoTracking()
-            .Where(user => user.Email == email)
+            .Where(user => user.Email == normalizedEmail)
             .Select(user => (Guid?)user.Id)
             .FirstOrDefaultAsync(ct)
             .ConfigureAwait(false);

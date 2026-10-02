@@ -114,10 +114,12 @@ public sealed class QaNutritionistsSeeder
 
     private async Task<string> ResolveKeycloakUserAsync(string email, string fullName, CancellationToken ct)
     {
-        var existing = await _keycloakAdminClient.FindByEmailAsync(email, ct).ConfigureAwait(false);
+        // La búsqueda y la escritura locales ya normalizan; Keycloak recibe el mismo valor (acta A70).
+        var normalizedEmail = EmailNormalization.Normalize(email);
+        var existing = await _keycloakAdminClient.FindByEmailAsync(normalizedEmail, ct).ConfigureAwait(false);
         return existing?.Id
             ?? await _keycloakAdminClient
-                .CreateUserAsync(email, fullName, UserRoles.Nutritionist, requireEmailVerification: false, ct)
+                .CreateUserAsync(normalizedEmail, fullName, UserRoles.Nutritionist, requireEmailVerification: false, ct)
                 .ConfigureAwait(false);
     }
 }

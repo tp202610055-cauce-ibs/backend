@@ -99,7 +99,17 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         var keycloakId = ExtractIdFromLocation(response.Headers.Location)
             ?? throw new KeycloakIntegrationException("Keycloak no devolvió el identificador del usuario creado.");
 
-        await AssignRealmRoleAsync(keycloakId, roleName, ct).ConfigureAwait(false);
+        try
+        {
+            await AssignRealmRoleAsync(keycloakId, roleName, ct).ConfigureAwait(false);
+        }
+        catch (Exception)
+        {
+            // El usuario ya existe en Keycloak y el llamador todavía no conoce su identificador: sin el rol
+            // quedaría huérfano, sin cuenta local y bloqueando una nueva alta con el mismo correo (acta A70).
+            await KeycloakCompensation.TryDeleteUserAsync(this, keycloakId, _logger).ConfigureAwait(false);
+            throw;
+        }
 
         return keycloakId;
     }
@@ -359,7 +369,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         var token = await GetAccessTokenAsync(forceRefresh: false, ct).ConfigureAwait(false);
         var request = requestFactory();
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        var response = await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+        var response = await SendOverNetworkAsync(request, ct).ConfigureAwait(false);
 
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
@@ -367,10 +377,39 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
             token = await GetAccessTokenAsync(forceRefresh: true, ct).ConfigureAwait(false);
             var retry = requestFactory();
             retry.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            response = await _httpClient.SendAsync(retry, ct).ConfigureAwait(false);
+            response = await SendOverNetworkAsync(retry, ct).ConfigureAwait(false);
         }
 
         return response;
+    }
+
+    /// <summary>
+    /// Envía una petición a Keycloak y traduce las fallas de transporte a
+    /// <see cref="KeycloakIntegrationException"/>, que el API responde como 502 (acta A70). Solo el timeout
+    /// y los errores de conexión: si la cancelación la pidió el llamador (por ejemplo, el cliente cortó la
+    /// petición), se propaga tal cual y no se disfraza de falla del proveedor.
+    /// </summary>
+    /// <param name="request">Petición ya armada, con su autorización.</param>
+    /// <param name="ct">Token de cancelación del llamador.</param>
+    /// <returns>La respuesta de Keycloak, con cualquier código de estado.</returns>
+    /// <exception cref="KeycloakIntegrationException">Si Keycloak no es alcanzable o no responde a tiempo.</exception>
+    private async Task<HttpResponseMessage> SendOverNetworkAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        try
+        {
+            return await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException exception)
+        {
+            _logger.LogError(exception, "Keycloak could not be reached ({Method} request).", request.Method);
+            throw new KeycloakIntegrationException("No se pudo conectar con el proveedor de identidad.", exception);
+        }
+        catch (OperationCanceledException exception) when (!ct.IsCancellationRequested)
+        {
+            // La cancelación no vino del llamador: es el timeout del HttpClient.
+            _logger.LogError(exception, "Keycloak did not respond in time ({Method} request).", request.Method);
+            throw new KeycloakIntegrationException("El proveedor de identidad no respondió a tiempo.", exception);
+        }
     }
 
     private async Task<string> GetAccessTokenAsync(bool forceRefresh, CancellationToken ct)
@@ -395,7 +434,8 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
                 ["client_secret"] = _options.ClientSecret
             });
 
-            using var response = await _httpClient.PostAsync(TokenUrl, form, ct).ConfigureAwait(false);
+            using var request = new HttpRequestMessage(HttpMethod.Post, TokenUrl) { Content = form };
+            using var response = await SendOverNetworkAsync(request, ct).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 throw await BuildExceptionAsync(response, "obtener el token de administración", ct).ConfigureAwait(false);

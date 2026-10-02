@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Cauce.Domain.Identity;
 
 namespace Cauce.Api.Middleware;
 
@@ -84,7 +85,7 @@ public sealed class VerificationResendPartitionMiddleware
                 var email = emailElement.GetString();
                 return string.IsNullOrWhiteSpace(email)
                     ? null
-                    : email.Trim().ToLowerInvariant();
+                    : EmailNormalization.Normalize(email);
             }
         }
         catch (JsonException)

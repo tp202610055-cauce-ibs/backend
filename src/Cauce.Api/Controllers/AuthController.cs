@@ -8,6 +8,7 @@ using Cauce.Application.Identity.UseCases.RefreshToken;
 using Cauce.Application.Identity.UseCases.RegisterPatient;
 using Cauce.Application.Identity.UseCases.RequestPasswordReset;
 using Cauce.Application.Identity.UseCases.ResendVerificationEmail;
+using Cauce.Domain.Identity;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -211,8 +212,8 @@ public sealed class AuthController : BaseApiController
         CancellationToken ct)
     {
         // Se normaliza aquí, igual que en la partición del rate limit, para que ambas miren la misma
-        // clave y una variación de caja no eluda el límite.
-        var normalizedEmail = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        // clave y una variación de caja no eluda el límite. El criterio es el único del sistema (acta A70).
+        var normalizedEmail = EmailNormalization.Normalize(request.Email);
         await _mediator.Send(new ResendVerificationEmailCommand(normalizedEmail), ct);
         return Ok();
     }

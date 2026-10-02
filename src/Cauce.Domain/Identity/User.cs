@@ -20,7 +20,8 @@ public sealed class User : Entity, IAggregateRoot
     public string KeycloakId { get; private set; } = string.Empty;
 
     /// <summary>
-    /// Correo electrónico único de la cuenta.
+    /// Correo electrónico único de la cuenta, siempre normalizado con <see cref="EmailNormalization"/>
+    /// (acta A70).
     /// </summary>
     public string Email { get; private set; } = string.Empty;
 
@@ -116,7 +117,7 @@ public sealed class User : Entity, IAggregateRoot
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(roleId);
 
         KeycloakId = keycloakId;
-        Email = email;
+        Email = EmailNormalization.Normalize(email);
         FullName = fullName;
         RoleId = roleId;
         Status = status;

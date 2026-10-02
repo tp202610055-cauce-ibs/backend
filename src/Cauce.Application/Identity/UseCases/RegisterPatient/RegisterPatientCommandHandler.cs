@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
@@ -62,12 +63,16 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
     {
         var utcNow = DateTime.UtcNow;
 
+        // Un solo valor para la base local y para Keycloak: si difieren en mayúsculas, el login posterior
+        // autentica en Keycloak y no encuentra la cuenta local (acta A70).
+        var email = EmailNormalization.Normalize(request.Email);
+
         if (!_consentService.VerifyHash(request.ConsentDocumentVersion, request.ConsentTextHash))
         {
             throw new ConsentTextMismatchException();
         }
 
-        if (await _userRepository.ExistsByEmailAsync(request.Email, cancellationToken).ConfigureAwait(false))
+        if (await _userRepository.ExistsByEmailAsync(email, cancellationToken).ConfigureAwait(false))
         {
             throw new DuplicateEmailException();
         }
@@ -77,7 +82,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
         var patientRoleId = await _userRepository.GetRoleIdAsync(UserRoles.Patient, cancellationToken).ConfigureAwait(false);
 
         var keycloakId = await _keycloakAdminClient
-            .CreateUserAsync(request.Email, request.FullName, UserRoles.Patient, requireEmailVerification: true, cancellationToken)
+            .CreateUserAsync(email, request.FullName, UserRoles.Patient, requireEmailVerification: true, cancellationToken)
             .ConfigureAwait(false);
 
         User user;
@@ -90,7 +95,7 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
             // numeración es aceptable; un código repetido no lo sería.
             var patientCode = await _patientCodeGenerator.NextAsync(cancellationToken).ConfigureAwait(false);
 
-            user = User.CreatePatient(Guid.NewGuid(), keycloakId, request.Email, request.FullName, patientRoleId, patientCode);
+            user = User.CreatePatient(Guid.NewGuid(), keycloakId, email, request.FullName, patientRoleId, patientCode);
             await _userRepository.AddAsync(user, cancellationToken).ConfigureAwait(false);
 
             var consent = ConsentRecord.Capture(
@@ -131,7 +136,10 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
             _logger.LogError(
                 exception,
                 "Patient registration failed after Keycloak user creation; compensating by deleting Keycloak user.");
-            await CompensateKeycloakAsync(keycloakId, cancellationToken).ConfigureAwait(false);
+
+            // Sin el token de la petición: si la falla fue que el cliente cortó la conexión, la
+            // compensación tiene que salir igual, con su propio tope de tiempo (acta A70).
+            await KeycloakCompensation.TryDeleteUserAsync(_keycloakAdminClient, keycloakId, _logger).ConfigureAwait(false);
             throw;
         }
 
@@ -183,20 +191,6 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
         }
 
         return invitation;
-    }
-
-    private async Task CompensateKeycloakAsync(string keycloakId, CancellationToken ct)
-    {
-        try
-        {
-            await _keycloakAdminClient.DeleteUserAsync(keycloakId, ct).ConfigureAwait(false);
-        }
-        catch (Exception compensationException)
-        {
-            _logger.LogError(
-                compensationException,
-                "Compensation failed: could not delete Keycloak user after a failed registration.");
-        }
     }
 
     private async Task TrySendVerifyEmailAsync(string keycloakId, Guid userId, CancellationToken ct)

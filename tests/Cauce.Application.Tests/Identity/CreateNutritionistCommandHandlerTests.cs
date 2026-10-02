@@ -114,4 +114,30 @@ public sealed class CreateNutritionistCommandHandlerTests
         // Sin cuenta confirmada no se pide ningún enlace.
         await _keycloakAdminClient.DidNotReceiveWithAnyArgs().SendUpdatePasswordEmailAsync(default!, default);
     }
+
+    [Fact]
+    public async Task Handle_RequestCancelledAfterKeycloakCreation_CompensatesWithoutInheritingTheCancellation()
+    {
+        GivenKeycloakCreatesTheUser();
+        using var request = new CancellationTokenSource();
+        _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            // El cliente corta la conexión justo cuando se confirma la transacción.
+            request.Cancel();
+            return Task.FromException<int>(new OperationCanceledException(request.Token));
+        });
+        (bool Cancelled, bool Cancellable)? compensationToken = null;
+        _keycloakAdminClient
+            .When(client => client.DeleteUserAsync(KeycloakId, Arg.Any<CancellationToken>()))
+            .Do(call =>
+            {
+                var token = call.Arg<CancellationToken>();
+                compensationToken = (token.IsCancellationRequested, token.CanBeCanceled);
+            });
+
+        var act = () => CreateHandler().Handle(Command(), request.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+        compensationToken.Should().Be((false, true), "la compensación sale igual y con su propio tope de tiempo (acta A70)");
+    }
 }

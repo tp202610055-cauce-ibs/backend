@@ -65,11 +65,15 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
             throw new UnsupportedOidcClientException();
         }
 
+        // Keycloak compara el correo sin distinguir mayúsculas; la base local, con el criterio único que
+        // guarda. Normalizar antes de las dos consultas es lo que evita el user_local_missing (acta A70).
+        var email = EmailNormalization.Normalize(request.Email);
+
         KeycloakTokenResult token;
         try
         {
             token = await _tokenClient
-                .LoginAsync(request.Email, request.Password, request.ClientId, cancellationToken)
+                .LoginAsync(email, request.Password, request.ClientId, cancellationToken)
                 .ConfigureAwait(false);
         }
         catch (InvalidCredentialsException)
@@ -77,7 +81,7 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
             // Keycloak colapsa "contraseña incorrecta" y "cuenta bloqueada" en el mismo 401. Solo
             // consultando la detección de fuerza bruta se pueden distinguir, que es lo que US05 CA02
             // necesita para mostrar el tiempo de espera. El resto de las causas va solo a la auditoría.
-            var (cause, lockedUntil) = await ExplainRejectionAsync(request.Email, cancellationToken)
+            var (cause, lockedUntil) = await ExplainRejectionAsync(email, cancellationToken)
                 .ConfigureAwait(false);
             _attemptContext.RecordFailure(cause);
             if (lockedUntil is not null)
@@ -93,7 +97,7 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
             throw;
         }
 
-        var user = await _userRepository.FindByEmailAsync(request.Email, cancellationToken).ConfigureAwait(false);
+        var user = await _userRepository.FindByEmailAsync(email, cancellationToken).ConfigureAwait(false);
         if (user is null)
         {
             // Keycloak autenticó pero la cuenta local no existe: el aprovisionamiento quedó a medias.
@@ -101,7 +105,7 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
             // conoce, así que el cliente arrancaba sesión contra una identidad fantasma.
             _logger.LogCritical(
                 "Authenticated subject without a local user account for {MaskedEmail}.",
-                AuditMask.Email(request.Email));
+                AuditMask.Email(email));
             _attemptContext.RecordFailure(AuthFailureCauses.LocalAccountMissing);
             throw new UserLocalMissingException();
         }
