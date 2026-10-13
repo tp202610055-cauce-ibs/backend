@@ -46,6 +46,7 @@ public sealed class SymptomRepository : ISymptomRepository
             .AsNoTracking()
             .Where(x => x.PatientId == patientId && x.ClientCreatedAt >= from && x.ClientCreatedAt <= to)
             .OrderByDescending(x => x.ClientCreatedAt)
+            .ThenByDescending(x => x.Id)
             .Skip(skip)
             .Take(take)
             .ToListAsync(ct)
