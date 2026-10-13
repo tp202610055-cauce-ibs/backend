@@ -5,6 +5,7 @@ using Cauce.Application.ClinicalRegistry.UseCases.SearchGlossary;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cauce.Api.Controllers;
@@ -48,13 +49,13 @@ public sealed class GlossaryController : BaseApiController
     /// <summary>
     /// Busca términos del glosario por coincidencia de texto (insensible a mayúsculas y a tildes).
     /// </summary>
-    /// <param name="q">Texto a buscar.</param>
+    /// <param name="q">Texto a buscar, obligatorio y no vacío.</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los términos coincidentes.</returns>
     [HttpGet("search")]
     [ProducesResponseType(typeof(GlossaryResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct)
+    public async Task<IActionResult> Search([FromQuery, BindRequired] string q, CancellationToken ct)
     {
         var result = await _mediator.Send(new SearchGlossaryQuery(q), ct);
         return Ok(result);
