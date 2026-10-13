@@ -4,6 +4,7 @@ using Cauce.Application.ClinicalRegistry.UseCases.GetUnifiedHistory;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cauce.Api.Controllers;
@@ -35,14 +36,18 @@ public sealed class HistoryController : BaseApiController
     /// Devuelve el historial unificado del paciente autenticado en un rango de fechas,
     /// ordenado cronológicamente de forma descendente.
     /// </summary>
-    /// <param name="from">Inicio del rango (UTC).</param>
-    /// <param name="to">Fin del rango (UTC).</param>
+    /// <remarks>Devuelve como máximo 500 comidas y 500 síntomas del rango; las notas clínicas no tienen tope.</remarks>
+    /// <param name="from">Inicio del rango, obligatorio e inclusivo, con zona horaria (<c>Z</c> u offset). Filtra comidas y síntomas por <c>clientCreatedAt</c> y notas por <c>createdAt</c>.</param>
+    /// <param name="to">Fin del rango, obligatorio e inclusivo, con zona horaria y no anterior a <c>from</c>.</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los eventos del historial.</returns>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<HistoryEvent>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Get([FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct)
+    public async Task<IActionResult> Get(
+        [FromQuery, BindRequired] DateTime from,
+        [FromQuery, BindRequired] DateTime to,
+        CancellationToken ct)
     {
         var result = await _mediator.Send(new GetUnifiedHistoryQuery(from, to), ct);
         return Ok(result);

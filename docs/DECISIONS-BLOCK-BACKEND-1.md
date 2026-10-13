@@ -3,7 +3,7 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A71, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+**Alcance:** actas A38 a A72, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
 trabajo posterior sobre el consentimiento, Backend-Pilot-Readiness y los bloques pequeños
 posteriores. Las decisiones DEC-B3 a DEC-B7B y las actas A1 a A29 viven en el repo `docs`, en
 `decisions/DECISIONS-BLOCK-01.md` a `decisions/DECISIONS-BLOCK-07B.md`; las actas A30 a A37 y A42,
@@ -15,7 +15,8 @@ A42 es un acta del repo `docs`; A50 no existe como acta.
 las actas A59 a A65. El 2026-09-25 se corrigieron este encabezado y una referencia de A58, que daban
 por inexistente el Bloque 3, y se agregó A67. El 2026-09-26 se agregaron A68 y A69, del bloque Portal
 listo 1. El 2026-09-30 se agregó A70, del endurecimiento del registro tras el incidente del 28-sep, y el
-2026-10-01 la A71, sobre la baja de cuenta en Keycloak.
+2026-10-01 la A71, sobre la baja de cuenta en Keycloak. El 2026-10-12 se agregó A72, del bloque
+Backend-Contract-1.
 
 ---
 
@@ -55,6 +56,7 @@ listo 1. El 2026-09-30 se agregó A70, del endurecimiento del registro tras el i
 | [A69](#acta-a69-contrato-del-portal-para-la-revisión-hitl-y-el-detalle-del-paciente) | Contrato del portal para la revisión HITL y el detalle del paciente | Aprobada, implementada en Portal listo 1. Cambio incompatible en `modify` |
 | [A70](#acta-a70-registro-sin-huérfanos-en-keycloak-correo-normalizado-y-logs-a-archivo) | Registro sin huérfanos en Keycloak, correo normalizado y logs a archivo | Aprobada e implementada. El cliente de tokens queda en backlog |
 | [A71](#acta-a71-baja-de-cuenta-la-identidad-en-keycloak-se-anonimiza-después-del-commit-local) | Baja de cuenta: la identidad en Keycloak se anonimiza después del commit local | Aprobada como diseño. Implementación diferida, obligatoria antes del primer paciente real |
+| [A72](#acta-a72-los-parámetros-de-rango-y-de-búsqueda-son-obligatorios-y-las-fechas-llevan-zona-horaria) | Los parámetros de rango y de búsqueda son obligatorios y las fechas llevan zona horaria | Aprobada, implementada en Backend-Contract-1. Quedan abiertos la opción D, los topes, el filtro por `clientCreatedAt` y las citas vencidas de CONTRACT-IDENTITY |
 
 ---
 
@@ -2836,5 +2838,99 @@ Kaelín de la Fuente.
 - Acta A17, en el repo `docs` (`decisions/DECISIONS-BLOCK-06.md`).
 - Actas [A55](#acta-a55-deuda-diferida--la-suspensión-no-corta-sesiones-ni-tokens-ya-emitidos),
   [A70](#acta-a70-registro-sin-huérfanos-en-keycloak-correo-normalizado-y-logs-a-archivo).
+
+---
+
+## Acta A72: Los parámetros de rango y de búsqueda son obligatorios y las fechas llevan zona horaria
+
+**Estado:** Aprobada, implementada en Backend-Contract-1
+**Fecha:** 2026-10-11
+**Aprobado por:** Kiwicha, con las decisiones de Trigo y Kiwicha del 2026-10-11 sobre la Fase 0 de lectura
+del bloque Backend-Contract-1
+**Aplicabilidad:** Backend: `GET /meals`, `/symptoms`, `/clinical-notes`, `/history`, `/foods/search` y
+`/glossary/search`, sus validadores y la paginación de comidas y síntomas. Cambio de contrato: snapshot
+`openapi-v1.7.0.json`.
+
+---
+
+### Contexto
+
+El contrato v1.6.0 declaraba opcionales `from` y `to` en GET /meals, /symptoms, /clinical-notes y /history, y
+`q` en GET /foods/search y /glossary/search, aunque el servidor los necesita. Las pruebas escritas antes de
+implementar confirmaron lo que la lectura del código anticipaba:
+
+| Caso | Respuesta hasta la v1.6.0 |
+|---|---|
+| Sin `from` (los 4 endpoints) | 200. El binder deja `DateTime.MinValue` y Npgsql lo envía como `-infinity` |
+| Sin `to` | 400 por el validador en comidas y síntomas; 200 en notas e historial |
+| `to` anterior a `from` | 400 en comidas y síntomas; 200 en notas e historial |
+| Fecha sin zona horaria (8 casos) | 500 `internal_server_error`. Llega con Kind=Unspecified y Npgsql lanza ArgumentException |
+
+Swashbuckle 7.2.0 marca un parámetro como requerido solo con `[BindRequired]` o `[Required]`, no con tipos no
+anulables ni con validadores. Por eso el snapshot decía «opcional» y Mobile habría heredado parámetros
+anulables al regenerar su cliente.
+
+### Decisión
+
+1. `[BindRequired]` en los diez parámetros. No se agrega un `InvalidModelStateResponseFactory`: el 400
+   automático sin `errorCode` sigue siendo el comportamiento documentado (CONTRACT-IDENTITY §4.2).
+2. Notas e historial reciben un validador con la regla To >= From y el mismo mensaje que comidas y síntomas.
+3. `From` y `To` deben llegar con Kind=Utc, es decir, con `Z` u offset. Si no, 400 `validation_error` con
+   mensaje en español. No se asume UTC en silencio.
+4. Comidas y síntomas desempatan por id descendente después de `clientCreatedAt`.
+5. Se documentan, sin cambiar el comportamiento, el campo que filtra cada rango (`clientCreatedAt` en comidas
+   y síntomas, `createdAt` en notas), los límites inclusivos y los topes: 500 comidas y 500 síntomas en
+   /history, notas sin tope y 20 resultados en /foods/search.
+6. Los cuatro códigos sin emisor HTTP (`ingredient_not_found`, `invalid_notification_state_transition`,
+   `notification_delivery_failed` y `onboarding_already_completed`) se documentan como «definido, sin endpoint
+   que lo emita hoy». Las excepciones y el middleware no se tocan. En CONTRACT-IDENTITY §2.11 solo se agrega
+   `nutritionist_assignment_exists`.
+7. El comentario `<param>` va en una sola línea. En la primera generación del snapshot, las siete
+   descripciones de dos líneas salieron con `\r\n` y doce espacios de sangría, y los clientes generados los
+   copian en sus comentarios.
+8. El snapshot pasa a `openapi-v1.7.0.json` y se retira el v1.6.0. ENDPOINTS.md pasa a 1.8.0 y
+   CONTRACT-IDENTITY a 1.4.1.
+9. La convención del Trait en las pruebas de integración queda escrita: marca las clases que levantan la API o
+   usan los fixtures de Docker (51 de 52 clases).
+
+### Justificación
+
+En un registro clínico, un filtro que se degrada en silencio es peor que un error: sin `from`, la consulta
+devolvía todo el historial sin avisar. Asumir UTC cuando falta la zona habría corrido cinco horas los
+registros de un paciente en Lima (UTC-5) sin que nadie lo notara, y por eso se rechaza. El desempate se
+necesita porque Mobile recorre todas las páginas de la ventana de 90 días: la documentación de PostgreSQL
+advierte que LIMIT sin un ORDER BY de orden único devuelve un subconjunto impredecible, y con `Skip/Take` una
+fila empatada puede repetirse o perderse entre páginas. Con una sola línea por `<param>`, las descripciones
+nuevas no dependen del fin de línea del código fuente.
+
+### Evidencia
+
+62 pruebas nuevas (28 unitarias y 34 de integración). La corrida en rojo dio 18 casos en rojo y 16 en verde,
+tal como la Fase 0 predecía, y el total pasa de 1134 a 1196 pruebas, sin omitidas. El snapshot v1.7.0 se
+diferencia del v1.6.0 en 22 puntos (10 `required`, 10 descripciones de parámetro y 2 de operación) y en nada
+más: 60 paths, 68 operaciones y 122 esquemas. Mobile comprobó con su cliente generado real que `from` y `to`
+salen con `Z` y que una fecha local lanza ArgumentError antes de enviarse. La causa del 500 está en el código
+de Npgsql 9.0.3 (DateTimeConverterResolver.cs, líneas 52 a 58).
+
+### Consecuencias
+
+- Cambios de comportamiento, también en la nota de la v1.8.0 de ENDPOINTS.md: sin `from`, `to` o `q` ahora
+  responde 400 de binding (antes 200 en casi todos los casos); una fecha sin zona ahora responde 400
+  `validation_error` (antes 500); y `to` anterior a `from` ahora responde 400 también en notas e historial
+  (antes 200).
+- Mobile no se rompe, porque manda siempre `from` y `to` en UTC con `Z`. Al regenerar el cliente con la
+  v1.7.0, `ClinicalNotesRepository.list` deja de compilar (pasa fechas anulables y no tiene llamadores); se
+  resuelve en Mobile-Contract-1. Se avisa a Mobile y al portal, como pide R11: cambia la firma de diez
+  parámetros.
+- `POST /sync/batch` devuelve `invalid_meal_registration` dentro de `errors[]` de una respuesta 200, no como
+  400, y emite dos códigos que el catálogo no tenía (`invalid_request` y `persistence_error`). Quedan
+  documentados en la fila del lote.
+- Siguen abiertas, y están anotadas en `api-contract.md`: la opción D (400 automático con `errorCode`, que se
+  tratará en un acta propia antes del portal web); el filtro por `clientCreatedAt` frente a la hora que
+  muestra la app; los topes de /history y de /foods/search frente a HU0009 #3, HU0022 y HU0024; la unión de
+  /history, que ENDPOINTS.md describe completa y el cliente Dart de Mobile descarta (acta M36); los códigos
+  sin emisor; y los 59 textos del snapshot que dependen del CRLF del código fuente.
+- De las 58 citas `archivo:línea` de CONTRACT-IDENTITY-v1.md, 41 están vencidas y 4 son parciales; 11 siguen
+  vigentes y 2 se corrigieron en este bloque. La corrección queda para un bloque de documentación.
 
 ---

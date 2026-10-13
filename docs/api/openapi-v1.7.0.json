@@ -1519,7 +1519,8 @@
           {
             "name": "from",
             "in": "query",
-            "description": "Inicio del rango (UTC).",
+            "description": "Inicio del rango, obligatorio e inclusivo, sobre `createdAt`. Debe llevar zona horaria (`Z` u offset, como `2026-10-01T00:00:00-05:00`).",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -1528,7 +1529,8 @@
           {
             "name": "to",
             "in": "query",
-            "description": "Fin del rango (UTC).",
+            "description": "Fin del rango, obligatorio e inclusivo, sobre `createdAt`. Debe llevar zona horaria y no ser anterior a `from`.",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -2544,11 +2546,13 @@
           "Foods"
         ],
         "summary": "Busca alimentos del catálogo por coincidencia de nombre.",
+        "description": "Devuelve como máximo 20 alimentos.",
         "parameters": [
           {
             "name": "q",
             "in": "query",
-            "description": "Texto a buscar.",
+            "description": "Texto a buscar en el nombre, obligatorio y no vacío.",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -2999,7 +3003,8 @@
           {
             "name": "q",
             "in": "query",
-            "description": "Texto a buscar.",
+            "description": "Texto a buscar, obligatorio y no vacío.",
+            "required": true,
             "schema": {
               "type": "string"
             }
@@ -3148,11 +3153,13 @@
           "History"
         ],
         "summary": "Devuelve el historial unificado del paciente autenticado en un rango de fechas,\r\nordenado cronológicamente de forma descendente.",
+        "description": "Devuelve como máximo 500 comidas y 500 síntomas del rango; las notas clínicas no tienen tope.",
         "parameters": [
           {
             "name": "from",
             "in": "query",
-            "description": "Inicio del rango (UTC).",
+            "description": "Inicio del rango, obligatorio e inclusivo, con zona horaria (`Z` u offset). Filtra comidas y síntomas por `clientCreatedAt` y notas por `createdAt`.",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -3161,7 +3168,8 @@
           {
             "name": "to",
             "in": "query",
-            "description": "Fin del rango (UTC).",
+            "description": "Fin del rango, obligatorio e inclusivo, con zona horaria y no anterior a `from`.",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -4058,7 +4066,8 @@
           {
             "name": "from",
             "in": "query",
-            "description": "Inicio del rango (UTC).",
+            "description": "Inicio del rango, obligatorio e inclusivo, sobre `clientCreatedAt`. Debe llevar zona horaria (`Z` u offset, como `2026-10-01T00:00:00-05:00`).",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -4067,7 +4076,8 @@
           {
             "name": "to",
             "in": "query",
-            "description": "Fin del rango (UTC).",
+            "description": "Fin del rango, obligatorio e inclusivo, sobre `clientCreatedAt`. Debe llevar zona horaria y no ser anterior a `from`.",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -9011,7 +9021,8 @@
           {
             "name": "from",
             "in": "query",
-            "description": "Inicio del rango (UTC).",
+            "description": "Inicio del rango, obligatorio e inclusivo, sobre `clientCreatedAt`. Debe llevar zona horaria (`Z` u offset, como `2026-10-01T00:00:00-05:00`).",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -9020,7 +9031,8 @@
           {
             "name": "to",
             "in": "query",
-            "description": "Fin del rango (UTC).",
+            "description": "Fin del rango, obligatorio e inclusivo, sobre `clientCreatedAt`. Debe llevar zona horaria y no ser anterior a `from`.",
+            "required": true,
             "schema": {
               "type": "string",
               "format": "date-time"

@@ -8,6 +8,7 @@ using Cauce.Application.Common.Models;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cauce.Api.Controllers;
@@ -64,8 +65,8 @@ public sealed class SymptomsController : BaseApiController
     /// <summary>
     /// Devuelve el historial paginado de síntomas del paciente autenticado.
     /// </summary>
-    /// <param name="from">Inicio del rango (UTC).</param>
-    /// <param name="to">Fin del rango (UTC).</param>
+    /// <param name="from">Inicio del rango, obligatorio e inclusivo, sobre <c>clientCreatedAt</c>. Debe llevar zona horaria (<c>Z</c> u offset, como <c>2026-10-01T00:00:00-05:00</c>).</param>
+    /// <param name="to">Fin del rango, obligatorio e inclusivo, sobre <c>clientCreatedAt</c>. Debe llevar zona horaria y no ser anterior a <c>from</c>.</param>
     /// <param name="page">Número de página.</param>
     /// <param name="pageSize">Tamaño de página.</param>
     /// <param name="ct">Token de cancelación.</param>
@@ -74,8 +75,8 @@ public sealed class SymptomsController : BaseApiController
     [ProducesResponseType(typeof(PagedResult<SymptomHistoryItem>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GetHistory(
-        [FromQuery] DateTime from,
-        [FromQuery] DateTime to,
+        [FromQuery, BindRequired] DateTime from,
+        [FromQuery, BindRequired] DateTime to,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 50,
         CancellationToken ct = default)

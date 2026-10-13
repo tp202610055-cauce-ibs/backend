@@ -7,6 +7,7 @@ using Cauce.Application.Common.Idempotency;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cauce.Api.Controllers;
@@ -62,14 +63,17 @@ public sealed class ClinicalNotesController : BaseApiController
     /// <summary>
     /// Lista las notas clínicas del paciente autenticado en un rango de fechas.
     /// </summary>
-    /// <param name="from">Inicio del rango (UTC).</param>
-    /// <param name="to">Fin del rango (UTC).</param>
+    /// <param name="from">Inicio del rango, obligatorio e inclusivo, sobre <c>createdAt</c>. Debe llevar zona horaria (<c>Z</c> u offset, como <c>2026-10-01T00:00:00-05:00</c>).</param>
+    /// <param name="to">Fin del rango, obligatorio e inclusivo, sobre <c>createdAt</c>. Debe llevar zona horaria y no ser anterior a <c>from</c>.</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Las notas clínicas.</returns>
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ClinicalNoteSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> List([FromQuery] DateTime from, [FromQuery] DateTime to, CancellationToken ct)
+    public async Task<IActionResult> List(
+        [FromQuery, BindRequired] DateTime from,
+        [FromQuery, BindRequired] DateTime to,
+        CancellationToken ct)
     {
         var result = await _mediator.Send(new GetClinicalNotesQuery(from, to), ct);
         return Ok(result);

@@ -1,12 +1,24 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.4.0 · **Fecha:** 26 de septiembre de 2026 · **Backend:** rama `feature/backend-portal-ready-1`
+**Versión:** 1.4.1 · **Fecha:** 11 de octubre de 2026 · **Backend:** rama `feature/backend-contract-1`
 **Alcance:** endpoints de identidad que consumen la app móvil Flutter (US01, US05, US07, US08, US19, US20) y,
 desde v1.4, el portal web de nutricionistas (§2.12).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
 `src/Cauce.Application/Identity/`. Cada afirmación de este documento lleva su evidencia en `archivo:línea`.
 
+> **v1.4.1 (Backend-Contract-1, acta A72).** Sin cambios en los endpoints de identidad. §2.11 suma el 409
+> `nutritionist_assignment_exists`, y se corrigen las citas de `BaseApiController` y de los campos del
+> `ProblemDetails`. El contrato v1.7.0 vuelve obligatorios `from`, `to` y `q` en seis endpoints del registro
+> diario y de referencia, con estos cambios de comportamiento:
+> - Sin `from`, `to` o `q` la respuesta es 400 de binding (§4.2), sin `errorCode`. Antes daba 200 en casi
+>   todos los casos.
+> - Una fecha sin zona horaria ahora responde 400 `validation_error`. Antes, 500.
+> - `to` anterior a `from` ahora responde 400 `validation_error` también en notas e historial. Antes, 200.
+> - `GET /meals` y `GET /symptoms` desempatan por id descendente a igual `clientCreatedAt`.
+>
+> El detalle está en `ENDPOINTS.md` v1.8.0.
+>
 > **v1.4.0 (Portal listo 1, acta A68).** El portal web tiene su propio canal de sesión:
 > `POST /auth/portal/login`, `/auth/portal/refresh` y `/auth/portal/logout` (§2.12), con el refresh token en
 > una cookie `HttpOnly` y un header contra CSRF. **Las tres rutas del móvil conservan su contrato**, verificado
@@ -537,6 +549,7 @@ un código sea válido o inválido igual en los dos flujos.
 | 403 | `forbidden` | El token es válido pero no es de un paciente |
 | 409 | `patient_already_assigned` | El paciente ya tiene un nutricionista activo |
 | 409 | `nutritionist_not_available` | El nutricionista del código no está en condiciones de atender. Extensión `reason` |
+| 409 | `nutritionist_assignment_exists` | El vínculo no se pudo crear porque ya existe una asignación activa. Solo ocurre si otra operación la creó entre la verificación y el canje |
 | 500 | `internal_server_error` | Fallo inesperado |
 
 **EL CÓDIGO NO SE CONSUME SI EL CANJE FALLA.** Todas las comprobaciones, incluida la disponibilidad del
@@ -649,7 +662,7 @@ El middleware serializa un `ProblemDetails` con `Content-Type: application/probl
 `Program.cs` **no** configura `ConfigureHttpJsonOptions`, así que `WriteAsJsonAsync` usa
 `JsonSerializerDefaults.Web`: las **propiedades** salen en camelCase.
 
-**Campos** (`ExceptionHandlingMiddleware.cs:290-301`)
+**Campos** (`ExceptionHandlingMiddleware.cs:386-397`)
 
 | Campo | Tipo | Notas |
 |---|---|---|
@@ -737,7 +750,7 @@ Ejemplo con datos ficticios:
 
 ### 4.2 Validación de binding de `[ApiController]`
 
-`BaseApiController` lleva `[ApiController]` (`src/Cauce.Api/Controllers/BaseApiController.cs:11`) y
+`BaseApiController` lleva `[ApiController]` (`src/Cauce.Api/Controllers/BaseApiController.cs:13`) y
 `Program.cs` **no** define un `InvalidModelStateResponseFactory` propio. Un cuerpo JSON malformado, o un
 campo obligatorio del record ausente, produce el `ValidationProblemDetails` automático de MVC:
 
@@ -969,6 +982,7 @@ de espera (US05 CA02) y la renovación de token (US08 CA02) quedaron cubiertos e
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 1.0 | 2026-07-13 | Versión inicial. Levantada del código en el tag `v0.6.2-dev-seed` para habilitar Mobile-1b. |
+| 1.4.1 | 2026-10-11 | Bloque Backend-Contract-1 (acta A72). Sin cambios en los endpoints de identidad. §2.11 suma el 409 `nutritionist_assignment_exists`. Se corrigen las citas `BaseApiController.cs:13` (§4.2) y `ExceptionHandlingMiddleware.cs:386-397` (§3). Nota inicial con los cambios de comportamiento del contrato v1.7.0: `from`, `to` y `q` obligatorios, fecha con zona horaria y desempate por id. |
 | 1.4.0 | 2026-09-26 | Bloque Portal listo 1 (acta A68). Nuevo §2.12 con la sesión del portal: tres rutas, cookie `HttpOnly` del refresh token, header `X-Cauce-Portal` contra CSRF, solo rol `nutritionist`. Las rutas del móvil conservan su esquema y solo aceptan `cauce-mobile` (400 `unsupported_client`). Auditoría de sesión con canal y causa interna; `ACCOUNT_LOCKED` y `FAILED_LOGOUT` nuevos. `unauthorized_client` / `invalid_client` de Keycloak pasan a 500 `identity_provider_misconfigured`. Se corrige el párrafo de §2.2 que negaba el 423. |
 | 1.3 | 2026-09-11 | Bloque Nutritionist-Activation-1 (acta A53). `POST /auth/register` valida el estado del nutricionista dueño del código con la misma regla que el canje de §2.11: responde 409 `nutritionist_not_available` con la extensión `reason`, antes de crear el usuario en Keycloak y sin consumir el código (§2.1). El cliente móvil todavía no mapea este `errorCode`. |
 | 1.2 | 2026-09-07 | Cierre de las deudas A39, A40 y A41 (bloque Backend-Fix-2). Nuevos §2.10 `POST /auth/verification-email/resend`, con rate limit particionado por correo, y §2.11 `POST /patients/me/nutritionist-assignment`, con el invariante de que el código no se consume si el canje falla. `POST /auth/login` sincroniza `emailVerified` desde Keycloak de forma unidireccional y tolerante a fallos (§2.2). Nuevos `errorCode`: `patient_already_assigned` y `nutritionist_not_available`, este último con la extensión `reason` (§3). Se retiran de §1 los dos endpoints que figuraban como inexistentes. |

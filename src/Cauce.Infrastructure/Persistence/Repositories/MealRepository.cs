@@ -60,6 +60,7 @@ public sealed class MealRepository : IMealRepository
             .Include(x => x.Items)
             .Where(x => x.PatientId == patientId && x.ClientCreatedAt >= from && x.ClientCreatedAt <= to)
             .OrderByDescending(x => x.ClientCreatedAt)
+            .ThenByDescending(x => x.Id)
             .Skip(skip)
             .Take(take)
             .ToListAsync(ct)

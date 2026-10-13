@@ -9,6 +9,7 @@ using Cauce.Domain.ClinicalRegistry.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.RateLimiting;
 
 namespace Cauce.Api.Controllers;
@@ -62,13 +63,14 @@ public sealed class FoodsController : BaseApiController
     /// <summary>
     /// Busca alimentos del catálogo por coincidencia de nombre.
     /// </summary>
-    /// <param name="q">Texto a buscar.</param>
+    /// <remarks>Devuelve como máximo 20 alimentos.</remarks>
+    /// <param name="q">Texto a buscar en el nombre, obligatorio y no vacío.</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los alimentos coincidentes.</returns>
     [HttpGet("search")]
     [ProducesResponseType(typeof(IReadOnlyList<FoodItemSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
-    public async Task<IActionResult> Search([FromQuery] string q, CancellationToken ct)
+    public async Task<IActionResult> Search([FromQuery, BindRequired] string q, CancellationToken ct)
     {
         var result = await _mediator.Send(new SearchFoodItemsQuery(q), ct);
         return Ok(result);
