@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.7.0 · **Actualizado:** 2026-09-26 · **Contrato:** [`openapi-v1.6.0.json`](openapi-v1.6.0.json) (349 KB, 68 operaciones, 60 paths)
+**Versión:** 1.8.0 · **Actualizado:** 2026-10-11 · **Contrato:** [`openapi-v1.7.0.json`](openapi-v1.7.0.json) (350 KB, 68 operaciones, 60 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -11,6 +11,21 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los endpoints de identidad, la fuente autoritativa versionada es
 > [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.4.
+
+**Novedades de la v1.8.0 (bloque Backend-Contract-1, acta A72).** El contrato v1.7.0 marca como
+obligatorios `from` y `to` en `GET /meals`, `/symptoms`, `/clinical-notes` y `/history`, y `q` en
+`GET /foods/search` y `/glossary/search`. No hay paths, operaciones ni esquemas nuevos, pero la firma del
+cliente generado cambia: los 10 parámetros dejan de ser opcionales. Cambios de comportamiento:
+- **Sin `from`, `to` o `q` la respuesta es 400 de binding**, sin `errorCode` y con la clave del parámetro en
+  `errors`. Antes daba 200 en casi todos los casos: sin `from` devolvía todo lo anterior a `to`, y sin `to`
+  devolvía una lista vacía en notas e historial (en comidas y síntomas, 400 `validation_error`). `q` ya
+  respondía 400 si faltaba o llegaba vacío.
+- **Una fecha sin zona horaria** (`2026-10-01T00:00:00` o `2026-10-01`) ahora responde **400
+  `validation_error`** con la clave `from` o `to`. Antes respondía 500 `internal_server_error`.
+- **`to` anterior a `from`** ahora responde **400 `validation_error`** también en `/clinical-notes` y
+  `/history`. Antes respondía 200 con una lista vacía.
+- **`GET /meals` y `GET /symptoms` desempatan por id descendente** cuando dos registros tienen el mismo
+  `clientCreatedAt`: recorrer todas las páginas de un rango ya no repite ni salta registros.
 
 **Novedades de la v1.7.0 (bloque Portal listo 1, actas A68 y A69).**
 - **Sesión del portal web**, nueva sección [2.b](#2b-sesión-del-portal-web): `POST /auth/portal/login`,
@@ -93,7 +108,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
   `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`. El móvil obtiene los tokens por
   `/auth/login`; el portal, por `/auth/portal/login` (§2.b). Ninguno de los dos habla con Keycloak.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.6.0.json` bajo
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.7.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -134,7 +149,7 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 
 | `errorCode` | HTTP | Significado |
 | --- | --- | --- |
-| `validation_error` | 400 | Falló validación (FluentValidation o binding de `[ApiController]`). Extensión `errors` por campo. |
+| `validation_error` | 400 | Falló una regla de FluentValidation. Extensión `errors` por campo. No cubre el 400 automático de binding de `[ApiController]` (por ejemplo, un parámetro obligatorio ausente), que llega sin `errorCode`: ver Convenciones. |
 | `domain_rule_violation` | 400 | Regla de dominio genérica violada. |
 | `invalid_invitation_code` / `expired_invitation_code` / `invitation_code_already_used` | 400 | Código de invitación inexistente / expirado / ya usado (registro). |
 | `consent_text_mismatch` | 400 | El hash del texto de consentimiento no coincide con la versión. |
@@ -142,6 +157,7 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `invalid_biometric_value` | 400 | Peso/estatura fuera de rango. |
 | `invalid_ibs_sss_dimension` | 400 | Dimensión IBS-SSS fuera de 0–100. |
 | `invalid_clinical_note_association` | 400 | La nota no se asocia a exactamente una comida o un síntoma. |
+| `invalid_meal_registration` | 400 | La comida viola una invariante de dominio. Por HTTP llega cuando `consumedAt` o `clientCreatedAt` son futuras (tolerancia de 5 minutos). En `POST /sync/batch` llega por ítem, dentro de `errors[]`. |
 | `invalid_credentials` | 401 | Login fallido (mensaje genérico; no revela si la cuenta existe). |
 | `invalid_refresh_token` | 401 | Refresh token vencido, revocado o ya consumido (el realm rota y no permite reuso). En el portal, también cookie ausente o sesión de una cuenta que ya no puede usar el portal. |
 | `unsupported_client` | 400 | Una ruta de sesión recibió un cliente OIDC que no es el de su canal: las rutas del móvil solo aceptan `cauce-mobile`. |
@@ -164,6 +180,7 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `recommendation_not_archivable` | 409 | La recomendación no está en un estado archivable. |
 | `active_pilot_retention` | 409 | Baja bloqueada por retención de piloto activo (falta el acuse). |
 | `patient_already_assigned` | 409 | El paciente ya tiene un nutricionista activo y no se sobrescribe. |
+| `nutritionist_assignment_exists` | 409 | El canje no pudo crear el vínculo porque ya existe una asignación activa. Solo ocurre si otra operación la creó entre la verificación y el canje. |
 | `nutritionist_not_available` | 409 | El nutricionista no puede atender: el dueño del código, al registrarse o al canjearlo, o quien intenta generar un código. Extensión `reason`: `pending_activation`, `inactive` o `suspended`. |
 | `nutritionist_not_pending_activation` | 409 | Reenvío del enlace de activación a un nutricionista que ya no está pendiente. |
 | `insufficient_clinical_history` | 422 | Historial clínico insuficiente para generar. |
@@ -177,6 +194,16 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `user_local_missing` | 500 | El token es válido en Keycloak pero no hay fila local en `users` para ese `sub`. Inconsistencia de identidad, no error del cliente. |
 | `identity_provider_misconfigured` | 500 | Keycloak rechazó al cliente OIDC del backend (`unauthorized_client` / `invalid_client`): falta o sobra el secret, o el cliente no admite el grant. Error de configuración del servidor; el detalle queda solo en el log. |
 | `internal_server_error` | 500 | Error inesperado. |
+
+**Definidos, sin endpoint que los emita hoy.** Están en el switch de `ExceptionHandlingMiddleware`, pero
+ninguna petición HTTP los produce. Un cliente no necesita mapearlos.
+
+| `errorCode` | HTTP | Por qué no se emite |
+| --- | --- | --- |
+| `ingredient_not_found` | 404 | Solo lo lanza `CustomFood.RemoveIngredient`, y `PUT /custom-foods/{id}` quita únicamente ingredientes que existen. |
+| `onboarding_already_completed` | 409 | Ningún código lanza la excepción. |
+| `invalid_notification_state_transition` | 500 | Solo la lanza el worker de notificaciones, fuera de una petición HTTP. |
+| `notification_delivery_failed` | 500 | Ningún código lanza la excepción. |
 
 ---
 
@@ -542,7 +569,7 @@ portal renueva primero y cierra después. Sin cookie responde igual 204.
 | Request body | `AssignNutritionistRequest` (invitationCode) |
 | Idempotencia | — |
 | Rate limit | `default-auth` (60/min·usuario) |
-| Respuestas | **201** `AssignNutritionistResult` (nutritionistId, nutritionistFullName, assignedAt) · 400 (`validation_error`, `invalid_invitation_code`, `expired_invitation_code`, `invitation_code_already_used`) · 409 (`patient_already_assigned`, `nutritionist_not_available`) · 401 · 403 · 500 |
+| Respuestas | **201** `AssignNutritionistResult` (nutritionistId, nutritionistFullName, assignedAt) · 400 (`validation_error`, `invalid_invitation_code`, `expired_invitation_code`, `invitation_code_already_used`) · 409 (`patient_already_assigned`, `nutritionist_not_available`, `nutritionist_assignment_exists`) · 401 · 403 · 500 |
 
 El código se normaliza a mayúsculas sin espacios envolventes, y se valida con las mismas reglas que el
 registro: longitud 8 a 20 y `^[A-Z0-9]+$`.
@@ -560,6 +587,11 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 
 `Policy = Patient` · `default-auth` (60/min·usuario) salvo `sync` → respuestas comunes 401 · 403 · 429 · 500.
 
+**Rangos de fechas.** En los `GET` de comidas, síntomas, notas e historial, `from` y `to` son obligatorios,
+inclusivos y deben llevar zona horaria (`Z` u offset, como `2026-10-01T00:00:00-05:00`). Sin uno de ellos
+responde 400 de binding sin `errorCode`; con una fecha sin zona o con `to` anterior a `from`, 400
+`validation_error`.
+
 ### `POST /api/v1/meals`
 | Campo | Valor |
 | --- | --- |
@@ -568,17 +600,18 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 | Request body | `CreateMealRequest` (clientGuid?, mealTime, consumedAt, clientCreatedAt, items[]) |
 | Idempotencia | **Sí** — `client_guid` (cuerpo `clientGuid` o header `Idempotency-Key`) |
 | Rate limit | `default-auth` |
-| Respuestas | **201** / **200** `CreateMealResult` · 400 · 404 `food_item_not_found`/`custom_food_not_found` · 409 `idempotency_mismatch` · 401 · 403 · 429 · 500 |
+| Respuestas | **201** / **200** `CreateMealResult` · 400 (`validation_error`, `invalid_meal_registration`) · 404 `food_item_not_found`/`custom_food_not_found` · 409 `idempotency_mismatch` · 401 · 403 · 429 · 500 |
 
 ### `GET /api/v1/meals`
 | Campo | Valor |
 | --- | --- |
 | Resumen | Historial paginado de comidas (rango `from`/`to`). Cada comida trae su `aggregatedFodmap` calculado, con la misma regla que el `POST`. |
 | US/TS | US09 |
-| Query | `from`, `to` (UTC), `page=1`, `pageSize=50` |
+| Query | `from` y `to` **obligatorios**, con zona horaria · `page=1` · `pageSize=50` (de 1 a 100) |
+| Filtro | `clientCreatedAt` entre `from` y `to`, ambos inclusivos. Orden: `clientCreatedAt` descendente y, a igualdad, id descendente. |
 | Idempotencia | — |
 | Rate limit | `default-auth` |
-| Respuestas | **200** `PagedResult<MealHistoryItem>` · 400 · 401 · 403 · 429 · 500 |
+| Respuestas | **200** `PagedResult<MealHistoryItem>` · 400 de binding sin `errorCode` (falta `from` o `to`) · 400 `validation_error` (fecha sin zona horaria, `to` anterior a `from`, `page` o `pageSize` fuera de rango) · 401 · 403 · 429 · 500 |
 
 ### `POST /api/v1/symptoms`
 | Campo | Valor |
@@ -595,10 +628,11 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 | --- | --- |
 | Resumen | Historial paginado de síntomas. |
 | US/TS | US11 |
-| Query | `from`, `to`, `page=1`, `pageSize=50` |
+| Query | `from` y `to` **obligatorios**, con zona horaria · `page=1` · `pageSize=50` (de 1 a 100) |
+| Filtro | `clientCreatedAt` entre `from` y `to`, ambos inclusivos. Orden: `clientCreatedAt` descendente y, a igualdad, id descendente. |
 | Idempotencia | — |
 | Rate limit | `default-auth` |
-| Respuestas | **200** `PagedResult<SymptomHistoryItem>` · 400 · 401 · 403 · 429 · 500 |
+| Respuestas | **200** `PagedResult<SymptomHistoryItem>` · 400 de binding sin `errorCode` (falta `from` o `to`) · 400 `validation_error` (fecha sin zona horaria, `to` anterior a `from`, `page` o `pageSize` fuera de rango) · 401 · 403 · 429 · 500 |
 
 ### `POST /api/v1/clinical-notes`
 | Campo | Valor |
@@ -615,10 +649,11 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 | --- | --- |
 | Resumen | Notas clínicas del paciente en un rango de fechas. Cada nota incluye su `clientGuid`. |
 | US/TS | US13 |
-| Query | `from`, `to` |
+| Query | `from` y `to` **obligatorios**, con zona horaria |
+| Filtro | `createdAt` (fecha del servidor) entre `from` y `to`, ambos inclusivos. Orden: `createdAt` descendente. Sin tope ni paginación. |
 | Idempotencia | — |
 | Rate limit | `default-auth` |
-| Respuestas | **200** `ClinicalNoteSummary[]` · 400 · 401 · 403 · 429 · 500 |
+| Respuestas | **200** `ClinicalNoteSummary[]` · 400 de binding sin `errorCode` (falta `from` o `to`) · 400 `validation_error` (fecha sin zona horaria, `to` anterior a `from`) · 401 · 403 · 429 · 500 |
 
 ### `POST /api/v1/custom-foods`
 | Campo | Valor |
@@ -668,17 +703,19 @@ aparte, para que el cliente afine el mensaje o muestre uno genérico.
 | Request body | `SyncBatchRequest` (meals[], symptoms[]) |
 | Idempotencia | **Sí** — `client_guid` por ítem |
 | Rate limit | `sync` (120/min·usuario) |
-| Respuestas | **200** `SyncBatchResult` · 400 · 401 · 403 · 429 · 500 |
+| Respuestas | **200** `SyncBatchResult` · 400 · 401 · 403 · 429 · 500. Un ítem rechazado no cambia el 200: va en `errors[]` con su `errorCode` (`validation_error`, `invalid_meal_registration`, `food_item_not_found`, `custom_food_not_found`, `patient_resource_access_denied`, `idempotency_mismatch`, `domain_rule_violation`, `invalid_request` o `persistence_error`). |
 
 ### `GET /api/v1/history`
 | Campo | Valor |
 | --- | --- |
 | Resumen | Historial unificado (comidas + síntomas + notas) ordenado cronológicamente descendente. |
 | US/TS | US13 |
-| Query | `from`, `to` |
+| Query | `from` y `to` **obligatorios**, con zona horaria |
+| Filtro | Comidas y síntomas por `clientCreatedAt`; notas por `createdAt`. Límites inclusivos. El orden usa el `occurredAt` de cada evento (`consumedAt`, `occurredAt` o `createdAt`), que puede no coincidir con el campo del filtro. |
+| Tope | Como máximo **500 comidas y 500 síntomas** (los más recientes por `clientCreatedAt`). Las notas no tienen tope. Sin paginación. |
 | Idempotencia | — |
 | Rate limit | `default-auth` |
-| Respuestas | **200** `HistoryEvent[]` · 400 · 401 · 403 · 429 · 500 |
+| Respuestas | **200** `HistoryEvent[]` · 400 de binding sin `errorCode` (falta `from` o `to`) · 400 `validation_error` (fecha sin zona horaria, `to` anterior a `from`) · 401 · 403 · 429 · 500 |
 
 > **Unión discriminada.** Cada elemento trae `eventType` con uno de tres valores —`meal`, `symptom`,
 > `clinical_note`— y el objeto correspondiente en `meal`, `symptom` o `note`. Desde el snapshot
@@ -832,9 +869,10 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 | Resumen | Catálogo de alimentos: listado paginado con filtros; búsqueda por nombre; detalle por id. |
 | US/TS | TS12 |
 | Autorización | Autenticado (cualquier rol) · `default-auth` |
-| Query / Path | List: `page`, `pageSize`, `category?`, `fodmapLevel?` · Search: `q` · Detail: `{foodId}` |
+| Query / Path | List: `page`, `pageSize`, `category?`, `fodmapLevel?` · Search: `q` **obligatorio y no vacío** · Detail: `{foodId}` |
+| Tope | Search devuelve como máximo **20 alimentos**, sin paginación. |
 | Idempotencia | — |
-| Respuestas | List **200** `PagedResult<FoodItemSummary>` · Search **200** `FoodItemSummary[]` · Detail **200** `FoodItemDetail` (404 `food_item_not_found`) · 400 (list/search) · 401 · 429 · 500 |
+| Respuestas | List **200** `PagedResult<FoodItemSummary>` · Search **200** `FoodItemSummary[]` · Detail **200** `FoodItemDetail` (404 `food_item_not_found`) · 400 (list; en search, 400 de binding sin `errorCode` si falta `q` o llega vacío) · 401 · 429 · 500 |
 
 ### `GET /api/v1/foods/suggestions`
 | Campo | Valor |
@@ -863,9 +901,9 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 | Resumen | Glosario clínico-nutricional; la definición depende del rol. Búsqueda insensible a tildes (`unaccent`). Contenido en borrador (`contentStatus`). |
 | US/TS | US27 |
 | Autorización | Autenticado (cualquier rol) · `default-auth` |
-| Query | Search: `q` |
+| Query | Search: `q` **obligatorio y no vacío** |
 | Idempotencia | — |
-| Respuestas | **200** `GlossaryResult` · 400 (search) · 401 · 429 · 500 |
+| Respuestas | **200** `GlossaryResult` · 400 de binding sin `errorCode` (search, si falta `q` o llega vacío) · 401 · 429 · 500 |
 
 ---
 
