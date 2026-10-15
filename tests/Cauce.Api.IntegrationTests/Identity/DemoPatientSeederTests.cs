@@ -12,8 +12,8 @@ using Microsoft.Extensions.Options;
 namespace Cauce.Api.IntegrationTests.Identity;
 
 /// <summary>
-/// Pruebas de caracterización del paciente demo: fijan lo que siembra antes de extraer la creación de la
-/// cuenta a un componente común. En Testing la cadena de sembrado no corre, así que se invoca a mano.
+/// Pruebas del paciente demo: cuenta lista para el Diario, historial corto, idempotencia y apagado. En
+/// Testing la cadena de sembrado no corre, así que se invoca a mano.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class DemoPatientSeederTests

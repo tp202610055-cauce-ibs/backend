@@ -11,9 +11,8 @@ using Microsoft.Extensions.Options;
 namespace Cauce.Infrastructure.Persistence.Seeders;
 
 /// <summary>
-/// Seeder de desarrollo del paciente de volumen: una cuenta lista para el Diario con 450 comidas y 180
-/// síntomas sintéticos, para probar la app en un celular. Solo corre en Development y con
-/// <c>VolumePatient:Enabled</c>; sin <c>VolumePatient__Regenerate</c>, una segunda ejecución no cambia nada.
+/// Seeder de desarrollo del paciente de volumen: cuenta lista para el Diario con 450 comidas y 180 síntomas
+/// sintéticos. Solo corre en Development y con <c>VolumePatient:Enabled</c>; sin Regenerate no cambia nada.
 /// </summary>
 public sealed class VolumePatientSeeder
 {
