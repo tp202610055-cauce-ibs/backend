@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.ClinicalRegistry.Enums;
@@ -35,8 +32,7 @@ public sealed class DemoPatientSeeder
 {
     private readonly CauceDbContext _context;
     private readonly IUserRepository _userRepository;
-    private readonly IKeycloakAdminClient _keycloakAdminClient;
-    private readonly IPatientCodeGenerator _patientCodeGenerator;
+    private readonly DevelopmentPatientAccount _account;
     private readonly IOptions<DemoPatientOptions> _options;
     private readonly ILogger<DemoPatientSeeder> _logger;
 
@@ -46,15 +42,13 @@ public sealed class DemoPatientSeeder
     public DemoPatientSeeder(
         CauceDbContext context,
         IUserRepository userRepository,
-        IKeycloakAdminClient keycloakAdminClient,
-        IPatientCodeGenerator patientCodeGenerator,
+        DevelopmentPatientAccount account,
         IOptions<DemoPatientOptions> options,
         ILogger<DemoPatientSeeder> logger)
     {
         _context = context;
         _userRepository = userRepository;
-        _keycloakAdminClient = keycloakAdminClient;
-        _patientCodeGenerator = patientCodeGenerator;
+        _account = account;
         _options = options;
         _logger = logger;
     }
@@ -84,43 +78,16 @@ public sealed class DemoPatientSeeder
         }
 
         var now = DateTime.UtcNow;
-        var patientRoleId = await _userRepository.GetRoleIdAsync(UserRoles.Patient, ct).ConfigureAwait(false);
 
-        // Identidad en Keycloak: reutiliza el usuario si un intento previo lo dejó creado; contraseña
-        // permanente (sin required actions) para habilitar el Direct Access Grant. La password nunca se loguea.
-        var existing = await _keycloakAdminClient.FindByEmailAsync(email, ct).ConfigureAwait(false);
-        var keycloakId = existing?.Id
-            ?? await _keycloakAdminClient
-                .CreateUserAsync(email, options.FullName, UserRoles.Patient, requireEmailVerification: false, ct)
-                .ConfigureAwait(false);
-        await _keycloakAdminClient.ResetPasswordAsync(keycloakId, options.Password, ct).ConfigureAwait(false);
-
-        // Cuenta local: verificada, activa e inscrita en el piloto activo (US26 CA02 comprobable).
-        var patientCode = await _patientCodeGenerator.NextAsync(ct).ConfigureAwait(false);
-        var user = User.CreatePatient(Guid.NewGuid(), keycloakId, email, options.FullName, patientRoleId, patientCode);
-        user.VerifyEmail();
-        user.EnrollInActivePilot();
-        await _userRepository.AddAsync(user, ct).ConfigureAwait(false);
-
-        // Consentimiento informado (US01 CA04 / US28). Texto de demostración; el hash es su SHA-256 real.
-        const string consentText = "Consentimiento informado de demostración para el entorno de desarrollo de Cauce.";
-        var consentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(consentText))).ToLowerInvariant();
-        _context.Add(ConsentRecord.Capture(Guid.NewGuid(), user.Id, "1.0", consentHash, "127.0.0.1", now.AddDays(-40)));
-
-        // Perfil clínico. Estatura en centímetros (162), no metros. Onboarding completo (hay línea base).
-        var profile = PatientProfile.Create(
-            Guid.NewGuid(),
-            user.Id,
-            new DateOnly(1990, 5, 15),
-            BiologicalSex.Female,
-            62.5m,
-            162m,
-            IbsSubtype.IbsD,
+        // Estatura en centímetros. Línea base de 220 puntos (moderada): deja margen para medir la reducción
+        // de 50 puntos del endpoint primario.
+        var profile = new DevelopmentPatientProfile(
+            new DateOnly(1990, 5, 15), BiologicalSex.Female, 62.5m, 162m, IbsSubtype.IbsD,
             DateOnly.FromDateTime(now.AddYears(-2)),
-            medications: null,
-            now.AddDays(-40));
-        profile.CompleteOnboarding(now.AddDays(-14));
-        _context.Add(profile);
+            PainSeverity: 60, PainFrequency: 40, BloatingSeverity: 50, BowelHabitsDissatisfaction: 40, LifeInterference: 30);
+        var user = await _account
+            .ProvisionAsync(email, options.FullName, options.Password, profile, now.AddDays(-40), now.AddDays(-14), ct)
+            .ConfigureAwait(false);
 
         // Vínculo con el nutricionista de prueba si existe (DevAdminSeeder corre antes en la cadena).
         var nutritionistRoleId = await _userRepository.GetRoleIdAsync(UserRoles.Nutritionist, ct).ConfigureAwait(false);
@@ -133,13 +100,6 @@ public sealed class DemoPatientSeeder
         {
             _context.Add(NutritionistPatient.Establish(Guid.NewGuid(), nutritionist.Id, user.Id, invitationCodeId: null, now.AddDays(-40)));
         }
-
-        // IBS-SSS de línea base hace 14 días, puntaje total 220 (60+40+50+40+30) → categoría moderada,
-        // deja margen para medir la reducción de ≥50 puntos del endpoint primario.
-        _context.Add(IbsSssAssessment.Submit(
-            Guid.NewGuid(), user.Id, AssessmentType.Baseline, cycleNumber: 0,
-            painSeverity: 60, painFrequency: 40, bloatingSeverity: 50, bowelHabitsDissatisfaction: 40,
-            lifeInterference: 30, now.AddDays(-14)));
 
         // Historial de comidas/síntomas: requiere alimentos reales del catálogo TPCA-CENAN ya sembrado.
         var foods = await _context.Set<FoodItem>()

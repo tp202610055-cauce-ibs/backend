@@ -236,7 +236,12 @@ public static class DependencyInjection
         services.AddScoped<QaNutritionistsSeeder>();
         services.Configure<Cauce.Infrastructure.Identity.DemoPatientOptions>(
             configuration.GetSection(Cauce.Infrastructure.Identity.DemoPatientOptions.SectionName));
+        services.AddScoped<DevelopmentPatientAccount>();
         services.AddScoped<DemoPatientSeeder>();
+        services.Configure<Cauce.Infrastructure.Identity.VolumePatientOptions>(
+            configuration.GetSection(Cauce.Infrastructure.Identity.VolumePatientOptions.SectionName));
+        services.AddSingleton(Cauce.Infrastructure.Identity.VolumePatientSwitches.FromEnvironment());
+        services.AddScoped<VolumePatientSeeder>();
         services.AddScoped<RecommendationsModelVersionsSeeder>();
         services.AddScoped<MinioBucketSeeder>();
 
