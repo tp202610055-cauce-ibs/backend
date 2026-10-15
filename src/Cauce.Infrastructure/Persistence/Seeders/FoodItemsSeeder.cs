@@ -81,6 +81,12 @@ public sealed class FoodItemsSeeder
     public static int CatalogSize => Catalog.Count;
 
     /// <summary>
+    /// Nombre, nivel FODMAP y origen de cada alimento del catálogo inicial.
+    /// </summary>
+    public static IReadOnlyList<CatalogFood> CatalogFoods { get; } =
+        Catalog.Select(seed => new CatalogFood(seed.Name, seed.Level, seed.IsPeruvian)).ToList();
+
+    /// <summary>
     /// Siembra el catálogo de alimentos de forma idempotente.
     /// </summary>
     /// <param name="ct">Token de cancelación.</param>
