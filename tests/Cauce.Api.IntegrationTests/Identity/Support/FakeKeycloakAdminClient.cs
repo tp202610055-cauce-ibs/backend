@@ -111,9 +111,19 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
     /// </summary>
     public List<string> PasswordResets { get; } = [];
 
+    /// <summary>
+    /// Si se asigna, <see cref="ResetPasswordAsync"/> la lanza, como cuando la política del realm rechaza la contraseña.
+    /// </summary>
+    public Exception? ResetPasswordFailure { get; set; }
+
     /// <inheritdoc />
     public Task ResetPasswordAsync(string keycloakUserId, string newPassword, CancellationToken ct = default)
     {
+        if (ResetPasswordFailure is not null)
+        {
+            throw ResetPasswordFailure;
+        }
+
         PasswordResets.Add(keycloakUserId);
         return Task.CompletedTask;
     }

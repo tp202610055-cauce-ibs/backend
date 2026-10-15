@@ -42,5 +42,16 @@ public static class SeedingExtensions
         {
             logger.LogError(exception, "Development seeding failed. The application will continue to start.");
         }
+
+        // Ámbito propio: un fallo anterior puede dejar entidades pendientes en el contexto de la cadena.
+        using var volumeScope = serviceProvider.CreateScope();
+        try
+        {
+            await volumeScope.ServiceProvider.GetRequiredService<VolumePatientSeeder>().SeedAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            logger.LogError(exception, "Volume patient seeding failed. The application will continue to start.");
+        }
     }
 }
