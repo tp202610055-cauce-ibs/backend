@@ -3,7 +3,7 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A72, de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+**Alcance:** actas A38 a A74 (A73 está reservada para Docs-Trace-1), de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
 trabajo posterior sobre el consentimiento, Backend-Pilot-Readiness y los bloques pequeños
 posteriores. Las decisiones DEC-B3 a DEC-B7B y las actas A1 a A29 viven en el repo `docs`, en
 `decisions/DECISIONS-BLOCK-01.md` a `decisions/DECISIONS-BLOCK-07B.md`; las actas A30 a A37 y A42,
@@ -16,7 +16,7 @@ las actas A59 a A65. El 2026-09-25 se corrigieron este encabezado y una referenc
 por inexistente el Bloque 3, y se agregó A67. El 2026-09-26 se agregaron A68 y A69, del bloque Portal
 listo 1. El 2026-09-30 se agregó A70, del endurecimiento del registro tras el incidente del 28-sep, y el
 2026-10-01 la A71, sobre la baja de cuenta en Keycloak. El 2026-10-12 se agregó A72, del bloque
-Backend-Contract-1.
+Backend-Contract-1, y el 2026-10-15 la A74, del bloque Backend-Seed-Volume-1.
 
 ---
 
@@ -57,6 +57,7 @@ Backend-Contract-1.
 | [A70](#acta-a70-registro-sin-huérfanos-en-keycloak-correo-normalizado-y-logs-a-archivo) | Registro sin huérfanos en Keycloak, correo normalizado y logs a archivo | Aprobada e implementada. El cliente de tokens queda en backlog |
 | [A71](#acta-a71-baja-de-cuenta-la-identidad-en-keycloak-se-anonimiza-después-del-commit-local) | Baja de cuenta: la identidad en Keycloak se anonimiza después del commit local | Aprobada como diseño. Implementación diferida, obligatoria antes del primer paciente real |
 | [A72](#acta-a72-los-parámetros-de-rango-y-de-búsqueda-son-obligatorios-y-las-fechas-llevan-zona-horaria) | Los parámetros de rango y de búsqueda son obligatorios y las fechas llevan zona horaria | Aprobada, implementada en Backend-Contract-1. Quedan abiertos la opción D, los topes, el filtro por `clientCreatedAt` y las citas vencidas de CONTRACT-IDENTITY |
+| [A74](#acta-a74-paciente-de-desarrollo-con-historial-de-volumen) | Paciente de desarrollo con historial de volumen | Implementada en Backend-Seed-Volume-1. Pendientes el primer arranque real y el pase en teléfono |
 
 ---
 
@@ -2932,5 +2933,96 @@ de Npgsql 9.0.3 (DateTimeConverterResolver.cs, líneas 52 a 58).
   sin emisor; y los 59 textos del snapshot que dependen del CRLF del código fuente.
 - De las 58 citas `archivo:línea` de CONTRACT-IDENTITY-v1.md, 41 están vencidas y 4 son parciales; 11 siguen
   vigentes y 2 se corrigieron en este bloque. La corrección queda para un bloque de documentación.
+
+---
+
+## Acta A74: Paciente de desarrollo con historial de volumen
+
+**Estado:** Implementada en Backend-Seed-Volume-1. Pendientes el primer arranque real y el pase en teléfono
+**Fecha:** 2026-10-15
+**Aprobado por:** decide Trigo; redacta Kiwicha
+**Aplicabilidad:** Backend: sembrado de Development. Rama `feature/backend-seed-volume-1`, sobre `c09cf4a`
+(tag `v0.15.0-contract-required-params`). Sin cambio de contrato.
+
+---
+
+### Contexto
+
+El paciente demo solo tiene 5 comidas y 3 síntomas. Con ese volumen no se puede comprobar en un teléfono real
+el Diario de Mobile-History-1: ni la ventana de 90 días que pide la app, ni el recorrido por páginas de 100,
+ni los empates en el corte de página. Hacía falta un segundo paciente sintético, solo para desarrollo, con
+historial suficiente y conocido.
+
+### Decisión
+
+Se agrega «Paciente Volumen» (`paciente.volumen@cauce.local`), sembrado al final de la cadena de Development,
+apagado por defecto (`VolumePatient:Enabled` en `false`) y sin relación con el piloto.
+
+1. Contraseña solo en user-secrets (`VolumePatient:Password`). Sin contraseña, o con la contraseña rechazada
+   por Keycloak, queda una advertencia sin el valor y no se siembra nada.
+2. `VolumePatient__Regenerate` y `VolumePatient__ProbeFoodRetired` se aceptan solo por variable de entorno,
+   porque los user-secrets ganan a las variables de entorno. Regenerate borra síntomas, comidas y platos
+   personalizados del paciente, en ese orden y en una transacción, y vuelve a sembrar con fechas relativas a
+   hoy. ProbeFoodRetired desactiva el «Alimento de prueba retirado» aunque el paciente ya exista.
+3. La creación de la cuenta (Keycloak, usuario local, consentimiento, perfil, línea base y piloto activo) se
+   extrajo de `DemoPatientSeeder` al componente `DevelopmentPatientAccount`. El consentimiento se captura con
+   la versión y el hash del documento vigente. Antes de extraer se escribieron 3 pruebas de caracterización
+   del demo, que pasaron antes y después.
+4. El historial lo produce `VolumeHistoryGenerator`, una función pura y determinista (instante actual y
+   semilla fija). Sus propiedades están cubiertas por 20 pruebas unitarias sin Docker.
+
+### Qué se siembra
+
+450 comidas y 180 síntomas, repartidos en los días 1 a 88 anteriores a hoy (hora de Lima), más 2 comidas y 1
+síntoma de «Hoy». Se usan 88 días y no 90 porque la app pide `clientCreatedAt` desde ahora menos 90 días, y
+con 88 se tolera un día de atraso. Incluye días vacíos (con una racha de 3), días de 8 comidas o más, comidas
+registradas horas después de su consumo, 6 consumidas antes de la medianoche de Lima y registradas después,
+grupos de 6 registros empatados sobre cada corte de página, 3 platos personalizados, las cinco unidades con
+cantidades decimales, los nueve tipos de síntoma y asociaciones síntoma comida calculadas con la regla del
+handler de síntomas (ventana de 4 horas). El catálogo tiene 27 alimentos mientras el alimento de prueba esté
+activo. El sembrado no corre antes de las 00:30 de Lima.
+
+Al sembrar o regenerar, el log de desarrollo escribe un manifiesto (totales, una fila por día de Lima,
+empates, filas de «Hoy», cruces de medianoche, platos personalizados y fila más antigua). La misma consulta
+está como SQL en `docs/dev/SEED-USERS.md` y se verificó contra PostgreSQL día por día. Cada siembra agrega 630
+filas a `audit_logs` y cada Regenerate 1260.
+
+### Efectos sobre lo existente
+
+1. En bases nuevas, el consentimiento del paciente demo pasa a usar el hash del documento vigente.
+2. `FoodItemsSeeder` expone su catálogo. `FoodItem` no cambia, porque `Reactivate` ya existía.
+3. `FakeKeycloakAdminClient` admite una falla configurable en `ResetPasswordAsync`.
+4. `appsettings.Development.json` suma la sección `VolumePatient` con Email, FullName y Enabled en `false`.
+5. Ningún camino de producción borra comidas. El único `ExecuteDelete` del código está en `OutboxRepository`.
+
+### Verificación
+
+Pruebas: 1196 antes y 1228 después (Domain 386, Application 327, Infrastructure 143, integración 372), sin
+omitidas. El build no tiene errores y conserva las 8 advertencias de siempre.
+
+### Decisiones de implementación
+
+1. ProbeFoodRetired corre aunque sean menos de las 00:30 de Lima, porque retirar el alimento no crea filas de
+   «Hoy».
+2. Si Keycloak rechaza la contraseña después de crear el usuario, el usuario queda en Keycloak y el siguiente
+   arranque lo reutiliza por correo, igual que el demo.
+3. Los grupos empatados alargan algunos registros: uno puede quedar registrado más de 40 minutos después del
+   consumo, a veces en otro día. El manifiesto los lista.
+4. El generador ordena el catálogo por nombre, porque la base lo devuelve sin orden y sin eso el plan no sería
+   determinista.
+
+### Límites
+
+Solo Development, datos sintéticos, no representan al piloto. No se verificó el arranque real con Keycloak, la
+escritura del manifiesto en el archivo de log, los comandos de PowerShell ni el flujo con `adb reverse` del
+documento. Las pruebas exigen rangos (peruanos 55 a 65 %, nivel bajo 55 a 65 %, asociados 60 a 70 %) y no se
+registraron los valores exactos.
+
+### Pendientes
+
+1. Primer arranque real y pase en teléfono por Trigo, con el manifiesto como referencia. Sus resultados van en
+   el acta M51 de Mobile.
+2. Regenerar el mismo día del pase.
+3. A73 sigue reservada para Docs-Trace-1.
 
 ---

@@ -42,6 +42,127 @@ Ver acta [`A30-dev-seed-patient.md`](../../../docs/decisions/A30-dev-seed-patien
 
 ---
 
+## Paciente de volumen: `paciente.volumen@cauce.local`
+
+Paciente con historial grande para probar la app en un celular real. Sus datos son **sintéticos**, sin
+relación con el piloto. Viene **apagado**: cada máquina lo enciende con user-secrets.
+
+| Campo | Valor |
+|---|---|
+| **Email / usuario** | `paciente.volumen@cauce.local` |
+| **Contraseña** | La que cada máquina defina en user-secrets (**permanente**). No está versionada ni escrita aquí |
+| **Rol (realm Keycloak)** | `patient` |
+| **Correo verificado** | sí |
+| **Cliente OIDC** | `cauce-mobile` |
+| **Seeder / config** | `VolumePatientSeeder` · sección `VolumePatient` (`Enabled: false` en `appsettings.Development.json`) |
+
+**Cómo activarlo** (desde `backend/`, con la contraseña que elijas en lugar del marcador):
+
+```powershell
+dotnet user-secrets set "VolumePatient:Enabled" "true" --project src/Cauce.Api
+dotnet user-secrets set "VolumePatient:Password" "<contraseña>" --project src/Cauce.Api
+```
+
+Después reinicia la API en Development. Si falta la contraseña, o Keycloak la rechaza por su política, el log
+deja una advertencia y no se siembra nada.
+
+**Perfil clínico:** nac. 1988-03-22 · `Male` · 74 kg · 170 cm · subtipo `IbsM` · onboarding completo ·
+`IsInActivePilot = true` · consentimiento del documento vigente · IBS-SSS de línea base de 280 puntos hace 90
+días · sin nutricionista asignado. Con eso el Diario no sale bloqueado.
+
+**Qué se siembra.** Las fechas son relativas al día de la siembra, en hora de Lima (UTC-5) y guardadas en UTC:
+
+- **450 comidas y 180 síntomas.** Van en los días 1 a 88 antes de hoy, más 2 comidas de hoy (hace 25 y 12
+  minutos) y 1 síntoma de hoy (hace 8 minutos).
+- **Variedad de fechas:** 5 días vacíos (uno es una racha de 3), 3 días con 8 comidas y el resto entre 3 y 7.
+  Una parte se registra 10 a 14 horas después del consumo, y 6 comidas se consumen antes de la medianoche de
+  Lima y se registran después. Una de ellas se consume ayer a las 23:40 y se registra hoy a las 00:10: sirve
+  para comprobar que «Hoy» sigue la fecha de consumo y no la de registro.
+- **Empates en los cortes de página de 100:** grupos de 6 registros con el mismo `clientCreatedAt` en las
+  posiciones 96 a 101 de cada tramo (comidas en 100|101, 200|201, 300|301 y 400|401; síntomas en 100|101).
+- **Platos personalizados:** 3, usados en cerca del 8 % de las comidas. Al menos 3 comidas llevan solo un
+  plato y por eso su nivel FODMAP sale `Low`.
+- **Síntomas:** los nueve tipos, con dolor abdominal e hinchazón como los más frecuentes. Cerca del 65 % queda
+  asociado a una comida por la regla de las 4 horas.
+- **Alimento de prueba** «Alimento de prueba retirado» (`cereales`, `Low`): activo y sin usar en ninguna
+  comida. Mientras esté activo, el catálogo tiene 27 alimentos.
+
+Al terminar de sembrar o regenerar, el log de desarrollo (`src/Cauce.Api/logs/`) trae el **manifiesto**:
+fecha y hora de la siembra, totales, una fila por día de Lima con los días vacíos a la vista, los días con 8
+comidas o más, los grupos empatados con su posición, las filas de hoy, las registradas otro día (con ambas
+fechas), las comidas con plato personalizado y la fecha de la fila más antigua. Con él se compara la pantalla.
+
+**Recorre el Diario completo antes de registrar algo nuevo.** Cada registro nuevo corre los cortes de página
+una posición, y con 5 nuevos los grupos empatados dejan de cubrirlos.
+
+**Regla de las 00:30.** Si en Lima son menos de las 00:30, el seeder no siembra ni regenera, porque una fila
+de «Hoy» caería en ayer, y lo avisa en el log. La comprobación va antes de borrar nada. Arranca de nuevo
+después de las 00:30.
+
+**Regenerar (conviene hacerlo el mismo día del pase).** Si la fila más reciente tiene más de un día, el log
+avisa que el manifiesto ya no coincide con la pantalla. La regeneración solo se acepta por variable de entorno,
+nunca en user-secrets ni en `appsettings`, porque los user-secrets ganan a las variables de entorno:
+
+```powershell
+$env:VolumePatient__Regenerate = 'true'
+dotnet run --project src/Cauce.Api
+# Al detener la API, quita la variable: si queda en la sesión, el siguiente arranque vuelve a regenerar.
+Remove-Item Env:VolumePatient__Regenerate
+```
+
+Borra síntomas, comidas y platos personalizados del paciente, en ese orden, y siembra de nuevo con fechas de
+hoy. No toca usuario, consentimiento, perfil ni línea base, y deja activo el alimento de prueba. Sin la
+variable, un nuevo arranque no cambia nada.
+
+**Auditoría.** `meals` y `symptoms` tienen trigger de auditoría: cada siembra deja **630 filas** en
+`audit_logs` y cada regeneración **1260** (borrado e inserción). `audit_logs` es inmutable y esas filas no se
+pueden limpiar.
+
+**Cómo provocar `food_item_not_found` desde el celular:**
+
+1. Con red, abre la app para que descargue el catálogo, que incluye el alimento de prueba.
+2. Activa el modo avión. La app decide «sin red» por la interfaz de conectividad, así que sirve aunque el
+   túnel de `adb reverse` siga activo.
+3. Registra una comida con «Alimento de prueba retirado». Queda pendiente en el teléfono.
+4. Detén la API y arráncala con la variable:
+
+   ```powershell
+   $env:VolumePatient__ProbeFoodRetired = 'true'
+   dotnet run --project src/Cauce.Api
+   ```
+
+5. Sal del modo avión. Al sincronizar, la fila queda fallida con `food_item_not_found`.
+6. Al terminar, quita la variable (`Remove-Item Env:VolumePatient__ProbeFoodRetired`). Para volver a dejar
+   el alimento activo, regenera.
+
+Si llegan las dos variables en `true`, primero se regenera y al final se retira el alimento.
+
+**Manifiesto desde la base.** Recalcula la fila por día (comidas por fecha de consumo y síntomas por fecha de
+ocurrencia, en hora de Lima). Córrela el mismo día de la siembra, porque el rango se cuenta desde hoy:
+
+```sql
+WITH paciente AS (
+    SELECT user_id FROM users WHERE email = 'paciente.volumen@cauce.local'
+), hoy AS (
+    SELECT (now() AT TIME ZONE 'UTC' - interval '5 hours')::date AS dia
+), dias AS (
+    SELECT generate_series((SELECT dia FROM hoy) - 88, (SELECT dia FROM hoy), interval '1 day')::date AS dia
+), comidas AS (
+    SELECT (consumed_at AT TIME ZONE 'UTC' - interval '5 hours')::date AS dia, count(*) AS n
+    FROM meals WHERE patient_id = (SELECT user_id FROM paciente) GROUP BY 1
+), sintomas AS (
+    SELECT (occurred_at AT TIME ZONE 'UTC' - interval '5 hours')::date AS dia, count(*) AS n
+    FROM symptoms WHERE patient_id = (SELECT user_id FROM paciente) GROUP BY 1
+)
+SELECT d.dia, coalesce(c.n, 0) AS comidas, coalesce(s.n, 0) AS sintomas
+FROM dias d
+LEFT JOIN comidas c USING (dia)
+LEFT JOIN sintomas s USING (dia)
+ORDER BY d.dia;
+```
+
+---
+
 ## Nutricionista demo — `nutricionista.demo@cauce.local`
 
 | Campo | Valor |
