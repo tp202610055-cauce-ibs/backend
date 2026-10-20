@@ -9500,7 +9500,7 @@
         "properties": {
           "note": {
             "type": "string",
-            "description": "Nota clínica de aprobación (entre 20 y 2000 caracteres, US17 CA01).",
+            "description": "Nota clínica de aprobación (entre 10 y 2000 caracteres sin contar los espacios de los extremos, US17 CA01).",
             "nullable": true
           }
         },
@@ -9880,7 +9880,7 @@
           },
           "clinicalNote": {
             "type": "string",
-            "description": "Nota clínica del nutricionista (entre 10 y 2000 caracteres, US29).",
+            "description": "Nota clínica del nutricionista (entre 10 y 2000 caracteres sin contar los espacios de los extremos, US29).",
             "nullable": true
           },
           "validUntil": {
@@ -10383,12 +10383,12 @@
         "properties": {
           "periodStart": {
             "type": "string",
-            "description": "Inicio del período.",
+            "description": "Inicio del período; puede ser igual al fin y la duración no tiene tope.",
             "format": "date"
           },
           "periodEnd": {
             "type": "string",
-            "description": "Fin del período.",
+            "description": "Fin del período, incluido; no puede ser futuro.",
             "format": "date"
           }
         },
@@ -10538,6 +10538,10 @@
           "medications": {
             "type": "string",
             "nullable": true
+          },
+          "assignedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "additionalProperties": false
@@ -11038,7 +11042,7 @@
         "properties": {
           "clinicalNote": {
             "type": "string",
-            "description": "Nota clínica de la modificación (entre 10 y 2000 caracteres, US17 CA03).",
+            "description": "Nota clínica de la modificación (entre 10 y 2000 caracteres sin contar los espacios de los extremos, US17 CA03).",
             "nullable": true
           },
           "items": {
@@ -11402,6 +11406,15 @@
         },
         "additionalProperties": { }
       },
+      "RecommendationAction": {
+        "enum": [
+          "Approve",
+          "Modify",
+          "Reject",
+          "Archive"
+        ],
+        "type": "string"
+      },
       "RecommendationDetailDto": {
         "type": "object",
         "properties": {
@@ -11511,6 +11524,13 @@
           "validUntil": {
             "type": "string",
             "format": "date-time",
+            "nullable": true
+          },
+          "allowedActions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecommendationAction"
+            },
             "nullable": true
           }
         },
@@ -11766,7 +11786,7 @@
         "properties": {
           "reason": {
             "type": "string",
-            "description": "Motivo del rechazo (entre 10 y 2000 caracteres).",
+            "description": "Motivo del rechazo (entre 10 y 2000 caracteres sin contar los espacios de los extremos).",
             "nullable": true
           }
         },

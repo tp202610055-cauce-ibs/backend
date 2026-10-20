@@ -49,6 +49,15 @@ public interface INutritionistPatientRepository
     Task<bool> ActiveAssignmentExistsAsync(Guid nutritionistId, Guid patientId, CancellationToken ct = default);
 
     /// <summary>
+    /// Obtiene la asignación activa entre un nutricionista y un paciente, sin seguimiento de cambios.
+    /// </summary>
+    /// <param name="nutritionistId">Identificador del nutricionista.</param>
+    /// <param name="patientId">Identificador del paciente.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>La asignación activa, o <see langword="null"/> si no existe.</returns>
+    Task<NutritionistPatient?> FindActiveAssignmentAsync(Guid nutritionistId, Guid patientId, CancellationToken ct = default);
+
+    /// <summary>
     /// Agrega una nueva asignación al contexto de persistencia.
     /// </summary>
     /// <param name="assignment">Asignación a agregar.</param>

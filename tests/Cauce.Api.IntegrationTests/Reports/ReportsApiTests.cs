@@ -142,9 +142,49 @@ public sealed class ReportsApiTests
         document.PageCount.Should().BeGreaterThan(0);
     }
 
-    private Task<HttpResponseMessage> GenerateReport((Guid Id, string KeycloakId, string Email) nutritionist, Guid patientId)
+    [SkippableFact]
+    public async Task Generate_PeriodsFromTestCaseCP059_RejectAnEmptyJulyAndAcceptJulyToToday()
     {
-        var request = new { periodStart = Today().AddDays(-7), periodEnd = Today() };
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedPatientProfileAsync(patient.Id);
+        await SeedMealAsync(patient.Id);
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var julyFirst = new DateOnly(2026, 7, 1);
+
+        var emptyJuly = await GenerateReport(nutritionist, patient.Id, julyFirst, new DateOnly(2026, 7, 31));
+        var julyToToday = await GenerateReport(nutritionist, patient.Id, julyFirst, Today());
+
+        emptyJuly.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await emptyJuly.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString()
+            .Should().Be("patient_has_no_data_in_period");
+        julyToToday.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    [SkippableFact]
+    public async Task Generate_SingleDayPeriod_IsAccepted()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedPatientProfileAsync(patient.Id);
+        await SeedMealAsync(patient.Id);
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var mealDay = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(-1));
+
+        var response = await GenerateReport(nutritionist, patient.Id, mealDay, mealDay);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+    }
+
+    private Task<HttpResponseMessage> GenerateReport((Guid Id, string KeycloakId, string Email) nutritionist, Guid patientId) =>
+        GenerateReport(nutritionist, patientId, Today().AddDays(-7), Today());
+
+    private Task<HttpResponseMessage> GenerateReport(
+        (Guid Id, string KeycloakId, string Email) nutritionist, Guid patientId, DateOnly periodStart, DateOnly periodEnd)
+    {
+        var request = new { periodStart, periodEnd };
         return PostWithKey(
             NutritionistClient(nutritionist.KeycloakId, nutritionist.Email),
             $"/api/v1/reports/patients/{patientId}",

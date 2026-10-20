@@ -61,13 +61,10 @@ public sealed class GetAssignedPatientDetailQueryHandler : IRequestHandler<GetAs
             throw new UnauthorizedAccessException("Solo un nutricionista puede consultar el detalle de un paciente.");
         }
 
-        var hasAccess = await _nutritionistPatientRepository
-            .ActiveAssignmentExistsAsync(nutritionist.Id, request.PatientUserId, cancellationToken)
-            .ConfigureAwait(false);
-        if (!hasAccess)
-        {
-            throw new PatientAccessNotAuthorizedException();
-        }
+        var assignment = await _nutritionistPatientRepository
+            .FindActiveAssignmentAsync(nutritionist.Id, request.PatientUserId, cancellationToken)
+            .ConfigureAwait(false)
+            ?? throw new PatientAccessNotAuthorizedException();
 
         var patient = await _userRepository.FindByIdAsync(request.PatientUserId, cancellationToken).ConfigureAwait(false)
             ?? throw new PatientProfileNotFoundException();
@@ -93,7 +90,8 @@ public sealed class GetAssignedPatientDetailQueryHandler : IRequestHandler<GetAs
                 allergies,
                 BiologicalSex: null,
                 DiagnosisDate: null,
-                Medications: null);
+                Medications: null,
+                assignment.AssignedAt);
         }
 
         var bmi = _bmiCalculator.Calculate(profile.WeightKg, profile.HeightCm);
@@ -109,6 +107,7 @@ public sealed class GetAssignedPatientDetailQueryHandler : IRequestHandler<GetAs
             allergies,
             profile.BiologicalSex,
             profile.DiagnosisDate,
-            profile.Medications);
+            profile.Medications,
+            assignment.AssignedAt);
     }
 }

@@ -85,7 +85,8 @@ public sealed class RejectRecommendationCommandHandler : IRequestHandler<RejectR
             throw new RecommendationExpiredException(recommendation.Id);
         }
 
-        recommendation.Reject(nutritionistId, request.Reason, now);
+        var reason = request.Reason.Trim();
+        recommendation.Reject(nutritionistId, reason, now);
 
         // Auditoría del flujo HITL (capa 3) y publicación del evento vía outbox, ambas ANTES del
         // SaveChanges para persistir de forma atómica el cambio, la bitácora y el mensaje de outbox.
@@ -95,14 +96,14 @@ public sealed class RejectRecommendationCommandHandler : IRequestHandler<RejectR
             nameof(Recommendation),
             recommendation.Id,
             oldValuesHash: null,
-            newValuesHash: AuditHash.Sha256Hex(request.Reason),
+            newValuesHash: AuditHash.Sha256Hex(reason),
             additionalContext: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
         await _outboxWriter.PublishAsync(
             recommendation.Id,
             nameof(Recommendation),
-            new RecommendationRejectedEvent(recommendation.Id, recommendation.PatientId, nutritionistId, request.Reason, now),
+            new RecommendationRejectedEvent(recommendation.Id, recommendation.PatientId, nutritionistId, reason, now),
             cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

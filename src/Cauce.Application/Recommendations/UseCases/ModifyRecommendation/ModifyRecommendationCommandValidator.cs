@@ -14,11 +14,7 @@ public sealed class ModifyRecommendationCommandValidator : AbstractValidator<Mod
     {
         RuleFor(x => x.RecommendationId).NotEmpty();
         RuleFor(x => x.ClientGuid).NotEmpty();
-        RuleFor(x => x.ClinicalNote)
-            .NotEmpty()
-            .MinimumLength(10)
-            .WithMessage("La nota clínica debe tener al menos 10 caracteres.")
-            .MaximumLength(2000);
+        RuleFor(x => x.ClinicalNote).ReviewNote("La nota clínica");
         RuleFor(x => x.Title).MaximumLength(200);
         RuleForEach(x => x.Items).ChildRules(item =>
         {

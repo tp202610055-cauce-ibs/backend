@@ -3,7 +3,7 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A74 (A73 está reservada para Docs-Trace-1), de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+**Alcance:** actas A38 a A75 (A73 está reservada para Docs-Trace-1), de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
 trabajo posterior sobre el consentimiento, Backend-Pilot-Readiness y los bloques pequeños
 posteriores. Las decisiones DEC-B3 a DEC-B7B y las actas A1 a A29 viven en el repo `docs`, en
 `decisions/DECISIONS-BLOCK-01.md` a `decisions/DECISIONS-BLOCK-07B.md`; las actas A30 a A37 y A42,
@@ -16,7 +16,8 @@ las actas A59 a A65. El 2026-09-25 se corrigieron este encabezado y una referenc
 por inexistente el Bloque 3, y se agregó A67. El 2026-09-26 se agregaron A68 y A69, del bloque Portal
 listo 1. El 2026-09-30 se agregó A70, del endurecimiento del registro tras el incidente del 28-sep, y el
 2026-10-01 la A71, sobre la baja de cuenta en Keycloak. El 2026-10-12 se agregó A72, del bloque
-Backend-Contract-1, y el 2026-10-15 la A74, del bloque Backend-Seed-Volume-1.
+Backend-Contract-1, el 2026-10-15 la A74, del bloque Backend-Seed-Volume-1, y el 2026-10-19 la A75, del
+bloque Backend-Portal-B1.
 
 ---
 
@@ -52,12 +53,13 @@ Backend-Contract-1, y el 2026-10-15 la A74, del bloque Backend-Seed-Volume-1.
 | [A65](#acta-a65-diagnósticos-del-bloque-que-no-se-implementaron) | Diagnósticos del bloque que no se implementaron | Documentada. Cuatro puntos abiertos: ancla de la ventana de 4 h, `isInActivePilot`, categorías IBS-SSS y conversión de unidades |
 | [A66](#acta-a66-el-código-de-paciente-y-las-alergias-declaradas-viajan-en-el-resumen-de-perfil) | El código de paciente y las alergias declaradas viajan en el resumen de perfil | Aprobada, implementada. Resuelve el punto abierto de A59 |
 | [A67](#acta-a67-desviación-de-dec-b3-06-la-asociación-entre-síntoma-y-comida-la-calcula-solo-el-servidor) | Desviación de DEC-B3-06, la asociación entre síntoma y comida la calcula solo el servidor | Aprobada. Corrige la redacción de DEC-B3-06 sin editar el Bloque 3 |
-| [A68](#acta-a68-autenticación-del-portal-web-a-través-del-backend) | Autenticación del portal web a través del backend | Aprobada, implementada en Portal listo 1. Desviación consciente de RFC 9700 §2.4 |
+| [A68](#acta-a68-autenticación-del-portal-web-a-través-del-backend) | Autenticación del portal web a través del backend | Aprobada, implementada en Portal listo 1. Desviación consciente de RFC 9700 §2.4. Inactividad del portal en 15 minutos desde A75 |
 | [A69](#acta-a69-contrato-del-portal-para-la-revisión-hitl-y-el-detalle-del-paciente) | Contrato del portal para la revisión HITL y el detalle del paciente | Aprobada, implementada en Portal listo 1. Cambio incompatible en `modify` |
 | [A70](#acta-a70-registro-sin-huérfanos-en-keycloak-correo-normalizado-y-logs-a-archivo) | Registro sin huérfanos en Keycloak, correo normalizado y logs a archivo | Aprobada e implementada. El cliente de tokens queda en backlog |
 | [A71](#acta-a71-baja-de-cuenta-la-identidad-en-keycloak-se-anonimiza-después-del-commit-local) | Baja de cuenta: la identidad en Keycloak se anonimiza después del commit local | Aprobada como diseño. Implementación diferida, obligatoria antes del primer paciente real |
 | [A72](#acta-a72-los-parámetros-de-rango-y-de-búsqueda-son-obligatorios-y-las-fechas-llevan-zona-horaria) | Los parámetros de rango y de búsqueda son obligatorios y las fechas llevan zona horaria | Aprobada, implementada en Backend-Contract-1. Quedan abiertos la opción D, los topes, el filtro por `clientCreatedAt` y las citas vencidas de CONTRACT-IDENTITY |
 | [A74](#acta-a74-paciente-de-desarrollo-con-historial-de-volumen) | Paciente de desarrollo con historial de volumen | Implementada en Backend-Seed-Volume-1. Pendientes el primer arranque real y el pase en teléfono |
+| [A75](#acta-a75-contrato-del-portal-para-el-bloque-b-1) | Contrato del portal para el bloque B-1 | Propuesta. Implementada en Backend-Portal-B1. Queda abierta la expiración al leer sin evento |
 
 ---
 
@@ -2306,7 +2308,8 @@ idénticos, con solo la descripción ampliada.
 **3. Cliente `cauce-web-portal`.** Sigue confidencial. Direct Access Grants ON, Standard Flow OFF (el enlace
 de activación de H2 no lo necesita, verificado en vivo), redirect y post-logout solo hacia el portal
 (`http://localhost:5173/*` en desarrollo). El backend pide sus tokens sin `offline_access`, así que rigen las
-sesiones del cliente: 30 minutos de inactividad y 8 horas en total. El secret vive solo en la configuración
+sesiones del cliente: 15 minutos de inactividad y 8 horas en total. La inactividad era de 30 minutos y bajó a
+15 en el acta [A75](#acta-a75-contrato-del-portal-para-el-bloque-b-1) (CP021). El secret vive solo en la configuración
 del backend (`Keycloak:WebPortalClientSecret`) y nunca llega al navegador.
 
 **4. Solo entra el rol `nutritionist`.** Paciente, cuenta deshabilitada en Keycloak, pendiente de activación
@@ -3024,5 +3027,100 @@ registraron los valores exactos.
    el acta M51 de Mobile.
 2. Regenerar el mismo día del pase.
 3. A73 sigue reservada para Docs-Trace-1.
+
+---
+
+## Acta A75: Contrato del portal para el bloque B-1
+
+**Estado:** Propuesta. Implementada en Backend-Portal-B1. Queda abierta la expiración al leer sin evento
+**Fecha:** 2026-10-19
+**Aprobado por:** decide Trigo; aprueba Kiwicha
+**Aplicabilidad:** Backend (recomendaciones, pacientes, reportes y contrato v1.8.0) e `infrastructure`
+(cliente `cauce-web-portal`). Ramas `feature/backend-portal-b1`, sobre `0fae28f` (tag `v0.16.0-seed-volume`),
+y `feature/infrastructure-portal-b1`, sobre `7f6fbe8`.
+
+---
+
+### Contexto
+
+El portal web del nutricionista se construye sobre el contrato del backend. Su Fase 0 pidió siete cambios para
+cubrir los casos de prueba v3 del portal, y Trigo los aprobó. Cinco corrigen brechas del análisis de
+cumplimiento de los CP (B4, B5, B11 y B20) y dos agregan campos que el portal necesita para no deducir reglas
+del servidor.
+
+### Decisión
+
+1. **`allowedActions` en el detalle de recomendación.** `RecommendationDetailDto` suma un arreglo obligatorio
+   de `RecommendationAction` (`Approve`, `Modify`, `Reject`, `Archive`). Lo calcula el dominio
+   (`RecommendationActionPolicy`) con el reloj, después de vencer al leer:
+   - `Approve`, `Modify` y `Reject` si el estado es `PendingReview`, no venció y consulta un nutricionista
+     asignado;
+   - `Archive` si la recomendación está activa y en `Approved`, `ModifiedApproved` o `ManualApproved`;
+   - vacío para el paciente y en cualquier otro caso.
+2. **Notas medidas sin los espacios de los extremos.** Aprobar, rechazar, modificar y crear manual exigen de
+   10 a 2000 caracteres del texto recortado, con una regla común (`ReviewNoteRules`). Aprobar baja de 20 a 10
+   (decisión 7b). Los handlers guardan, auditan y publican el texto recortado.
+3. **Inactividad del portal de 15 minutos.** `client.session.idle.timeout` del cliente `cauce-web-portal` pasa
+   de 1800 a 900 en `realm.json` y en `apply-portal-client.sh`. El tope de 8 horas no cambia. Actualiza la
+   decisión 3 del acta [A68](#acta-a68-autenticación-del-portal-web-a-través-del-backend) (CP021 parte B).
+4. **`assignedAt` en el detalle del paciente.** `GetAssignedPatientDetailResult` suma el inicio de la asignación
+   activa con el nutricionista que consulta, con un método nuevo del repositorio
+   (`FindActiveAssignmentAsync`). Un vínculo anterior ya cerrado no cuenta (CP087).
+5. **Período libre del reporte del nutricionista.** Se quita el tope de 90 días y se acepta inicio igual a fin.
+   El fin sigue sin poder ser futuro y un período sin datos sigue respondiendo 422
+   `patient_has_no_data_in_period` (CP059). El autoreporte del paciente conserva su tope de 90 días.
+6. **Triaje según HU0018** (`AssignedPatientTriage`, CP049):
+   - alta: IBS-SSS más reciente mayor a 300, o una recomendación en `PendingReview` generada hace más de
+     24 horas;
+   - media: ninguna comida ni síntoma en las últimas 72 horas, contadas desde el último registro o, sin
+     registros, desde `assignedAt`; las evaluaciones IBS-SSS no cuentan;
+   - el resto, `Low` o `None`, como antes. El puntaje moderado deja de subir a media.
+7. **Sin push al rechazar.** Se borra `RecommendationRejectedEventHandler`, que solo agendaba el push «Se
+   generó una nueva recomendación para ti» (CP046 paso 9). La auditoría y el evento por outbox siguen en
+   `RejectRecommendationCommandHandler`. El evento queda sin handlers y el outbox lo marca procesado sin
+   reintentos. No había correo asociado.
+
+### Contrato
+
+Snapshot `openapi-v1.8.0.json`, aditivo: `allowedActions` con su enum `RecommendationAction`, y `assignedAt`.
+`ENDPOINTS.md` pasa a la v1.9.0 y `CONTRACT-IDENTITY-v1.md` a la v1.4.2. Mobile no se rompe: su cliente
+`built_value` deja las claves desconocidas en `unhandled`.
+
+### Consecuencias
+
+1. El access token y la inactividad del portal duran lo mismo, 15 minutos. El portal renueva 60 segundos antes
+   del vencimiento y solo si hubo actividad, y avisa a los 13 minutos: un portal que renovara por temporizador
+   sin actividad nunca dejaría caer la sesión.
+2. La VM de QA importa `realm.json` en su primer arranque. El cambio de `infrastructure` tiene que estar en
+   `develop` antes de levantar Keycloak allí; un Keycloak ya importado necesita `apply-portal-client.sh`.
+3. Las notas ya guardadas no se recortan. Una nota de aprobación de 10 a 19 caracteres, antes rechazada, ahora
+   se acepta.
+4. Un paciente recién vinculado y sin registros pasa a prioridad media a las 72 horas del vínculo.
+5. Un reporte de un período largo no crece sin límite: el detalle de comidas y de síntomas ya tenía el tope
+   `Reports:MaxDetailRows` (200). Con el paciente de volumen (630 filas) el riesgo es bajo.
+
+### Limitaciones conocidas
+
+1. **La expiración al leer no publica `RecommendationExpiredEvent`.** `GET /recommendations/{id}` vence la
+   recomendación y guarda, pero no escribe el evento en el outbox, como sí hacen aprobar, rechazar y modificar.
+   Fuera de alcance.
+2. Una recomendación en `PendingReview` cuya ventana venció cuenta como pendiente de más de 24 horas en el
+   triaje hasta que la vence el worker o una lectura.
+3. `AssignedPatientTriageRow.LatestSeverity` se sigue consultando pero el triaje ya no lo usa.
+
+### Verificación
+
+Pruebas: 1228 antes y 1304 después (Domain 408, Application 372, Infrastructure 143, integración 381), sin
+omitidas, con Docker y la integración en secuencial. El build no tiene errores y conserva las 8 advertencias de
+siempre. La revisión de privacidad no encontró hallazgos bloqueantes. El valor 900 no se verificó contra un
+Keycloak levantado: lo aplica Trigo con el script.
+
+### Pendientes
+
+1. Trigo aplica `apply-portal-client.sh` al Keycloak local y comprueba 15 minutos en «Client Session Idle».
+2. Fusionar `feature/infrastructure-portal-b1` en `develop` antes del primer arranque de Keycloak en la VM de
+   QA.
+3. Mobile y el portal copian el snapshot v1.8.0 y regeneran su cliente.
+4. A73 sigue reservada para Docs-Trace-1.
 
 ---

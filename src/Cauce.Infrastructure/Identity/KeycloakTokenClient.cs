@@ -237,8 +237,8 @@ public sealed class KeycloakTokenClient : IKeycloakTokenClient
     /// <c>offline_access</c>: sin él, el refresh token queda atado a la sesión SSO del realm, cuyo
     /// <c>ssoSessionIdleTimeout</c> es de 30 minutos, y la sesión moriría por inactividad mucho antes
     /// de los 30 días previstos para el piloto (DEC-B3-01). El portal web usa sesiones cortas y no lo
-    /// necesita: sin <c>offline_access</c> rigen las del cliente del portal, 30 minutos de inactividad
-    /// y 8 horas en total (acta A68).
+    /// necesita: sin <c>offline_access</c> rigen las del cliente del portal, 15 minutos de inactividad
+    /// y 8 horas en total (actas A68 y A75).
     /// </summary>
     /// <param name="clientId">Identificador del cliente OIDC.</param>
     /// <returns>El valor del parámetro <c>scope</c>.</returns>

@@ -7,6 +7,7 @@ using Cauce.Application.Recommendations.Mapping;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Recommendations;
 using Cauce.Domain.Recommendations.Exceptions;
+using Cauce.Domain.Recommendations.Services;
 using MediatR;
 
 namespace Cauce.Application.Recommendations.UseCases.GetRecommendationById;
@@ -113,8 +114,11 @@ public sealed class GetRecommendationByIdQueryHandler : IRequestHandler<GetRecom
             windowFrom,
             windowTo);
 
+        // Se calcula después de la expiración al leer, para no ofrecer acciones sobre una recomendación vencida.
+        var allowedActions = RecommendationActionPolicy.GetAllowedActions(recommendation, now, callerIsAssignedNutritionist: !isPatient);
+
         return RecommendationsMappings.ToDetail(
-            recommendation, modelVersion?.VersionName ?? string.Empty, foodNames, reviewedByNutritionistName, supportingData);
+            recommendation, modelVersion?.VersionName ?? string.Empty, foodNames, reviewedByNutritionistName, supportingData, allowedActions);
     }
 
     private async Task<bool> EnsureAuthorizedAsync(Recommendation recommendation, CancellationToken ct)

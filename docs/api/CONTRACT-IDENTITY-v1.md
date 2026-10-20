@@ -1,12 +1,18 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.4.1 · **Fecha:** 11 de octubre de 2026 · **Backend:** rama `feature/backend-contract-1`
+**Versión:** 1.4.2 · **Fecha:** 19 de octubre de 2026 · **Backend:** rama `feature/backend-portal-b1`
 **Alcance:** endpoints de identidad que consumen la app móvil Flutter (US01, US05, US07, US08, US19, US20) y,
 desde v1.4, el portal web de nutricionistas (§2.12).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
 `src/Cauce.Application/Identity/`. Cada afirmación de este documento lleva su evidencia en `archivo:línea`.
 
+> **v1.4.2 (Backend-Portal-B1, actas A68 y A75).** Sin cambios en los endpoints de identidad. La sesión del
+> portal caduca a los **15 minutos sin uso** (antes, 30): el cliente `cauce-web-portal` pasa a
+> `client.session.idle.timeout: "900"` en `infrastructure/keycloak/import/realm.json` y en
+> `apply-portal-client.sh`. El tope de 8 horas no cambia. El contrato v1.8.0 suma `allowedActions` al
+> detalle de recomendación y `assignedAt` al detalle del paciente; el detalle está en `ENDPOINTS.md` v1.9.0.
+>
 > **v1.4.1 (Backend-Contract-1, acta A72).** Sin cambios en los endpoints de identidad. §2.11 suma el 409
 > `nutritionist_assignment_exists`, y se corrigen las citas de `BaseApiController` y de los campos del
 > `ProblemDetails`. El contrato v1.7.0 vuelve obligatorios `from`, `to` y `q` en seis endpoints del registro
@@ -594,8 +600,9 @@ Development). El refresh token **nunca viaja en el cuerpo**. El access token viv
 `csrf_header_missing`. El header está en la lista de CORS. La cookie es `SameSite=Strict`: portal y API
 tienen que ser del mismo sitio.
 
-**Sesión.** Sin `offline_access`: rige el cliente del portal, 30 minutos de inactividad y 8 horas en total.
-El access token dura 15 minutos. Cada renovación rota el refresh token y la cookie.
+**Sesión.** Sin `offline_access`: rige el cliente del portal, 15 minutos de inactividad y 8 horas en total
+(desde v1.4.2; antes, 30 minutos de inactividad). El access token también dura 15 minutos, así que el portal
+renueva antes de que venza y solo si hubo actividad. Cada renovación rota el refresh token y la cookie.
 
 #### `POST /api/v1/auth/portal/login`
 
@@ -771,7 +778,7 @@ campo obligatorio del record ausente, produce el `ValidationProblemDetails` auto
 | Obtención | `POST /api/v1/auth/login` | Devuelve `accessToken`, `refreshToken`, `expiresIn`, `refreshExpiresIn`, `tokenType` |
 | Duración del access token | Realm Keycloak | 900 segundos (15 minutos). `accessTokenLifespan: 900` y `access.token.lifespan: "900"` del cliente `cauce-mobile` en `infrastructure/keycloak/import/realm.json` |
 | Vida de la sesión del cliente móvil | Realm Keycloak | `client.session.max.lifespan: "2592000"` (30 días) |
-| Vida de la sesión del portal *(v1.4)* | Realm Keycloak | `client.session.idle.timeout: "1800"` (30 min sin uso) y `client.session.max.lifespan: "28800"` (8 h) del cliente `cauce-web-portal`, sin `offline_access` |
+| Vida de la sesión del portal *(v1.4, v1.4.2)* | Realm Keycloak | `client.session.idle.timeout: "900"` (15 min sin uso) y `client.session.max.lifespan: "28800"` (8 h) del cliente `cauce-web-portal`, sin `offline_access` |
 | Rotación de refresh token | Realm Keycloak | `revokeRefreshToken: true`, `refreshTokenMaxReuse: 0` |
 | **Renovación** *(v1.1)* | `POST /api/v1/auth/refresh` | Ver §2.9. Devuelve el mismo cuerpo que el login, con tokens nuevos |
 | Revocación | `POST /api/v1/auth/logout` | Revoca el refresh token en Keycloak |

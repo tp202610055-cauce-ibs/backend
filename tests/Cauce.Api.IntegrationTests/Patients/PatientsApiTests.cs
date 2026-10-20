@@ -6,6 +6,9 @@ using Cauce.Api.IntegrationTests.Identity.Support;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients;
 using Cauce.Domain.Patients.Enums;
+using Cauce.Domain.Recommendations;
+using Cauce.Domain.Recommendations.Enums;
+using Cauce.Domain.Recommendations.ValueObjects;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Seeders;
 using FluentAssertions;
@@ -384,6 +387,63 @@ public sealed class PatientsApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         detail.TryGetProperty("patientCode", out _).Should().BeFalse();
     }
 
+    [SkippableFact]
+    public async Task ListAssignedPatients_PendingReviewOlderThan24Hours_IsHighAndYoungerIsNot()
+    {
+        SkipIfNoDocker();
+        var (nutritionistId, nutritionistKeycloakId) = await SeedNutritionistAsync(UniqueEmail());
+        var (pendingFor30HoursId, _) = await SeedPatientAsync(UniqueEmail());
+        var (pendingFor20HoursId, _) = await SeedPatientAsync(UniqueEmail());
+        var now = DateTime.UtcNow;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<FoodItemsSeeder>().SeedAsync();
+            await scope.ServiceProvider.GetRequiredService<RecommendationsModelVersionsSeeder>().SeedAsync();
+            var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+            db.NutritionistPatients.Add(NutritionistPatient.Establish(Guid.NewGuid(), nutritionistId, pendingFor30HoursId, null, now.AddHours(-1)));
+            db.NutritionistPatients.Add(NutritionistPatient.Establish(Guid.NewGuid(), nutritionistId, pendingFor20HoursId, null, now.AddHours(-1)));
+            db.Recommendations.Add(await PendingReviewRecommendationAsync(db, pendingFor30HoursId, now.AddHours(-30)));
+            db.Recommendations.Add(await PendingReviewRecommendationAsync(db, pendingFor20HoursId, now.AddHours(-20)));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await NutritionistClient(nutritionistKeycloakId).GetAsync("/api/v1/nutritionists/me/patients");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var patients = (await response.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray()
+            .ToDictionary(patient => patient.GetProperty("patientUserId").GetGuid());
+        patients[pendingFor30HoursId].GetProperty("pendingReviewOver24hCount").GetInt32().Should().Be(1);
+        patients[pendingFor30HoursId].GetProperty("priorityLevel").GetString().Should().Be("High");
+        patients[pendingFor20HoursId].GetProperty("pendingReviewOver24hCount").GetInt32().Should().Be(0);
+        patients[pendingFor20HoursId].GetProperty("priorityLevel").GetString().Should().NotBe("High");
+    }
+
+    [SkippableFact]
+    public async Task GetAssignedPatientDetail_ReturnsTheStartOfTheActiveAssignment()
+    {
+        SkipIfNoDocker();
+        var (nutritionistId, nutritionistKeycloakId) = await SeedNutritionistAsync(UniqueEmail());
+        var (patientId, _) = await SeedPatientAsync(UniqueEmail());
+        var previousStart = new DateTime(2026, 9, 1, 14, 0, 0, DateTimeKind.Utc);
+        var activeStart = new DateTime(2026, 10, 1, 15, 30, 0, DateTimeKind.Utc);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            // Un vínculo anterior ya cerrado no debe confundirse con el activo.
+            var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+            var previous = NutritionistPatient.Establish(Guid.NewGuid(), nutritionistId, patientId, null, previousStart);
+            previous.Deactivate(previousStart.AddDays(10));
+            db.NutritionistPatients.Add(previous);
+            db.NutritionistPatients.Add(NutritionistPatient.Establish(Guid.NewGuid(), nutritionistId, patientId, null, activeStart));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await NutritionistClient(nutritionistKeycloakId).GetAsync($"/api/v1/nutritionists/me/patients/{patientId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var detail = await response.Content.ReadFromJsonAsync<JsonElement>();
+        detail.GetProperty("assignedAt").GetDateTime().ToUniversalTime().Should().Be(activeStart);
+    }
+
     // ----- Helpers -----
 
     private void SkipIfNoDocker()
@@ -392,6 +452,23 @@ public sealed class PatientsApiTests : IClassFixture<PostgresFixture>, IAsyncLif
     }
 
     private static string UniqueEmail() => $"user-{Guid.NewGuid():N}@cauce.local";
+
+    private static async Task<Recommendation> PendingReviewRecommendationAsync(CauceDbContext db, Guid patientId, DateTime generatedAt)
+    {
+        var modelVersionId = await db.ModelVersions.AsNoTracking().Select(v => v.Id).FirstAsync();
+        var foodId = await db.FoodItems.AsNoTracking().Select(f => f.Id).FirstAsync();
+        var recommendation = Recommendation.Generate(
+            patientId,
+            modelVersionId,
+            ConfidenceScore.Create(0.50m),
+            ExplanationSource.LlmGenerated,
+            "Explicación de prueba.",
+            new[] { RecommendationItem.Create(foodId, ActionType.Suggest, "razón de prueba", null) },
+            generatedAt,
+            TimeSpan.FromHours(72));
+        recommendation.MarkPendingReview(generatedAt);
+        return recommendation;
+    }
 
     private static object ValidProfileBody(decimal weightKg = 70m, decimal heightCm = 175m, DateOnly? dateOfBirth = null) => new
     {

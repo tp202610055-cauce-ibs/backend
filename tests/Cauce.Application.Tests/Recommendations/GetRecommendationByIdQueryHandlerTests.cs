@@ -53,6 +53,13 @@ public sealed class GetRecommendationByIdQueryHandlerTests
         _currentUser, _userRepository, _recommendationRepository, _assignments,
         _modelVersionRepository, _foodCatalogReader, _supportingDataReader, _unitOfWork);
 
+    private void AuthenticateAsAssignedNutritionist()
+    {
+        var nutritionist = User.CreateNutritionist(Guid.NewGuid(), "kc-nutri", "n@cauce.local", "Nutri", NutritionistRoleId);
+        _userRepository.FindByKeycloakIdAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(nutritionist);
+        _assignments.ActiveAssignmentExistsAsync(nutritionist.Id, _patientId, Arg.Any<CancellationToken>()).Returns(true);
+    }
+
     [Fact]
     public async Task Handle_AsOwnerPatient_VisibleStatus_ReturnsDto()
     {
@@ -64,6 +71,42 @@ public sealed class GetRecommendationByIdQueryHandlerTests
 
         dto.RecommendationId.Should().Be(recommendation.Id);
         dto.ModelVersionName.Should().Be("rule-v1.0.0");
+    }
+
+    [Fact]
+    public async Task Handle_AsOwnerPatient_ReturnsNoAllowedActions()
+    {
+        var recommendation = RecommendationTestData.Approved(_patientId, Now);
+        _recommendationRepository.GetByIdWithDetailsAsync(recommendation.Id, Arg.Any<CancellationToken>()).Returns(recommendation);
+
+        var dto = await CreateHandler().Handle(new GetRecommendationByIdQuery(recommendation.Id), CancellationToken.None);
+
+        dto.AllowedActions.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
+    public async Task Handle_AsAssignedNutritionist_PendingReview_ReturnsReviewActions()
+    {
+        AuthenticateAsAssignedNutritionist();
+        var recommendation = RecommendationTestData.PendingReview(_patientId, Now);
+        _recommendationRepository.GetByIdWithDetailsAsync(recommendation.Id, Arg.Any<CancellationToken>()).Returns(recommendation);
+
+        var dto = await CreateHandler().Handle(new GetRecommendationByIdQuery(recommendation.Id), CancellationToken.None);
+
+        dto.AllowedActions.Should().Equal(RecommendationAction.Approve, RecommendationAction.Modify, RecommendationAction.Reject);
+    }
+
+    [Fact]
+    public async Task Handle_AsAssignedNutritionist_PendingReviewPastItsWindow_ExpiresAndReturnsNoActions()
+    {
+        AuthenticateAsAssignedNutritionist();
+        var recommendation = RecommendationTestData.PendingReview(_patientId, Now.AddHours(-100));
+        _recommendationRepository.GetByIdWithDetailsAsync(recommendation.Id, Arg.Any<CancellationToken>()).Returns(recommendation);
+
+        var dto = await CreateHandler().Handle(new GetRecommendationByIdQuery(recommendation.Id), CancellationToken.None);
+
+        dto.Status.Should().Be(RecommendationStatus.Expired);
+        dto.AllowedActions.Should().BeEmpty();
     }
 
     [Fact]

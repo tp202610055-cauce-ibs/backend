@@ -21,6 +21,7 @@ namespace Cauce.Application.Patients.UseCases.GetAssignedPatientDetail;
 /// <param name="BiologicalSex">Sexo biológico, o <see langword="null"/> sin perfil.</param>
 /// <param name="DiagnosisDate">Fecha del diagnóstico de SII, o <see langword="null"/> si no la informó.</param>
 /// <param name="Medications">Medicación declarada, o <see langword="null"/> si no la informó.</param>
+/// <param name="AssignedAt">Inicio de la asignación activa con el nutricionista que consulta, en UTC.</param>
 public sealed record GetAssignedPatientDetailResult(
     Guid PatientUserId,
     string FullName,
@@ -32,4 +33,5 @@ public sealed record GetAssignedPatientDetailResult(
     IReadOnlyList<PatientAllergySummary> Allergies,
     BiologicalSex? BiologicalSex,
     DateOnly? DiagnosisDate,
-    string? Medications);
+    string? Medications,
+    DateTime AssignedAt);

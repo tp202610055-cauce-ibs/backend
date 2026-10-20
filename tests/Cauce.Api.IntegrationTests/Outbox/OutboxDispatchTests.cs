@@ -1,6 +1,7 @@
 using Cauce.Api.IntegrationTests.Identity.Support;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Outbox;
+using Cauce.Domain.Common;
 using Cauce.Domain.Outbox;
 using Cauce.Domain.Recommendations.Events;
 using Cauce.Infrastructure.Outbox;
@@ -38,6 +39,26 @@ public sealed class OutboxDispatchTests : IntegrationTestBase, IClassFixture<Pos
 
         (await GetMessageAsync(messageId))!.ProcessedAt.Should().NotBeNull();
         (await NotificationCountAsync(patient.Id, recommendationId)).Should().Be(1);
+    }
+
+    [SkippableFact]
+    public async Task ProcessAsync_RejectedEvent_MarksProcessedWithoutNotifyingThePatientOrRetrying()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        var recommendationId = Guid.NewGuid();
+        var messageId = await PublishAsync(
+            recommendationId,
+            new RecommendationRejectedEvent(recommendationId, patient.Id, Guid.NewGuid(), "Motivo clínico de prueba.", DateTime.UtcNow));
+
+        await ProcessOnceAsync(messageId);
+
+        var message = await GetMessageAsync(messageId);
+        message!.ProcessedAt.Should().NotBeNull();
+        message.Attempts.Should().Be((short)0);
+        message.LastError.Should().BeNull();
+        (await PendingIdsAsync(DateTime.UtcNow.AddDays(1))).Should().NotContain(messageId);
+        (await NotificationCountAsync(patient.Id, recommendationId)).Should().Be(0);
     }
 
     [SkippableFact]
@@ -156,6 +177,19 @@ public sealed class OutboxDispatchTests : IntegrationTestBase, IClassFixture<Pos
 
         var messageId = await db.OutboxMessages.Where(m => m.AggregateId == recId).Select(m => m.Id).OrderBy(id => id).LastAsync();
         return (messageId, recId);
+    }
+
+    private async Task<Guid> PublishAsync(Guid recommendationId, IDomainEvent domainEvent)
+    {
+        using var scope = Factory.Services.CreateScope();
+        var writer = scope.ServiceProvider.GetRequiredService<IOutboxWriter>();
+        var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+
+        await writer.PublishAsync(recommendationId, "recommendation", domainEvent);
+        await unitOfWork.SaveChangesAsync();
+
+        return await db.OutboxMessages.Where(m => m.AggregateId == recommendationId).Select(m => m.Id).SingleAsync();
     }
 
     private async Task<Guid> InsertBogusMessageAsync(DateTime? processedAt = null)

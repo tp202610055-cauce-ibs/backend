@@ -39,6 +39,7 @@ namespace Cauce.Application.Recommendations.Dtos;
 /// <param name="ValidUntil">
 /// Fecha hasta la que rige, en UTC, o <see langword="null"/> si no caduca. Solo la fijan las manuales.
 /// </param>
+/// <param name="AllowedActions">Acciones que quien consulta puede ejecutar hoy; nunca nula y vacía para el paciente.</param>
 public sealed record RecommendationDetailDto(
     Guid RecommendationId,
     Guid PatientId,
@@ -65,4 +66,5 @@ public sealed record RecommendationDetailDto(
     bool IsActive,
     DateTime? ArchivedAt,
     ArchiveReason? ArchiveReason,
-    DateTime? ValidUntil);
+    DateTime? ValidUntil,
+    IReadOnlyList<RecommendationAction> AllowedActions);

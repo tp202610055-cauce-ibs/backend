@@ -91,15 +91,16 @@ public sealed class ModifyRecommendationCommandHandler : IRequestHandler<ModifyR
             .Select(item => RecommendationItem.Create(item.FoodId, item.ActionType, item.Reasoning, item.SubstituteFoodId))
             .ToList();
 
+        var clinicalNote = request.ClinicalNote.Trim();
         recommendation.ModifyByNutritionist(
-            nutritionistId, request.ClinicalNote, now, newItems, request.Title, request.Description, request.Steps);
+            nutritionistId, clinicalNote, now, newItems, request.Title, request.Description, request.Steps);
 
         await _auditLogger.LogAsync(
             AuditActionType.Approve,
             nameof(Recommendation),
             recommendation.Id,
             oldValuesHash: null,
-            newValuesHash: AuditHash.Sha256Hex(request.ClinicalNote),
+            newValuesHash: AuditHash.Sha256Hex(clinicalNote),
             additionalContext: JsonSerializer.Serialize(new { operation = "modified_approved" }),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
