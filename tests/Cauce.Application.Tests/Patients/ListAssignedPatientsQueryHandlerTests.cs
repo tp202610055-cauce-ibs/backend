@@ -91,7 +91,8 @@ public sealed class ListAssignedPatientsQueryHandlerTests
             Row("Sin datos"),
             Row("Pendiente vencida", latestScore: 150, severity: SeverityCategory.Mild, pendingOver24h: 2),
             Row("Severo", latestScore: 400, severity: SeverityCategory.Severe),
-            Row("Moderado", latestScore: 250, severity: SeverityCategory.Moderate)
+            Row("Moderado", latestScore: 250, severity: SeverityCategory.Moderate, lastActivity: DateTime.UtcNow.AddHours(-1)),
+            Row("Inactivo", latestScore: 120, severity: SeverityCategory.Mild, lastActivity: DateTime.UtcNow.AddDays(-4))
         };
         _nutritionistPatientRepository
             .ListAssignedPatientTriageRowsAsync(Arg.Any<Guid>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())
@@ -99,21 +100,24 @@ public sealed class ListAssignedPatientsQueryHandlerTests
 
         var result = await CreateHandler().Handle(new ListAssignedPatientsQuery(), CancellationToken.None);
 
-        result.Select(r => r.PriorityLevel).Should().ContainInOrder(
-            PriorityLevel.High, PriorityLevel.High, PriorityLevel.Medium, PriorityLevel.Low, PriorityLevel.None);
+        result.Select(r => r.PriorityLevel).Should().Equal(
+            PriorityLevel.High, PriorityLevel.High, PriorityLevel.Medium, PriorityLevel.Low, PriorityLevel.Low, PriorityLevel.None);
         // Entre las dos High, primero la de mayor puntaje (Severo 400 sobre Pendiente 150).
         result[0].PatientFullName.Should().Be("Severo");
         result[1].PatientFullName.Should().Be("Pendiente vencida");
+        result[2].PatientFullName.Should().Be("Inactivo");
+        // Un puntaje moderado ya no sube a prioridad media (HU0018).
+        result[3].PatientFullName.Should().Be("Moderado");
         result.Last().PatientFullName.Should().Be("Sin datos");
     }
 
     [Fact]
-    public async Task Handle_ProlongedInactivity_MarksMediumPriority()
+    public async Task Handle_NoMealsOrSymptomsFor72Hours_MarksMediumPriority()
     {
         ArrangeNutritionist();
         var rows = new List<AssignedPatientTriageRow>
         {
-            Row("Inactivo", latestScore: 100, severity: SeverityCategory.Mild, lastActivity: DateTime.UtcNow.AddDays(-10))
+            Row("Inactivo", latestScore: 100, severity: SeverityCategory.Mild, lastActivity: DateTime.UtcNow.AddDays(-4))
         };
         _nutritionistPatientRepository
             .ListAssignedPatientTriageRowsAsync(Arg.Any<Guid>(), Arg.Any<DateTime>(), Arg.Any<CancellationToken>())

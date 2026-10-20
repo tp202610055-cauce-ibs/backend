@@ -101,6 +101,18 @@ public sealed class NutritionistPatientRepository : INutritionistPatientReposito
     }
 
     /// <inheritdoc />
+    public Task<NutritionistPatient?> FindActiveAssignmentAsync(Guid nutritionistId, Guid patientId, CancellationToken ct = default)
+    {
+        return _context.Set<NutritionistPatient>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                x => x.NutritionistId == nutritionistId
+                    && x.PatientId == patientId
+                    && x.Status == AssignmentStatus.Active,
+                ct);
+    }
+
+    /// <inheritdoc />
     public async Task AddAsync(NutritionistPatient assignment, CancellationToken ct = default)
     {
         await _context.Set<NutritionistPatient>().AddAsync(assignment, ct).ConfigureAwait(false);
