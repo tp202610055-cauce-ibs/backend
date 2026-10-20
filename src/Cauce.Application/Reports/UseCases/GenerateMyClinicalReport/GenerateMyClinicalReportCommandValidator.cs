@@ -3,9 +3,9 @@ using FluentValidation;
 namespace Cauce.Application.Reports.UseCases.GenerateMyClinicalReport;
 
 /// <summary>
-/// Validador estructural del comando <see cref="GenerateMyClinicalReportCommand"/>. Las reglas son
-/// las mismas que las del reporte del nutricionista: o se omiten los dos extremos del período, o se
-/// envían los dos, con inicio anterior al fin, fin no futuro y una duración acotada.
+/// Validador estructural del comando <see cref="GenerateMyClinicalReportCommand"/>. O se omiten los dos
+/// extremos del período, o se envían los dos, con inicio anterior al fin, fin no futuro y un tope de
+/// 90 días, que el reporte del nutricionista ya no tiene.
 ///
 /// <para>La cota máxima se compara contra un valor fijo y no contra la configuración porque el
 /// validador vive en la capa de aplicación, que no conoce <c>ReportOptions</c>; la configuración
