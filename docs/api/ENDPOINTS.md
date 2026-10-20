@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.8.0 · **Actualizado:** 2026-10-11 · **Contrato:** [`openapi-v1.7.0.json`](openapi-v1.7.0.json) (350 KB, 68 operaciones, 60 paths)
+**Versión:** 1.9.0 · **Actualizado:** 2026-10-19 · **Contrato:** [`openapi-v1.8.0.json`](openapi-v1.8.0.json) (351 KB, 68 operaciones, 60 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -11,6 +11,21 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los endpoints de identidad, la fuente autoritativa versionada es
 > [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.4.
+
+**Novedades de la v1.9.0 (bloque Backend-Portal-B1, acta A75).** El contrato v1.8.0 es aditivo: mismos 60
+paths y 68 operaciones, y un esquema nuevo (123 en total). Los clientes generados ganan dos campos y un enum.
+- **`GET /recommendations/{id}`** suma **`allowedActions`**, arreglo obligatorio del enum nuevo
+  **`RecommendationAction`** (`Approve`, `Modify`, `Reject`, `Archive`). Ver la tabla en su sección.
+- **`GET /nutritionists/me/patients/{patientUserId}`** suma **`assignedAt`** (`date-time`, obligatorio), el
+  inicio de la asignación activa.
+- **Notas del nutricionista:** aprobar, rechazar, modificar y crear manual miden el texto sin los espacios de
+  los extremos, de 10 a 2000 caracteres, y lo guardan recortado. **Aprobar baja de 20 a 10.** `"a"` seguida
+  de 9 espacios ahora responde 400.
+- **Rechazar ya no envía push** al paciente.
+- **Panel de triaje:** la prioridad sigue HU0018 (IBS-SSS mayor a 300 o pendiente de más de 24 horas para
+  `High`; 72 horas sin comidas ni síntomas para `Medium`). Ver su sección.
+- **`POST /reports/patients/{id}`:** el período ya no tiene tope de 90 días y acepta inicio igual a fin.
+- **Sesión del portal:** 15 minutos sin uso (antes, 30). Ver `CONTRACT-IDENTITY-v1.md` v1.4.2.
 
 **Novedades de la v1.8.0 (bloque Backend-Contract-1, acta A72).** El contrato v1.7.0 marca como
 obligatorios `from` y `to` en `GET /meals`, `/symptoms`, `/clinical-notes` y `/history`, y `q` en
@@ -108,7 +123,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
   `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`. El móvil obtiene los tokens por
   `/auth/login`; el portal, por `/auth/portal/login` (§2.b). Ninguno de los dos habla con Keycloak.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.7.0.json` bajo
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.8.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -259,6 +274,22 @@ del motor llegan en `null`), `source` (`EngineGenerated` o `Manual`), `isActive`
 visible para el paciente; el motivo de un rechazo nunca llega al paciente porque la rechazada no le es
 visible.
 
+Desde la v1.9.0 trae **`allowedActions`**, un arreglo obligatorio y nunca `null` de `RecommendationAction`
+(`Approve`, `Modify`, `Reject`, `Archive`). El servidor lo calcula en cada lectura, después de vencer al leer
+una recomendación cuya ventana ya pasó. El portal muestra los botones según este arreglo, sin deducirlos del
+estado:
+
+| Quién consulta | Estado | `allowedActions` |
+| --- | --- | --- |
+| Nutricionista asignado | `PendingReview` y dentro de su ventana | `["Approve", "Modify", "Reject"]` |
+| Nutricionista asignado | `Approved`, `ModifiedApproved` o `ManualApproved`, con `isActive: true` | `["Archive"]` |
+| Nutricionista asignado | Cualquier otro caso, incluida una archivada o vencida | `[]` |
+| Paciente | Cualquiera | `[]` |
+
+El snapshot no lo marca como `required` y lo declara `nullable: true`, como a todas las listas del repo
+(`items`, `steps`, `allergies`): Swashbuckle no distingue la nulabilidad de los tipos por referencia. Es
+obligatorio igual: siempre viene, vacío si no hay acciones.
+
 > Nota: para el paciente, una recomendación no visible o archivada responde **404** (no 403), para no revelar
 > su existencia. El listado del paciente es `GET /recommendations/me` (§6).
 
@@ -326,7 +357,7 @@ indistinguible de una contraseña incorrecta, lo que hacía imposible cumplir US
 | `clientId` | `scope` | Motivo |
 | --- | --- | --- |
 | `cauce-mobile` | `openid offline_access` | Sin `offline_access` el refresh token queda atado a la sesión SSO del realm, cuyo `ssoSessionIdleTimeout` es de 30 minutos, y la sesión moriría por inactividad mucho antes de los 30 días previstos para el piloto (DEC-B3-01). |
-| `cauce-web-portal` (solo por `/auth/portal/login`) | `openid` | El portal usa las sesiones de su cliente: 30 minutos de inactividad y 8 horas en total. |
+| `cauce-web-portal` (solo por `/auth/portal/login`) | `openid` | El portal usa las sesiones de su cliente: 15 minutos de inactividad y 8 horas en total. |
 
 ### `POST /api/v1/auth/refresh`
 | Campo | Valor |
@@ -420,7 +451,7 @@ pide los tokens con el cliente confidencial `cauce-web-portal` y su secret, que 
 configuración del servidor. **Solo entra el rol `nutritionist`.**
 
 **Cookie del refresh token.** `cauce_portal_rt`, con `HttpOnly`, `SameSite=Strict`,
-`Path=/api/v1/auth/portal` y `Max-Age` igual a la vigencia del refresh token (30 minutos, que se renuevan con
+`Path=/api/v1/auth/portal` y `Max-Age` igual a la vigencia del refresh token (15 minutos, que se renuevan con
 cada refresh, y como máximo 8 horas de sesión). `Secure` se configura con `PortalSession:CookieSecure`: está
 activo en todos los ambientes salvo Development, donde la API corre sobre `http://localhost`. El refresh
 token **nunca aparece en el cuerpo**. El access token vive solo en memoria del portal.
@@ -921,6 +952,19 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 | Rate limit | — |
 | Respuestas | **200** `AssignedPatientSummary[]` · 401 · 403 · 500 |
 
+Prioridad según HU0018, desde la v1.9.0 (acta A75):
+
+| `priorityLevel` | Criterio |
+| --- | --- |
+| `High` | IBS-SSS más reciente **mayor a 300** (300 no cuenta), o una recomendación en `PendingReview` generada hace **más de 24 horas** (`pendingReviewOver24hCount > 0`) |
+| `Medium` | Ninguna comida ni síntoma en las últimas **72 horas**, contadas desde el último registro o, si no hay ninguno, desde `assignedAt`. Las evaluaciones IBS-SSS no cuentan como actividad |
+| `Low` | El resto, con puntaje IBS-SSS o algún registro |
+| `None` | El resto, sin puntaje ni registros. El portal muestra `Low` y `None` como «Normal» |
+
+Un puntaje moderado (175 a 300) ya no sube a `Medium`. Orden: prioridad descendente, luego el puntaje
+IBS-SSS más reciente descendente y luego `assignedAt` ascendente. `lastActivityAt` sigue incluyendo las
+evaluaciones IBS-SSS.
+
 ### `GET /api/v1/nutritionists/me/patients/{patientUserId}`
 | Campo | Valor |
 | --- | --- |
@@ -935,6 +979,9 @@ Si el paciente todavía no creó su perfil, responde **200** con `onboardingComp
 y `age`, `bmi`, `bmiCategory`, `ibsSubtype`, `biologicalSex`, `diagnosisDate` y `medications` en `null`. Pasa
 con los vínculos por canje post-registro (acta A41), que aparecen en el panel antes del perfil. **No incluye
 el código de paciente** (acta A59).
+
+Desde la v1.9.0 trae **`assignedAt`**, obligatorio: el inicio de la asignación activa con el nutricionista que
+consulta, en UTC. Un vínculo anterior ya cerrado no cuenta. La ficha lo muestra como «Vinculado el…» (CP087).
 
 ### `GET /api/v1/nutritionists/me/patients/{patientId}/evolution`
 | Campo | Valor |
@@ -979,7 +1026,7 @@ el código de paciente** (acta A59).
 ### `POST /api/v1/recommendations/{id}/approve`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Aprueba con nota clínica de **20 a 2000 caracteres** (HU0017 CA1). La nota es visible para el paciente en el detalle (HU0015 CA2). |
+| Resumen | Aprueba con nota clínica de **10 a 2000 caracteres**, sin contar los espacios de los extremos (HU0017 CA1). Se guarda recortada. La nota es visible para el paciente en el detalle (HU0015 CA2). |
 | US/TS | US17 (CA01) |
 | Request body | `ApproveRecommendationRequest` (note) |
 | Idempotencia | **Sí — requerido** |
@@ -989,7 +1036,7 @@ el código de paciente** (acta A59).
 ### `POST /api/v1/recommendations/{id}/reject`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Rechaza con motivo de **10 a 2000 caracteres**. El motivo nunca le llega al paciente: la recomendación rechazada no aparece en su listado ni en su detalle, y el push no lo incluye (HU0017 CA2). |
+| Resumen | Rechaza con motivo de **10 a 2000 caracteres**, sin contar los espacios de los extremos. Se guarda recortado. El motivo nunca le llega al paciente: la recomendación rechazada no aparece en su listado ni en su detalle, y desde la v1.9.0 el rechazo **no envía ningún push** al paciente (HU0017 CA2, CP046). |
 | US/TS | US17 |
 | Request body | `RejectRecommendationRequest` (reason) |
 | Idempotencia | **Sí — requerido** |
@@ -999,7 +1046,7 @@ el código de paciente** (acta A59).
 ### `POST /api/v1/recommendations/{id}/modify`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Aprueba tras modificar ítems y/o contenido (`PendingReview → ModifiedApproved`). Nota clínica de **10 a 2000 caracteres** (HU0017 CA3), visible para el paciente. |
+| Resumen | Aprueba tras modificar ítems y/o contenido (`PendingReview → ModifiedApproved`). Nota clínica de **10 a 2000 caracteres**, sin contar los espacios de los extremos (HU0017 CA3), guardada recortada y visible para el paciente. |
 | US/TS | US17 CA03 |
 | Request body | `ModifyRecommendationRequest` (clinicalNote, items?, title?, description?, steps?) |
 | Idempotencia | **Sí — requerido** (desde la v1.7.0; sin la clave, 400 con `errors.clientGuid`) |
@@ -1009,7 +1056,7 @@ el código de paciente** (acta A59).
 ### `POST /api/v1/recommendations/manual`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Crea manualmente una recomendación para un paciente asignado (queda `ManualApproved`). Nota clínica de **10 a 2000 caracteres** (HU0029), visible para el paciente. Título hasta 200 caracteres, descripción hasta 4000 y cada paso hasta 500. |
+| Resumen | Crea manualmente una recomendación para un paciente asignado (queda `ManualApproved`). Nota clínica de **10 a 2000 caracteres**, sin contar los espacios de los extremos (HU0029), guardada recortada y visible para el paciente. Título hasta 200 caracteres, descripción hasta 4000 y cada paso hasta 500. |
 | US/TS | US29 |
 | Request body | `CreateManualRecommendationRequest` (patientId, title, description, steps?, clinicalNote, validUntil?) |
 | Idempotencia | — |
@@ -1040,6 +1087,12 @@ el código de paciente** (acta A59).
 | Idempotencia | **Sí — requerido** (header `Idempotency-Key`) |
 | Rate limit | `default-auth` |
 | Respuestas | **202** `GenerateClinicalReportResult` · 400 · 409 `idempotency_mismatch` · 422 (`patient_has_no_data_in_period`, `report_period_invalid`) · 401 · 403 `report_access_denied` · 429 · 500 |
+
+Desde la v1.9.0 el período **no tiene tope de duración** (antes, 90 días) y puede ser de un solo día
+(`periodStart` igual a `periodEnd`). El fin está incluido y no puede ser futuro. Sin comidas ni síntomas en el
+período responde 422 `patient_has_no_data_in_period`. El PDF lista como máximo `Reports:MaxDetailRows` (200)
+comidas y otros tantos síntomas; los agregados cubren todo el período. El autoreporte del paciente
+(`POST /patients/me/report`) conserva su tope de 90 días.
 
 ---
 

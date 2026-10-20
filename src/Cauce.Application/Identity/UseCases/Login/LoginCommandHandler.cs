@@ -178,7 +178,7 @@ public sealed class LoginCommandHandler : IRequestHandler<LoginCommand, LoginRes
         _logger.LogWarning("Portal login rejected for user {UserId} ({Cause}).", user.Id, cause);
 
         // Keycloak ya abrió una sesión con esas credenciales: se revoca para no dejarla viva sin dueño. Si la
-        // revocación falla, el rechazo se mantiene igual: la sesión caduca sola a los 30 minutos sin uso.
+        // revocación falla, el rechazo se mantiene igual: la sesión caduca sola a los 15 minutos sin uso.
         try
         {
             await _tokenClient
