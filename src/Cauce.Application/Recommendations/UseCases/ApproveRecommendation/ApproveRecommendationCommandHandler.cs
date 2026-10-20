@@ -85,7 +85,8 @@ public sealed class ApproveRecommendationCommandHandler : IRequestHandler<Approv
             throw new RecommendationExpiredException(recommendation.Id);
         }
 
-        recommendation.Approve(nutritionistId, request.Note, now);
+        var note = request.Note.Trim();
+        recommendation.Approve(nutritionistId, note, now);
 
         // Auditoría del flujo HITL (capa 3) y publicación del evento vía outbox, ambas ANTES del
         // SaveChanges para persistir de forma atómica el cambio, la bitácora y el mensaje de outbox.
@@ -95,7 +96,7 @@ public sealed class ApproveRecommendationCommandHandler : IRequestHandler<Approv
             nameof(Recommendation),
             recommendation.Id,
             oldValuesHash: null,
-            newValuesHash: AuditHash.Sha256Hex(request.Note),
+            newValuesHash: AuditHash.Sha256Hex(note),
             additionalContext: null,
             cancellationToken: cancellationToken).ConfigureAwait(false);
 

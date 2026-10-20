@@ -504,7 +504,7 @@ public sealed class Recommendation : Entity, IAggregateRoot
             or RecommendationStatus.Approved;
     }
 
-    private bool IsApprovedTerminalState()
+    internal bool IsApprovedTerminalState()
     {
         return Status is RecommendationStatus.Approved
             or RecommendationStatus.ModifiedApproved

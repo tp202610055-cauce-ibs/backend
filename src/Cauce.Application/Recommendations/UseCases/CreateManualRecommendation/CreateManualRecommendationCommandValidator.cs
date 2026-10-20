@@ -15,11 +15,7 @@ public sealed class CreateManualRecommendationCommandValidator : AbstractValidat
         RuleFor(x => x.PatientId).NotEmpty();
         RuleFor(x => x.Title).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Description).NotEmpty().MaximumLength(4000);
-        RuleFor(x => x.ClinicalNote)
-            .NotEmpty()
-            .MinimumLength(10)
-            .WithMessage("La nota clínica debe tener al menos 10 caracteres.")
-            .MaximumLength(2000);
+        RuleFor(x => x.ClinicalNote).ReviewNote("La nota clínica");
         RuleForEach(x => x.Steps).NotEmpty().MaximumLength(500).When(x => x.Steps is not null);
     }
 }

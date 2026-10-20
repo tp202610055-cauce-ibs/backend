@@ -1,6 +1,7 @@
 using Cauce.Application.Recommendations.Contracts;
 using Cauce.Application.Recommendations.Dtos;
 using Cauce.Domain.Recommendations;
+using Cauce.Domain.Recommendations.Enums;
 
 namespace Cauce.Application.Recommendations.Mapping;
 
@@ -53,13 +54,15 @@ public static class RecommendationsMappings
     /// <param name="foodNames">Datos legibles de los alimentos involucrados, por identificador.</param>
     /// <param name="reviewedByNutritionistName">Nombre completo del nutricionista revisor (bloque 2), o <see langword="null"/>.</param>
     /// <param name="supportingData">Datos de respaldo clínico de la ventana de análisis (bloque 4).</param>
+    /// <param name="allowedActions">Acciones que quien consulta puede ejecutar hoy.</param>
     /// <returns>El detalle de la recomendación.</returns>
     public static RecommendationDetailDto ToDetail(
         Recommendation recommendation,
         string modelVersionName,
         IReadOnlyDictionary<Guid, FoodNameInfo> foodNames,
         string? reviewedByNutritionistName,
-        RecommendationSupportingDataDto supportingData)
+        RecommendationSupportingDataDto supportingData,
+        IReadOnlyList<RecommendationAction> allowedActions)
     {
         var items = recommendation.Items
             .Select(item => ToItemDto(item, foodNames))
@@ -91,7 +94,8 @@ public static class RecommendationsMappings
             recommendation.IsActive,
             recommendation.ArchivedAt,
             recommendation.ArchiveReason,
-            recommendation.ValidUntil);
+            recommendation.ValidUntil,
+            allowedActions);
     }
 
     /// <summary>

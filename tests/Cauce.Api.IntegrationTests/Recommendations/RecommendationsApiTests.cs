@@ -286,7 +286,7 @@ public sealed class RecommendationsApiTests
     }
 
     [SkippableFact]
-    public async Task Approve_WithNoteShorterThan20Chars_RejectsWithSpecificMessage()
+    public async Task Approve_WithNoteShorterThan10Chars_RejectsWithSpecificMessage()
     {
         SkipIfUnavailable();
         var patient = await SeedPatientWithHistoryAsync();
@@ -297,12 +297,47 @@ public sealed class RecommendationsApiTests
         var response = await PostWithKey(
             NutritionistClient(nutritionist.KeycloakId),
             $"/api/v1/recommendations/{recommendationId}/approve",
-            new { note = "Nota corta" });
+            new { note = "Muy poco." });
 
         // El pipeline de validación de FluentValidation se traduce a 400 (application/problem+json).
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
-        problem.ToString().Should().Contain("al menos 20 caracteres");
+        problem.ToString().Should().Contain("al menos 10 caracteres");
+    }
+
+    [SkippableFact]
+    public async Task Approve_WithNoteOf10Chars_IsAccepted()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+
+        var response = await PostWithKey(
+            NutritionistClient(nutritionist.KeycloakId),
+            $"/api/v1/recommendations/{recommendationId}/approve",
+            new { note = "Ajuste OK." });
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [SkippableFact]
+    public async Task Reject_WithSurroundingSpaces_StoresTheTrimmedReason()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+
+        var response = await PostWithKey(
+            NutritionistClient(nutritionist.KeycloakId),
+            $"/api/v1/recommendations/{recommendationId}/reject",
+            new { reason = "   Ajuste OK.   " });
+
+        response.IsSuccessStatusCode.Should().BeTrue();
+        (await GetRecommendationFromDbAsync(recommendationId)).NutritionistNote.Should().Be("Ajuste OK.");
     }
 
     [SkippableFact]
@@ -536,6 +571,50 @@ public sealed class RecommendationsApiTests
         detail.GetProperty("archiveReason").GetString().Should().Be("ObjectiveMet");
         detail.GetProperty("archivedAt").ValueKind.Should().Be(JsonValueKind.String);
         detail.GetProperty("title").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [SkippableFact]
+    public async Task GetDetail_AsAssignedNutritionist_ExposesAllowedActionsThroughTheLifecycle()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        var client = NutritionistClient(nutritionist.KeycloakId);
+
+        (await AllowedActionsAsync(client, recommendationId)).Should().Equal("Approve", "Modify", "Reject");
+
+        (await Approve(nutritionist.KeycloakId, recommendationId)).EnsureSuccessStatusCode();
+        (await AllowedActionsAsync(client, recommendationId)).Should().Equal("Archive");
+
+        (await client.PostAsJsonAsync(
+            $"/api/v1/recommendations/{recommendationId}/archive", new { reason = "ObjectiveMet" })).EnsureSuccessStatusCode();
+        (await AllowedActionsAsync(client, recommendationId)).Should().BeEmpty();
+    }
+
+    [SkippableFact]
+    public async Task GetDetail_AsOwnerPatient_ExposesAnEmptyAllowedActionsArray()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        (await Approve(nutritionist.KeycloakId, recommendationId)).EnsureSuccessStatusCode();
+
+        var detail = await GetDetail(patient.KeycloakId, recommendationId);
+
+        detail.GetProperty("allowedActions").ValueKind.Should().Be(JsonValueKind.Array);
+        detail.GetProperty("allowedActions").GetArrayLength().Should().Be(0);
+    }
+
+    private static async Task<IReadOnlyList<string?>> AllowedActionsAsync(HttpClient client, Guid recommendationId)
+    {
+        var response = await client.GetAsync($"/api/v1/recommendations/{recommendationId}");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var detail = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return detail.GetProperty("allowedActions").EnumerateArray().Select(action => action.GetString()).ToList();
     }
 
     [SkippableFact]

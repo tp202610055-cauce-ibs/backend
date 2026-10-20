@@ -1,8 +1,10 @@
+using Cauce.Application.Common.Auditing;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Common.Interfaces.Recommendations;
 using Cauce.Application.Recommendations.UseCases.ApproveRecommendation;
+using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Recommendations;
 using Cauce.Domain.Recommendations.Enums;
@@ -60,6 +62,21 @@ public sealed class ApproveRecommendationCommandHandlerTests
         recommendation.Status.Should().Be(RecommendationStatus.Approved);
         recommendation.ReviewedByNutritionistId.Should().Be(_nutritionistId);
         await _unitOfWork.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_NoteWithSurroundingSpaces_StoresAndAuditsTheTrimmedNote()
+    {
+        var recommendation = RecommendationTestData.PendingReview(_patientId, Now);
+        _recommendationRepository.GetByIdAsync(recommendation.Id, Arg.Any<CancellationToken>()).Returns(recommendation);
+        _assignments.ActiveAssignmentExistsAsync(_nutritionistId, _patientId, Arg.Any<CancellationToken>()).Returns(true);
+
+        await CreateHandler().Handle(new ApproveRecommendationCommand(recommendation.Id, "  Ajuste OK.  ", Guid.NewGuid()), CancellationToken.None);
+
+        recommendation.NutritionistNote.Should().Be("Ajuste OK.");
+        await _auditLogger.Received(1).LogAsync(
+            Arg.Any<AuditActionType>(), Arg.Any<string>(), recommendation.Id,
+            Arg.Any<string?>(), AuditHash.Sha256Hex("Ajuste OK."), Arg.Any<string?>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

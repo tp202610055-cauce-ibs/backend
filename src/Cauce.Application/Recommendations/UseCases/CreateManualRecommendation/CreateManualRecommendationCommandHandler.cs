@@ -72,13 +72,14 @@ public sealed class CreateManualRecommendationCommandHandler
             throw new RecommendationAccessDeniedException();
         }
 
+        var clinicalNote = request.ClinicalNote.Trim();
         var recommendation = Recommendation.CreateManual(
             request.PatientId,
             nutritionistId,
             request.Title,
             request.Description,
             request.Steps,
-            request.ClinicalNote,
+            clinicalNote,
             request.ValidUntil,
             now);
 
@@ -91,7 +92,7 @@ public sealed class CreateManualRecommendationCommandHandler
             nameof(Recommendation),
             recommendation.Id,
             oldValuesHash: null,
-            newValuesHash: AuditHash.Sha256Hex(request.ClinicalNote),
+            newValuesHash: AuditHash.Sha256Hex(clinicalNote),
             additionalContext: JsonSerializer.Serialize(new { source = "manual" }),
             cancellationToken: cancellationToken).ConfigureAwait(false);
 
