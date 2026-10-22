@@ -6,8 +6,8 @@ using Microsoft.Extensions.Options;
 namespace Cauce.Infrastructure.Persistence.Seeders;
 
 /// <summary>
-/// Seeder idempotente que asegura la existencia del bucket de reportes clínicos en MinIO
-/// (DEC-B5-07). No falla el arranque si MinIO no está disponible: registra la advertencia y continúa.
+/// Seeder idempotente que asegura los buckets de reportes y de exportaciones en MinIO (DEC-B5-07).
+/// <see cref="SeedAsync"/> tolera un MinIO caído; <see cref="EnsureBucketsAsync"/> no.
 /// </summary>
 public sealed class MinioBucketSeeder
 {
@@ -38,20 +38,37 @@ public sealed class MinioBucketSeeder
     /// <returns>Tarea que representa la operación asíncrona.</returns>
     public async Task SeedAsync(CancellationToken ct = default)
     {
-        await EnsureBucketAsync(_options.ReportsBucket, ct).ConfigureAwait(false);
-        await EnsureBucketAsync(_options.ExportsBucket, ct).ConfigureAwait(false);
+        foreach (var bucket in Buckets)
+        {
+            try
+            {
+                await EnsureBucketAsync(bucket, ct).ConfigureAwait(false);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Could not ensure MinIO bucket {Bucket}; object storage may be unavailable.", bucket);
+            }
+        }
     }
+
+    /// <summary>
+    /// Asegura la existencia de los buckets y propaga el error si MinIO no responde.
+    /// </summary>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>Tarea que representa la operación asíncrona.</returns>
+    public async Task EnsureBucketsAsync(CancellationToken ct = default)
+    {
+        foreach (var bucket in Buckets)
+        {
+            await EnsureBucketAsync(bucket, ct).ConfigureAwait(false);
+        }
+    }
+
+    private IEnumerable<string> Buckets => [_options.ReportsBucket, _options.ExportsBucket];
 
     private async Task EnsureBucketAsync(string bucket, CancellationToken ct)
     {
-        try
-        {
-            await _objectStorage.EnsureBucketExistsAsync(bucket, ct).ConfigureAwait(false);
-            _logger.LogInformation("Ensured MinIO bucket {Bucket} exists.", bucket);
-        }
-        catch (Exception exception)
-        {
-            _logger.LogWarning(exception, "Could not ensure MinIO bucket {Bucket}; object storage may be unavailable.", bucket);
-        }
+        await _objectStorage.EnsureBucketExistsAsync(bucket, ct).ConfigureAwait(false);
+        _logger.LogInformation("Ensured MinIO bucket {Bucket} exists.", bucket);
     }
 }

@@ -51,18 +51,9 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         _logger = logger;
     }
 
-    private string ServerRoot
-    {
-        get
-        {
-            var index = _options.Authority.IndexOf("/realms/", StringComparison.Ordinal);
-            return index > 0 ? _options.Authority[..index] : _options.Authority.TrimEnd('/');
-        }
-    }
+    private string AdminBaseUrl => $"{_options.ServerRoot}/admin/realms/{_options.Realm}";
 
-    private string AdminBaseUrl => $"{ServerRoot}/admin/realms/{_options.Realm}";
-
-    private string TokenUrl => $"{_options.Authority}/protocol/openid-connect/token";
+    private string TokenUrl => $"{_options.BackchannelAuthority}/protocol/openid-connect/token";
 
     /// <inheritdoc />
     public async Task<string> CreateUserAsync(

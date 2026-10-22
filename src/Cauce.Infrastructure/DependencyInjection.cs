@@ -293,7 +293,7 @@ public static class DependencyInjection
     /// <param name="useSsl">Indica si la conexión usa TLS.</param>
     /// <param name="options">Opciones de MinIO, de donde salen las credenciales.</param>
     /// <returns>El cliente de MinIO.</returns>
-    private static IMinioClient BuildMinioClient(string endpoint, bool useSsl, MinioOptions options)
+    internal static IMinioClient BuildMinioClient(string endpoint, bool useSsl, MinioOptions options)
     {
         return new MinioClient()
             .WithEndpoint(endpoint)

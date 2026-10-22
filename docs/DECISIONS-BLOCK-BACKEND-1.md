@@ -3,7 +3,7 @@
 Bloque único de actas del backend. Reemplaza los 19 archivos sueltos que vivían en
 `docs/decisions/`, en simetría con `DECISIONS-BLOCK-MOBILE-1.md` del repo mobile.
 
-**Alcance:** actas A38 a A75 (A73 está reservada para Docs-Trace-1), de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
+**Alcance:** actas A38 a A76 (A73 está reservada para Docs-Trace-1), de los bloques Backend-Fix-2, Nutritionist-Activation-1, el
 trabajo posterior sobre el consentimiento, Backend-Pilot-Readiness y los bloques pequeños
 posteriores. Las decisiones DEC-B3 a DEC-B7B y las actas A1 a A29 viven en el repo `docs`, en
 `decisions/DECISIONS-BLOCK-01.md` a `decisions/DECISIONS-BLOCK-07B.md`; las actas A30 a A37 y A42,
@@ -17,7 +17,7 @@ por inexistente el Bloque 3, y se agregó A67. El 2026-09-26 se agregaron A68 y 
 listo 1. El 2026-09-30 se agregó A70, del endurecimiento del registro tras el incidente del 28-sep, y el
 2026-10-01 la A71, sobre la baja de cuenta en Keycloak. El 2026-10-12 se agregó A72, del bloque
 Backend-Contract-1, el 2026-10-15 la A74, del bloque Backend-Seed-Volume-1, y el 2026-10-19 la A75, del
-bloque Backend-Portal-B1.
+bloque Backend-Portal-B1. El 2026-10-21 se agregó A76, del bloque Backend-Deploy-D1.
 
 ---
 
@@ -60,6 +60,7 @@ bloque Backend-Portal-B1.
 | [A72](#acta-a72-los-parámetros-de-rango-y-de-búsqueda-son-obligatorios-y-las-fechas-llevan-zona-horaria) | Los parámetros de rango y de búsqueda son obligatorios y las fechas llevan zona horaria | Aprobada, implementada en Backend-Contract-1. Quedan abiertos la opción D, los topes, el filtro por `clientCreatedAt` y las citas vencidas de CONTRACT-IDENTITY |
 | [A74](#acta-a74-paciente-de-desarrollo-con-historial-de-volumen) | Paciente de desarrollo con historial de volumen | Implementada en Backend-Seed-Volume-1. Pendientes el primer arranque real y el pase en teléfono |
 | [A75](#acta-a75-contrato-del-portal-para-el-bloque-b-1) | Contrato del portal para el bloque B-1 | Propuesta. Implementada en Backend-Portal-B1. Queda abierta la expiración al leer sin evento |
+| [A76](#acta-a76-despliegue-en-una-vm-para-la-certificación-qa) | Despliegue en una VM para la certificación QA | Propuesta. Implementada en Backend-Deploy-D1. Pendiente la verificación en la VM |
 
 ---
 
@@ -3122,5 +3123,111 @@ Keycloak levantado: lo aplica Trigo con el script.
    QA.
 3. Mobile y el portal copian el snapshot v1.8.0 y regeneran su cliente.
 4. A73 sigue reservada para Docs-Trace-1.
+
+---
+
+## Acta A76: Despliegue en una VM para la certificación QA
+
+**Estado:** Propuesta. Implementada en Backend-Deploy-D1. Pendiente la verificación en la VM
+**Fecha:** 2026-10-21
+**Aprobado por:** decide Trigo; aprueba Kiwicha
+**Aplicabilidad:** Backend (imagen, comandos de operación, identidad, configuración y salud) e `infrastructure`
+(carpeta `vm/` y `README-VM.md`). Ramas `feature/backend-deploy-d1`, sobre `b1418ff` (tag
+`v0.17.0-portal-contract`), y `feature/infrastructure-deploy-d1`, sobre `f2628d7`.
+
+---
+
+### Contexto
+
+La certificación QA corre en una sola VM Ubuntu 24.04 en Azure (2 vCPU, 4 GiB, 64 GB) con Docker Compose y Caddy,
+con datos sintéticos. La entrega es el domingo 25-oct a las 12:00 y el código se congela el sábado 24 por la noche.
+Durante la semana de pruebas no se puede tocar la aplicación en producción: ni redespliegues ni reinicios en
+horario de pruebas, con URL y certificado estables los 7 días. El push de Firebase debe funcionar de punta a
+punta. La Fase 0 de despliegue mostró que en Production no se migraba ni se cargaban los catálogos, que la API
+arrancaba «sana» sin base ni Keycloak y que una sola URL de Keycloak servía de emisor y de canal interno.
+
+### Decisión
+
+1. **Una imagen para todo.** `Dockerfile` multietapa sobre Debian (`sdk` y `aspnet` 9.0 `bookworm-slim`), con
+   `tzdata`, `libfontconfig1`, `fonts-dejavu-core` y `curl`, usuario `app` y puerto 8080. La imagen se construye en
+   la VM la primera vez, se etiqueta con el tag del backend y no se reconstruye durante la semana de pruebas.
+2. **Comandos `migrate` y `seed-catalogs`** (`Cauce.Api/Commands/CommandRunner.cs`), con el mismo binario:
+   `dotnet Cauce.Api.dll migrate`. Terminan con 0 si salen bien, 1 si fallan y 2 si el comando no existe, y no
+   levantan el servidor web. `seed-catalogs` carga roles, alergias, alimentos, glosario, documento de
+   consentimiento, versión de modelo y buckets, y exige que MinIO responda. Ninguno crea cuentas: DevAdmin,
+   QaNutritionists, DemoPatient y VolumePatient siguen siendo solo de Development. El arranque normal en
+   Production no migra. La tabla de comandos queda lista para `seed-qa` y `reset-qa` de D-2.
+3. **URL interna de Keycloak.** Clave opcional `Keycloak:InternalBaseUrl` (raíz del servidor, por ejemplo
+   `http://keycloak:8080`). Con ella, los metadatos, el token, el logout y la Admin API van por la red interna, y el
+   emisor validado sigue siendo `Keycloak:Authority`, la URL pública. Vacía, todo queda como antes. Con la URL
+   interna en http, `Keycloak:RequireHttpsMetadata` va en `false`, lo que también apaga `UseHttpsRedirection`:
+   Caddy hace el paso a HTTPS.
+4. **Validación al arrancar en Production** (`ProductionSettingsValidator`). Quince claves obligatorias; con
+   `Notifications:Fcm:UseFake=false`, también `CredentialsPath` y que el archivo se pueda leer. El mensaje nombra
+   la clave como variable de entorno y, para Firebase, la ruta; nunca un valor.
+5. **`GET /api/v1/health/ready`**, que abre una conexión a la base. `/health/live` no cambia.
+6. **Pila de la VM** (`infrastructure/vm/`): postgres, keycloak (`start --import-realm`), keydb, minio, mailpit,
+   api y caddy, con versiones fijas, healthchecks, límites de memoria y `restart: unless-stopped`. Solo 80 y 443
+   hacia afuera; las consolas de Keycloak (8081) y MinIO (9001) en 127.0.0.1 para el túnel SSH. Red
+   `172.28.0.0/16`, de la que la API acepta los encabezados reenviados. La API usa un usuario propio de MinIO
+   (`minio-init`), con las credenciales root como respaldo anotado.
+7. **Estabilidad de 7 días.** `setup-vm.sh` deja Docker con `live-restore`, rotación de logs (10 MB por 3
+   archivos), paquetes congelados con `apt-mark hold` y swap de 2 GB. `update.sh` no corre si existe `vm/.freeze`.
+   Los certificados de Caddy viven en un volumen con nombre y se renuevan solos.
+8. **Push real.** El archivo de cuenta de servicio vive en `vm/secrets/` (ignorada por git), se monta en solo
+   lectura y lo lee el usuario `app` (UID 1654). `FCM_USE_FAKE` empieza en `true` y el runbook lo pasa a `false`.
+
+### Consecuencias
+
+1. **Congelamiento de la semana de pruebas.** Con `vm/.freeze`, `update.sh` se niega a correr. Cambiar un
+   interruptor del `.env` (los siete `Workers__*__Enabled` y `Recommendations__ExpirationWindowHours`) recrea
+   solo la API y se hace fuera del horario de pruebas.
+2. Keycloak arranca con `start` sin imagen optimizada: reconstruye en cada arranque, tarda más y usa más
+   memoria al inicio. Se mide en la VM.
+3. Las versiones flotantes (`9.0.*`) sin lock files pueden resolver paquetes distintos en la VM que en la laptop.
+4. Un envío exitoso de FCM no deja línea en el log, solo los fallos. El envío se comprueba en la tabla
+   `notifications`.
+5. En Development, la cadena de siembra pasa a cargar los catálogos (con el consentimiento, la versión de modelo
+   y los buckets) antes que las cuentas de prueba.
+
+### Decisiones de implementación
+
+1. **Sin región fija en MinIO.** Se había aprobado `.WithRegion("us-east-1")` para evitar que la firma consultara
+   la red. Una prueba mostró que el SDK 6 ya firma sin red, aun contra un host que no resuelve, así que no se
+   agregó código: queda la prueba (`MinioClientSigningTests`) como evidencia.
+2. **Secretos de Keycloak antes de publicar.** `realm.json` trae marcadores públicos para `cauce-backend`, cuya
+   cuenta de servicio administra usuarios. `update.sh` levanta Keycloak, sincroniza los secretos y recién después
+   levanta Caddy. Los secretos viajan por stdin a `kcadm`, no como argumento.
+3. **Superficie pública.** Caddy responde 404 a `/api/v1/admin/*` (se usa desde la VM con `docker compose exec`),
+   a la consola y a los demás realms de Keycloak. Los logs de acceso no registran el `token` del enlace de
+   restablecimiento ni la firma de las URL prefirmadas.
+4. **Logs de EF.** En la VM, `Serilog__MinimumLevel__Override__Microsoft.EntityFrameworkCore=Warning` saca del
+   log cada sentencia SQL.
+5. **Scripts con `bash`.** Los scripts de `vm/` se ejecutan con `bash vm/<script>.sh`, porque desde Windows no
+   llegan con el bit de ejecución.
+
+### Verificación
+
+En la laptop, con Docker:
+
+- **Pruebas:** 1304 antes y 1329 después (Domain 408, Application 372, Infrastructure 154, integración 395), sin
+  omitidas. Build sin errores y con las 8 advertencias de siempre.
+- **Imagen** `cauce-api` (951 MB): corre como `app` (UID 1654), trae `America/Lima` y no incluye
+  `appsettings.Development.json`.
+- **Comandos con la imagen** contra un Postgres y un MinIO desechables, dos veces seguidas, en Production y con los
+  seeders de cuentas encendidos: `migrate` y `seed-catalogs` salen con 0, los conteos son idénticos (2 roles, 10
+  alergias, 26 alimentos, 30 términos, 1 consentimiento, 1 versión de modelo) y quedan cero usuarios. Con MinIO
+  caído, `seed-catalogs` sale con 1; un comando desconocido, con 2. Sin claves, la API en Production no arranca y
+  nombra las que faltan.
+- **Imágenes de terceros:** existen las etiquetas, el Caddyfile valida, MinIO trae `curl` y `mc`, y Mailpit
+  responde `readyz` con `MP_WEBROOT=/mail/`.
+
+En la VM queda lo que el cierre del bloque lista como no verificado.
+
+### Pendientes
+
+1. Instalación en la VM y pruebas de humo de `README-VM.md`, con la lista de lo no verificado del cierre.
+2. Cuentas y datos de QA, `seed-qa` y `reset-qa`: bloque D-2.
+3. A73 sigue reservada para Docs-Trace-1.
 
 ---

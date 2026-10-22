@@ -42,9 +42,9 @@ public sealed class KeycloakTokenClient : IKeycloakTokenClient
         _logger = logger;
     }
 
-    private string TokenUrl => $"{_options.Authority}/protocol/openid-connect/token";
+    private string TokenUrl => $"{_options.BackchannelAuthority}/protocol/openid-connect/token";
 
-    private string LogoutUrl => $"{_options.Authority}/protocol/openid-connect/logout";
+    private string LogoutUrl => $"{_options.BackchannelAuthority}/protocol/openid-connect/logout";
 
     /// <inheritdoc />
     public async Task<KeycloakTokenResult> LoginAsync(string email, string password, string clientId, CancellationToken ct = default)

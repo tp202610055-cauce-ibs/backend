@@ -246,6 +246,19 @@ ninguna petición HTTP los produce. Un cliente no necesita mapearlos.
 | Rate limit | — |
 | Respuestas | **200** (texto `Healthy`) · 503 (no saludable) |
 
+No comprueba dependencias: responde 200 mientras el proceso esté vivo, aunque la base no responda.
+
+### `GET /api/v1/health/ready`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Health check de readiness: abre una conexión a la base de datos. **No aparece en el OpenAPI** (no es un controller). La usan el healthcheck del contenedor y las pruebas de humo del despliegue (acta A76). |
+| US/TS | TS03 |
+| Autorización | Anónimo |
+| Request body | — |
+| Idempotencia | — |
+| Rate limit | — |
+| Respuestas | **200** (texto `Healthy`) · **503** (texto `Unhealthy`, la base no responde) |
+
 ### `PUT /api/v1/users/me/fcm-token`
 | Campo | Valor |
 | --- | --- |

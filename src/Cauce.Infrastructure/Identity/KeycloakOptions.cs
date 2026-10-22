@@ -61,8 +61,39 @@ public sealed class KeycloakOptions
     public int WaitIncrementSeconds { get; init; } = 60;
 
     /// <summary>
-    /// Dirección del documento de descubrimiento OIDC, derivada de
-    /// <see cref="Authority"/>.
+    /// Raíz del servidor Keycloak por la red interna, sin <c>/realms</c> (por ejemplo <c>http://keycloak:8080</c>).
+    /// Opcional; si es http, <see cref="RequireHttpsMetadata"/> debe ir en <see langword="false"/>.
     /// </summary>
-    public string MetadataAddress => $"{Authority}/.well-known/openid-configuration";
+    public string InternalBaseUrl { get; init; } = string.Empty;
+
+    /// <summary>
+    /// URL del realm con la que el backend habla con Keycloak: la interna si está configurada; si no,
+    /// <see cref="Authority"/>. El emisor que se valida sigue siendo <see cref="Authority"/>.
+    /// </summary>
+    public string BackchannelAuthority => string.IsNullOrWhiteSpace(InternalBaseUrl)
+        ? Authority
+        : $"{InternalBaseUrl.TrimEnd('/')}/realms/{Realm}";
+
+    /// <summary>
+    /// Raíz del servidor para la Admin API: la interna si está configurada; si no, la que precede a
+    /// <c>/realms/</c> en <see cref="Authority"/>.
+    /// </summary>
+    public string ServerRoot
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(InternalBaseUrl))
+            {
+                return InternalBaseUrl.TrimEnd('/');
+            }
+
+            var index = Authority.IndexOf("/realms/", StringComparison.Ordinal);
+            return index > 0 ? Authority[..index] : Authority.TrimEnd('/');
+        }
+    }
+
+    /// <summary>
+    /// Dirección del documento de descubrimiento OIDC, derivada de <see cref="BackchannelAuthority"/>.
+    /// </summary>
+    public string MetadataAddress => $"{BackchannelAuthority}/.well-known/openid-configuration";
 }
