@@ -34,6 +34,32 @@ public sealed class KeycloakTokenClientTests
         handler.LastForm["grant_type"].Should().Be("password");
     }
 
+    [Theory]
+    [InlineData("", "https://test.cauce.local/realms/cauce/protocol/openid-connect/token")]
+    [InlineData("http://keycloak:8080/", "http://keycloak:8080/realms/cauce/protocol/openid-connect/token")]
+    public async Task LoginAsync_PostsToTheBackchannelTokenEndpoint(string internalBaseUrl, string expectedUrl)
+    {
+        var handler = new CapturingHandler(TokenResponse());
+        var client = CreateClient(handler, internalBaseUrl: internalBaseUrl);
+
+        await client.LoginAsync("p@cauce.local", "Correct123!", "cauce-mobile");
+
+        handler.LastRequestUri!.ToString().Should().Be(expectedUrl);
+    }
+
+    [Theory]
+    [InlineData("", "https://test.cauce.local/realms/cauce/protocol/openid-connect/logout")]
+    [InlineData("http://keycloak:8080", "http://keycloak:8080/realms/cauce/protocol/openid-connect/logout")]
+    public async Task LogoutAsync_PostsToTheBackchannelLogoutEndpoint(string internalBaseUrl, string expectedUrl)
+    {
+        var handler = new CapturingHandler(new HttpResponseMessage(HttpStatusCode.NoContent));
+        var client = CreateClient(handler, internalBaseUrl: internalBaseUrl);
+
+        await client.LogoutAsync("refresh-abc", "cauce-mobile");
+
+        handler.LastRequestUri!.ToString().Should().Be(expectedUrl);
+    }
+
     [Fact]
     public async Task LoginAsync_WebPortalClient_RequestsOnlyOpenIdScope()
     {
@@ -239,7 +265,10 @@ public sealed class KeycloakTokenClientTests
         await act.Should().NotThrowAsync();
     }
 
-    private static KeycloakTokenClient CreateClient(CapturingHandler handler, string webPortalSecret = PortalSecret)
+    private static KeycloakTokenClient CreateClient(
+        CapturingHandler handler,
+        string webPortalSecret = PortalSecret,
+        string internalBaseUrl = "")
     {
         var httpClient = new HttpClient(handler);
         var options = Options.Create(new KeycloakOptions
@@ -249,7 +278,8 @@ public sealed class KeycloakTokenClientTests
             Audience = "cauce-backend",
             ClientId = "cauce-backend",
             ClientSecret = "test-secret",
-            WebPortalClientSecret = webPortalSecret
+            WebPortalClientSecret = webPortalSecret,
+            InternalBaseUrl = internalBaseUrl
         });
 
         return new KeycloakTokenClient(httpClient, options, NullLogger<KeycloakTokenClient>.Instance);
@@ -308,11 +338,14 @@ public sealed class KeycloakTokenClientTests
 
         public int CallCount { get; private set; }
 
+        public Uri? LastRequestUri { get; private set; }
+
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
             CancellationToken cancellationToken)
         {
             CallCount++;
+            LastRequestUri = request.RequestUri;
             var body = await request.Content!.ReadAsStringAsync(cancellationToken);
             LastForm = body
                 .Split('&', StringSplitOptions.RemoveEmptyEntries)

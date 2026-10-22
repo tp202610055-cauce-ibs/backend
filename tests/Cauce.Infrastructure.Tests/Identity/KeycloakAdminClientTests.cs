@@ -75,6 +75,20 @@ public sealed class KeycloakAdminClientTests
         await act.Should().ThrowAsync<KeycloakIntegrationException>();
     }
 
+    [Theory]
+    [InlineData("", "https://test.cauce.local")]
+    [InlineData("http://keycloak:8080/", "http://keycloak:8080")]
+    public async Task AdminRequests_UseTheBackchannelServerRootAndTokenEndpoint(string internalBaseUrl, string expectedRoot)
+    {
+        var handler = new RoutingHandler(UserResponse("""{"id":"x","emailVerified":true}"""));
+        var client = CreateClient(handler, internalBaseUrl: internalBaseUrl);
+
+        await client.GetUserEmailVerifiedAsync(KeycloakId);
+
+        handler.LastAdminRequestUri!.ToString().Should().Be($"{expectedRoot}/admin/realms/cauce/users/{KeycloakId}");
+        handler.LastTokenRequestUri!.ToString().Should().Be($"{expectedRoot}/realms/cauce/protocol/openid-connect/token");
+    }
+
     [Fact]
     public async Task GetUserEmailVerifiedAsync_QueriesTheUserByIdentifier()
     {
@@ -378,7 +392,8 @@ public sealed class KeycloakAdminClientTests
     private static KeycloakAdminClient CreateClient(
         HttpMessageHandler handler,
         string? portalLoginUrl = null,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        string internalBaseUrl = "")
     {
         var httpClient = new HttpClient(handler);
         if (timeout is not null)
@@ -392,7 +407,8 @@ public sealed class KeycloakAdminClientTests
             Realm = "cauce",
             Audience = "cauce-backend",
             ClientId = "cauce-backend",
-            ClientSecret = "test-secret"
+            ClientSecret = "test-secret",
+            InternalBaseUrl = internalBaseUrl
         });
 
         var clientUrlProvider = Substitute.For<IClientUrlProvider>();
@@ -423,6 +439,8 @@ public sealed class KeycloakAdminClientTests
 
         public Uri? LastAdminRequestUri { get; private set; }
 
+        public Uri? LastTokenRequestUri { get; private set; }
+
         public HttpMethod? LastAdminRequestMethod { get; private set; }
 
         public string? LastAdminRequestBody { get; private set; }
@@ -433,6 +451,7 @@ public sealed class KeycloakAdminClientTests
         {
             if (request.RequestUri!.AbsolutePath.EndsWith("/protocol/openid-connect/token", StringComparison.Ordinal))
             {
+                LastTokenRequestUri = request.RequestUri;
                 return TokenResponse();
             }
 
