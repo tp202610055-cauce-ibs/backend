@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Asp.Versioning;
+using Cauce.Api.Commands;
 using Cauce.Api.Configuration;
 using Cauce.Api.Middleware;
 using Cauce.Api.Workers;
@@ -11,6 +12,7 @@ using Cauce.Infrastructure;
 using Cauce.Infrastructure.Identity;
 using Cauce.Infrastructure.Persistence.Seeders;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using QuestPDF.Infrastructure;
@@ -222,11 +224,24 @@ builder.Services.AddSwaggerGen(options =>
     }
 });
 
-// 12. Health checks básicos.
-builder.Services.AddHealthChecks();
+// 12. Health checks: live sin dependencias; ready comprueba además la base de datos.
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", tags: [DatabaseHealthCheck.ReadyTag]);
 
 // 13. Construcción de la aplicación.
 var app = builder.Build();
+
+// Comandos de operación (migrate, seed-catalogs): se ejecutan y terminan sin levantar el servidor web.
+if (CommandRunner.IsCommand(args))
+{
+    return await CommandRunner.RunAsync(app.Services, args).ConfigureAwait(false);
+}
+
+// En Production, una clave obligatoria ausente detiene el arranque con su nombre, nunca con su valor.
+if (app.Environment.IsProduction())
+{
+    ProductionSettingsValidator.EnsureValid(app.Configuration);
+}
 
 // Primero del pipeline: el log de peticiones, el rate limiting y la auditoría tienen que ver la IP del
 // usuario y no la del proxy (acta A68).
@@ -274,7 +289,14 @@ app.UseAuthorization();
 app.UseAuditingMiddleware();
 
 app.MapControllers();
-app.MapHealthChecks("/api/v1/health/live");
+app.MapHealthChecks("/api/v1/health/live", new HealthCheckOptions
+{
+    Predicate = check => !check.Tags.Contains(DatabaseHealthCheck.ReadyTag)
+});
+app.MapHealthChecks("/api/v1/health/ready", new HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains(DatabaseHealthCheck.ReadyTag)
+});
 
 // Sembrado automático en desarrollo: aplica migraciones, puebla el catálogo de
 // roles y provisiona el nutricionista de prueba.
@@ -291,6 +313,7 @@ await app.Services.EnsureConsentDocumentAsync();
 
 // 15. Ejecución.
 app.Run();
+return CommandRunner.Success;
 
 // Mapea los roles del realm de Keycloak, presentes en el claim realm_access como objeto JSON,
 // a claims de rol estándar de ASP.NET Core para que funcione la autorización basada en
