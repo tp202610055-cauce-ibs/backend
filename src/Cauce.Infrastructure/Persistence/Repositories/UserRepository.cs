@@ -45,6 +45,18 @@ public sealed class UserRepository : IUserRepository
     }
 
     /// <inheritdoc />
+    public async Task<IReadOnlyList<User>> ListOthersWithFcmTokenAsync(
+        string fcmToken,
+        Guid exceptUserId,
+        CancellationToken ct = default)
+    {
+        return await _context.Set<User>()
+            .Where(x => x.FcmToken == fcmToken && x.Id != exceptUserId)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+    }
+
+    /// <inheritdoc />
     public async Task AddAsync(User user, CancellationToken ct = default)
     {
         await _context.Set<User>().AddAsync(user, ct).ConfigureAwait(false);
