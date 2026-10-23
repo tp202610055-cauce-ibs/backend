@@ -756,22 +756,7 @@ public sealed class RecommendationsApiTests
     }
 
     [SkippableFact]
-    public async Task Generate_WhenPendingReview_SchedulesWaitingNotification()
-    {
-        SkipIfUnavailable();
-        var patient = await SeedPatientWithHistoryAsync();
-        var recommendationId = await GenerateAsync(patient.KeycloakId);
-
-        using var scope = _factory.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
-        var waiting = await db.Notifications.AsNoTracking()
-            .SingleAsync(n => n.RelatedEntityId == recommendationId && n.Type == NotificationType.Info);
-        waiting.Channel.Should().Be(NotificationChannel.Push);
-        waiting.UserId.Should().Be(patient.Id);
-    }
-
-    [SkippableFact]
-    public async Task Generate_ReplayWithSameKey_DoesNotDuplicateWaitingNotification()
+    public async Task Generate_WhenPendingReview_DoesNotNotifyPatient()
     {
         SkipIfUnavailable();
         var patient = await SeedPatientWithHistoryAsync();
@@ -784,8 +769,7 @@ public sealed class RecommendationsApiTests
 
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
-        (await db.Notifications.AsNoTracking()
-            .CountAsync(n => n.UserId == patient.Id && n.Type == NotificationType.Info)).Should().Be(1);
+        (await db.Notifications.AsNoTracking().CountAsync(n => n.UserId == patient.Id)).Should().Be(0);
     }
 
     [SkippableFact]
