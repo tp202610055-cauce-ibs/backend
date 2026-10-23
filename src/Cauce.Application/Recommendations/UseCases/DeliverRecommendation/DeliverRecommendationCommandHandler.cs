@@ -2,6 +2,7 @@ using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Notifications;
 using Cauce.Application.Common.Interfaces.Recommendations;
+using Cauce.Application.Common.Notifications;
 using Cauce.Domain.Notifications;
 using Cauce.Domain.Notifications.Enums;
 using Cauce.Domain.Recommendations;
@@ -96,8 +97,8 @@ public sealed class DeliverRecommendationCommandHandler : IRequestHandler<Delive
             recommendation.PatientId,
             NotificationType.Reminder,
             NotificationChannel.Push,
-            "¿Cómo te fue con la recomendación?",
-            "Cuéntanos si aplicaste la recomendación y cómo te sentiste.",
+            PatientPushTexts.Title,
+            PatientPushTexts.FeedbackReminderBody,
             now + FeedbackReminderDelay,
             "recommendation",
             recommendation.Id);
