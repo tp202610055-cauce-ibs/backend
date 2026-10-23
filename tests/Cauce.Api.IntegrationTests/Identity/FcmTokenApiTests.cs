@@ -59,4 +59,41 @@ public sealed class FcmTokenApiTests : IntegrationTestBase, IClassFixture<Postgr
         var user = await db.Users.AsNoTracking().FirstAsync(u => u.Id == patient.Id);
         user.FcmToken.Should().BeNull();
     }
+
+    [SkippableFact]
+    public async Task UpdateFcmToken_SameTokenFromSecondAccount_UnlinksItFromTheFirst()
+    {
+        SkipIfUnavailable();
+        var first = await SeedPatientAsync();
+        var second = await SeedPatientAsync();
+
+        await PatientClient(first.KeycloakId, first.Email)
+            .PutAsJsonAsync("/api/v1/users/me/fcm-token", new { fcmToken = "same-phone-token" });
+        var response = await PatientClient(second.KeycloakId, second.Email)
+            .PutAsJsonAsync("/api/v1/users/me/fcm-token", new { fcmToken = "same-phone-token" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        var (scope, db) = CreateDbScope();
+        using var _ = scope;
+        (await db.Users.AsNoTracking().FirstAsync(u => u.Id == first.Id)).FcmToken.Should().BeNull();
+        (await db.Users.AsNoTracking().FirstAsync(u => u.Id == second.Id)).FcmToken.Should().Be("same-phone-token");
+
+        var moved = (await AuditLogsAsync("User", first.Id, AuditActionType.Update))
+            .Select(audit => audit.AdditionalContext ?? string.Empty)
+            .ToList();
+        moved.Should().Contain(context => context.Contains("fcm_token_moved_to_another_account"));
+        moved.Should().NotContain(context => context.Contains("same-phone-token"));
+    }
+
+    [SkippableFact]
+    public async Task UpdateFcmToken_TokenLongerThanTheColumn_ReturnsBadRequest()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+
+        var response = await PatientClient(patient.KeycloakId, patient.Email)
+            .PutAsJsonAsync("/api/v1/users/me/fcm-token", new { fcmToken = new string('a', 501) });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
 }
