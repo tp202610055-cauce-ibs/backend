@@ -28,9 +28,6 @@ using Cauce.Infrastructure.Recommendations.Llm;
 using Cauce.Infrastructure.Recommendations.Readers;
 using Cauce.Infrastructure.Reports;
 using Cauce.Infrastructure.Storage;
-using FirebaseAdmin;
-using FirebaseAdmin.Messaging;
-using Google.Apis.Auth.OAuth2;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -272,17 +269,7 @@ public static class DependencyInjection
             return;
         }
 
-        services.AddSingleton(serviceProvider =>
-        {
-            var options = serviceProvider.GetRequiredService<IOptions<NotificationOptions>>().Value.Fcm;
-            var app = FirebaseApp.DefaultInstance ?? FirebaseApp.Create(new AppOptions
-            {
-                Credential = string.IsNullOrWhiteSpace(options.CredentialsPath)
-                    ? GoogleCredential.GetApplicationDefault()
-                    : GoogleCredential.FromFile(options.CredentialsPath)
-            });
-            return FirebaseMessaging.GetMessaging(app);
-        });
+        services.AddSingleton<FirebaseMessagingProvider>();
         services.AddScoped<INotificationSender, FirebaseCloudMessagingSender>();
     }
 
