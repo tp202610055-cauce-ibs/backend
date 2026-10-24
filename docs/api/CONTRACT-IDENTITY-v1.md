@@ -395,7 +395,8 @@ texto e IP de origen. El nombre del archivo es `consentimiento-{documentVersion}
 | Campo | Valor |
 |---|---|
 | Auth | Bearer JWT (cualquier rol) |
-| Request | `fcmToken` (string, nullable: enviar `null` desvincula el dispositivo) |
+| Request | `fcmToken` (string, nullable: enviar `null` desvincula el dispositivo; máximo 500 caracteres) |
+| Efecto | Un token pertenece a una sola cuenta: si otra lo tenía (dos cuentas en el mismo teléfono), queda sin token |
 | Response | 204 |
 | Errores | 400, 401, 403, 500 |
 

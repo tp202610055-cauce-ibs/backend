@@ -262,7 +262,7 @@ No comprueba dependencias: responde 200 mientras el proceso esté vivo, aunque l
 ### `PUT /api/v1/users/me/fcm-token`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Registra/actualiza el token FCM del dispositivo (enviar `null` lo desvincula). |
+| Resumen | Registra/actualiza el token FCM del dispositivo (enviar `null` lo desvincula). Máximo 500 caracteres. Si otra cuenta tenía el mismo token, se le quita. |
 | US/TS | US14, TS10 CA01 |
 | Autorización | Autenticado (cualquier rol) |
 | Request body | `UpdateFcmTokenRequest` |
