@@ -79,9 +79,11 @@ public sealed class QaStateInspector
     }
 
     /// <summary>
-    /// Líneas de las secciones pedidas, cuenta por cuenta, en el orden del manifiesto.
+    /// Líneas de las secciones pedidas, cuenta por cuenta, en el orden del manifiesto. Los códigos de los nutricionistas de
+    /// <paramref name="revealCodesOf"/> salen completos; los demás, enmascarados.
     /// </summary>
-    public async Task<IReadOnlyList<string>> InspectAsync(QaInspectionScope scope, QaInspectSections sections, DateTime nowUtc, CancellationToken ct)
+    public async Task<IReadOnlyList<string>> InspectAsync(
+        QaInspectionScope scope, QaInspectSections sections, DateTime nowUtc, CancellationToken ct, IReadOnlySet<string>? revealCodesOf = null)
     {
         ArgumentNullException.ThrowIfNull(scope);
         var lines = new List<string>();
@@ -99,7 +101,8 @@ public sealed class QaStateInspector
             {
                 if (sections.HasFlag(QaInspectSections.Codes))
                 {
-                    await AddCodesAsync(scope, userId, nowUtc, lines, ct).ConfigureAwait(false);
+                    var reveal = revealCodesOf?.Contains(account.Email) == true;
+                    await AddCodesAsync(scope, userId, nowUtc, reveal, lines, ct).ConfigureAwait(false);
                 }
 
                 if (sections.HasFlag(QaInspectSections.State))
@@ -247,7 +250,7 @@ public sealed class QaStateInspector
         }
     }
 
-    private async Task AddCodesAsync(QaInspectionScope scope, Guid nutritionistId, DateTime nowUtc, List<string> lines, CancellationToken ct)
+    private async Task AddCodesAsync(QaInspectionScope scope, Guid nutritionistId, DateTime nowUtc, bool reveal, List<string> lines, CancellationToken ct)
     {
         var codes = await _db.InvitationCodes.AsNoTracking().Where(row => row.NutritionistId == nutritionistId)
             .OrderBy(row => row.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
@@ -261,7 +264,7 @@ public sealed class QaStateInspector
                 _ when !code.IsValid(nowUtc) => "vencido (sin canjear)",
                 _ => "vigente"
             };
-            lines.Add($"    {Mask(code.Code)}: {state}; creado el {Lima(code.CreatedAt)}; vence el {Lima(code.ExpiresAt)}.");
+            lines.Add($"    {(reveal ? code.Code : Mask(code.Code))}: {state}; creado el {Lima(code.CreatedAt)}; vence el {Lima(code.ExpiresAt)}.");
         }
     }
 
