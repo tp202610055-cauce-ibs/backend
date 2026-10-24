@@ -1,6 +1,4 @@
-using Cauce.Domain.Recommendations.Enums;
-using Cauce.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
+using Cauce.Infrastructure.Recommendations;
 
 namespace Cauce.Api.Workers;
 
@@ -12,12 +10,6 @@ namespace Cauce.Api.Workers;
 public sealed class RecommendationExpirationWorker : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(6);
-    private static readonly RecommendationStatus[] ExpirableStatuses =
-    [
-        RecommendationStatus.Generated,
-        RecommendationStatus.PendingReview,
-        RecommendationStatus.Approved
-    ];
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
@@ -70,17 +62,8 @@ public sealed class RecommendationExpirationWorker : BackgroundService
     private async Task ExpireAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
-        var now = DateTime.UtcNow;
-
-        var affected = await context.Recommendations
-            .Where(recommendation => ExpirableStatuses.Contains(recommendation.Status)
-                && recommendation.ExpiresAt != null
-                && recommendation.ExpiresAt < now)
-            .ExecuteUpdateAsync(
-                setters => setters.SetProperty(recommendation => recommendation.Status, RecommendationStatus.Expired),
-                ct)
-            .ConfigureAwait(false);
+        var sweeper = scope.ServiceProvider.GetRequiredService<RecommendationSweeper>();
+        var affected = await sweeper.ExpireDueAsync(DateTime.UtcNow, ct).ConfigureAwait(false);
 
         if (affected > 0)
         {

@@ -22,8 +22,8 @@ public sealed record QaCaseVerdict(string Cp, IReadOnlyList<string> Problems)
 }
 
 /// <summary>
-/// Verificación de solo lectura (<c>verify-qa</c>): cuentas y su estado, cuentas que no deben existir, vínculos,
-/// perfil y alergias, recomendaciones por estado, códigos, agendas y la edad del ancla de los casos con reloj.
+/// Verificación de solo lectura (<c>verify-qa</c>): cuentas, su estado y el consentimiento, cuentas que no deben existir,
+/// vínculos, perfil y alergias, recomendaciones por estado y archivado, códigos, agendas y la edad del ancla con reloj.
 /// Nunca escribe: consultas sin seguimiento y solo lecturas en Keycloak.
 /// </summary>
 public sealed class QaVerifier
@@ -145,6 +145,12 @@ public sealed class QaVerifier
             {
                 problems.Add($"{account.Email} tiene acciones pendientes en Keycloak");
             }
+
+            if (account.Role == QaRole.Patient
+                && !await _db.ConsentRecords.AsNoTracking().AnyAsync(consent => consent.UserId == user.Id && consent.IsCurrent, ct).ConfigureAwait(false))
+            {
+                problems.Add($"{account.Email} no tiene el consentimiento vigente aceptado");
+            }
         }
     }
 
@@ -223,9 +229,11 @@ public sealed class QaVerifier
 
     private async Task CheckRecommendationsAsync(QaManifest manifest, string patient, DateTime now, List<string> problems, CancellationToken ct)
     {
-        var expected = QaSeedOwnership.OwnedBy(manifest, patient)
+        var seeds = QaSeedOwnership.OwnedBy(manifest, patient)
             .Select(pair => pair.Seed)
             .OfType<QaRecommendationSeed>()
+            .ToList();
+        var expected = seeds
             .GroupBy(ExpectedStatus)
             .ToDictionary(group => group.Key, group => group.Count());
         var patientId = await UserIdAsync(patient, ct).ConfigureAwait(false);
@@ -245,6 +253,20 @@ public sealed class QaVerifier
             {
                 problems.Add($"{patient} tiene {have} recomendación(es) {status} y debe tener {want}");
             }
+        }
+
+        // Ninguna sembrada nace archivada; una manual con la vigencia vencida espera el archivado (CP075).
+        var archived = actual.Count(recommendation => !recommendation.IsActive);
+        if (archived > 0)
+        {
+            problems.Add($"{patient} tiene {archived} recomendación(es) archivada(s) y debe tener 0");
+        }
+
+        var pendingArchive = actual.Count(recommendation => recommendation.IsActive && recommendation.ValidUntil < now);
+        var expectedPendingArchive = seeds.Count(seed => seed is { IsManual: true, ValidDaysLeft: < 0 });
+        if (pendingArchive != expectedPendingArchive)
+        {
+            problems.Add($"{patient} tiene {pendingArchive} recomendación(es) vencida(s) pendiente(s) de archivo y debe tener {expectedPendingArchive}");
         }
     }
 

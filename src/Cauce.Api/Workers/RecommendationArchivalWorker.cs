@@ -1,6 +1,6 @@
 using Cauce.Domain.Recommendations.Enums;
 using Cauce.Infrastructure.Persistence;
-using Microsoft.EntityFrameworkCore;
+using Cauce.Infrastructure.Recommendations;
 
 namespace Cauce.Api.Workers;
 
@@ -14,12 +14,6 @@ public sealed class RecommendationArchivalWorker : BackgroundService
 {
     private const int RunHourUtc = 3;
     private static readonly TimeSpan Interval = TimeSpan.FromHours(24);
-    private static readonly RecommendationStatus[] ApprovedTerminalStatuses =
-    [
-        RecommendationStatus.Approved,
-        RecommendationStatus.ModifiedApproved,
-        RecommendationStatus.ManualApproved
-    ];
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
@@ -113,16 +107,6 @@ public sealed class RecommendationArchivalWorker : BackgroundService
     /// <returns>La cantidad de recomendaciones archivadas.</returns>
     internal static Task<int> ArchiveDueAsync(CauceDbContext context, DateTime nowUtc, CancellationToken ct)
     {
-        return context.Recommendations
-            .Where(recommendation => recommendation.IsActive
-                && recommendation.ValidUntil != null
-                && recommendation.ValidUntil < nowUtc
-                && ApprovedTerminalStatuses.Contains(recommendation.Status))
-            .ExecuteUpdateAsync(
-                setters => setters
-                    .SetProperty(recommendation => recommendation.IsActive, false)
-                    .SetProperty(recommendation => recommendation.ArchiveReason, ArchiveReason.TemporalExpiration)
-                    .SetProperty(recommendation => recommendation.ArchivedAt, nowUtc),
-                ct);
+        return new RecommendationSweeper(context).ArchiveDueAsync(nowUtc, ct);
     }
 }

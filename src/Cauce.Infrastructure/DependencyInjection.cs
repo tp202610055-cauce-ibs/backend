@@ -23,6 +23,7 @@ using Cauce.Infrastructure.Patients;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Repositories;
 using Cauce.Infrastructure.Persistence.Seeders;
+using Cauce.Infrastructure.Recommendations;
 using Cauce.Infrastructure.Recommendations.Engines;
 using Cauce.Infrastructure.Recommendations.Llm;
 using Cauce.Infrastructure.Recommendations.Readers;
@@ -181,6 +182,7 @@ public static class DependencyInjection
         services.AddScoped<IFoodSuggestionsReader, FoodSuggestionsReader>();
         services.AddScoped<ICustomFoodAllergenChecker, CustomFoodAllergenChecker>();
         services.AddScoped<IbsSssScheduleProcessor>();
+        services.AddScoped<RecommendationSweeper>();
 
         // Módulo de auditoría, outbox y notificaciones (Prompt 5).
         services.TryAddSingleton(TimeProvider.System);
