@@ -64,6 +64,42 @@ public sealed class VerifyQaTests
     }
 
     [SkippableFact]
+    public async Task VerifyQa_Cp075AfterArchival_FailsUntilItIsReset()
+    {
+        SkipIfUnavailable();
+        (await RunAsync("verify-qa", "CP075")).Should().Be(CommandRunner.Success);
+        (await RunAsync("archive-recommendations")).Should().Be(CommandRunner.Success);
+
+        var code = await RunCapturingAsync("verify-qa", "CP075");
+
+        code.Should().Be(CommandRunner.Failure);
+        CapturedLog.Should().Contain(line => line.Contains("CP075 FALLA")
+            && line.Contains("1 recomendación(es) archivada(s) y debe tener 0")
+            && line.Contains("0 recomendación(es) vencida(s) pendiente(s) de archivo y debe tener 1"));
+
+        (await RunAsync("reset-qa", "CP075")).Should().Be(CommandRunner.Success);
+        (await RunAsync("verify-qa", "CP075")).Should().Be(CommandRunner.Success);
+    }
+
+    [SkippableFact]
+    public async Task VerifyQa_PatientWithoutCurrentConsent_Fails()
+    {
+        SkipIfUnavailable();
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            var patient = await db.Users.SingleAsync(user => user.Email == "paciente.editar@ejemplo.com");
+            await db.ConsentRecords.Where(consent => consent.UserId == patient.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(consent => consent.IsCurrent, false));
+        }
+
+        var code = await RunCapturingAsync("verify-qa", "CP071");
+
+        code.Should().Be(CommandRunner.Failure);
+        CapturedLog.Should().Contain(line => line.Contains("CP071 FALLA") && line.Contains("paciente.editar@ejemplo.com no tiene el consentimiento vigente aceptado"));
+    }
+
+    [SkippableFact]
     public async Task VerifyQa_ForbiddenAccountPresent_Fails()
     {
         SkipIfUnavailable();
