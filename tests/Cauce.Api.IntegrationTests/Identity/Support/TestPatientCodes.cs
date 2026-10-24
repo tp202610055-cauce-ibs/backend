@@ -12,7 +12,8 @@ namespace Cauce.Api.IntegrationTests.Identity.Support;
 /// </summary>
 public static class TestPatientCodes
 {
-    private static int _counter;
+    // Arranca lejos de patient_code_seq, que empieza en 1: un alta real en la misma prueba no repite el código.
+    private static int _counter = 500_000;
 
     /// <summary>
     /// Devuelve un código de paciente no usado antes en este proceso.
