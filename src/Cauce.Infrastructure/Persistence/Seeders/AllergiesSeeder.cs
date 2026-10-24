@@ -25,6 +25,11 @@ public sealed class AllergiesSeeder
         ("Fructosa", AllergyType.Intolerance, "Malabsorción de fructosa, frecuentemente asociada a síntomas de SII.")
     };
 
+    /// <summary>
+    /// Nombres de las alergias del catálogo inicial.
+    /// </summary>
+    internal static IReadOnlyList<string> CatalogNames { get; } = Catalog.Select(entry => entry.Name).ToList();
+
     private readonly CauceDbContext _context;
     private readonly ILogger<AllergiesSeeder> _logger;
 
