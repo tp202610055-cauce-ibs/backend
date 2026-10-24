@@ -1,6 +1,7 @@
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Notifications;
+using Cauce.Application.Common.Notifications;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Enums;
 using Cauce.Domain.Notifications;
@@ -18,10 +19,6 @@ namespace Cauce.Api.Workers;
 /// </summary>
 public sealed class WeeklyRecommendationReminderWorker : BackgroundService
 {
-    private const string ReminderTitle = "Cauce — Recordatorio semanal";
-    private const string ReminderBody =
-        "No olvides registrar tus comidas y síntomas esta semana para recibir mejores recomendaciones.";
-
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<WeeklyRecommendationReminderWorker> _logger;
@@ -79,7 +76,10 @@ public sealed class WeeklyRecommendationReminderWorker : BackgroundService
         }
     }
 
-    private async Task ScheduleRemindersAsync(CancellationToken ct)
+    /// <summary>
+    /// Agenda el recordatorio semanal para cada paciente activo. Las pruebas lo invocan sin esperar al lunes.
+    /// </summary>
+    internal async Task ScheduleRemindersAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
@@ -99,7 +99,8 @@ public sealed class WeeklyRecommendationReminderWorker : BackgroundService
         foreach (var patientId in patientIds)
         {
             var notification = Notification.Schedule(
-                patientId, NotificationType.Reminder, NotificationChannel.Push, ReminderTitle, ReminderBody, now);
+                patientId, NotificationType.Reminder, NotificationChannel.Push, PatientPushTexts.Title,
+                PatientPushTexts.WeeklyReminderBody, now);
             await scheduler.ScheduleAsync(notification, ct).ConfigureAwait(false);
         }
 
