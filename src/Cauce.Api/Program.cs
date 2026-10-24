@@ -10,6 +10,7 @@ using Cauce.Application;
 using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Infrastructure;
 using Cauce.Infrastructure.Identity;
+using Cauce.Infrastructure.Notifications.Senders;
 using Cauce.Infrastructure.Persistence.Seeders;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -241,6 +242,13 @@ if (CommandRunner.IsCommand(args))
 if (app.Environment.IsProduction())
 {
     ProductionSettingsValidator.EnsureValid(app.Configuration);
+}
+
+// Con el push real, Firebase se inicializa al arrancar: una credencial inválida deja un error en el log,
+// no detiene la API, y el push falla controlado hasta corregirla.
+if (app.Services.GetService<FirebaseMessagingProvider>() is { } firebase)
+{
+    _ = firebase.Messaging;
 }
 
 // Primero del pipeline: el log de peticiones, el rate limiting y la auditoría tienen que ver la IP del

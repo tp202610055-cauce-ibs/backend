@@ -1,5 +1,6 @@
 using Cauce.Application.Common.Interfaces.Notifications;
 using Cauce.Application.Common.Messaging;
+using Cauce.Application.Common.Notifications;
 using Cauce.Domain.Notifications;
 using Cauce.Domain.Notifications.Enums;
 using Cauce.Domain.Recommendations.Events;
@@ -47,8 +48,8 @@ public sealed class RecommendationModifiedApprovedEventHandler
             domainEvent.PatientId,
             NotificationType.Recommendation,
             NotificationChannel.Push,
-            "Tu recomendación está lista",
-            "Tu nutricionista revisó y ajustó tu recomendación. Tocá para verla.",
+            PatientPushTexts.Title,
+            PatientPushTexts.NewRecommendationBody,
             DateTime.UtcNow,
             RelatedEntityType,
             domainEvent.RecommendationId);

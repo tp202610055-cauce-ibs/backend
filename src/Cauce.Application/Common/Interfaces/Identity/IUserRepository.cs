@@ -32,6 +32,14 @@ public interface IUserRepository
     Task<User?> FindByKeycloakIdAsync(string keycloakId, CancellationToken ct = default);
 
     /// <summary>
+    /// Lista, con seguimiento de cambios, las demás cuentas que tienen registrado el token de dispositivo dado.
+    /// </summary>
+    /// <param name="fcmToken">Token de FCM del dispositivo.</param>
+    /// <param name="exceptUserId">Cuenta que se excluye: la que está registrando el token.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    Task<IReadOnlyList<User>> ListOthersWithFcmTokenAsync(string fcmToken, Guid exceptUserId, CancellationToken ct = default);
+
+    /// <summary>
     /// Agrega un nuevo usuario al contexto de persistencia.
     /// </summary>
     /// <param name="user">Usuario a agregar.</param>

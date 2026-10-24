@@ -1,8 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using Cauce.Api.IntegrationTests.Identity.Support;
+using Cauce.Application.Common.Notifications;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.Notifications;
+using Cauce.Domain.Notifications.Enums;
 using Cauce.Infrastructure.ClinicalRegistry;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -12,8 +14,8 @@ namespace Cauce.Api.IntegrationTests.ClinicalRegistry;
 
 /// <summary>
 /// Pruebas de integración de las agendas de evaluaciones IBS-SSS (US12 CA02): al registrar una
-/// evaluación se agenda la siguiente; el procesador envía el recordatorio a las 48 horas de vencida y
-/// marca como perdida la que supera los 7 días.
+/// evaluación se agenda la siguiente; el procesador avisa el día del vencimiento, recuerda a las 48 horas
+/// de vencida y marca como perdida la que supera los 7 días.
 /// </summary>
 [Trait("Category", "Integration")]
 public sealed class IbsSssScheduleApiTests
@@ -47,12 +49,19 @@ public sealed class IbsSssScheduleApiTests
         return schedule.Id;
     }
 
-    private async Task<(int RemindersSent, int MarkedMissed)> RunProcessorAsync()
+    private async Task<IbsSssScheduleProcessingResult> RunProcessorAsync(DateTime? utcNow = null)
     {
         var (scope, _) = CreateDbScope();
         using var _scope = scope;
         var processor = scope.ServiceProvider.GetRequiredService<IbsSssScheduleProcessor>();
-        return await processor.ProcessAsync(DateTime.UtcNow);
+        return await processor.ProcessAsync(utcNow ?? DateTime.UtcNow);
+    }
+
+    private async Task<List<Notification>> NotificationsOfAsync(Guid patientId)
+    {
+        var (scope, db) = CreateDbScope();
+        using var _ = scope;
+        return await db.Set<Notification>().AsNoTracking().Where(n => n.UserId == patientId).ToListAsync();
     }
 
     [SkippableFact]
@@ -81,19 +90,24 @@ public sealed class IbsSssScheduleApiTests
         var patient = await SeedPatientAsync();
         var scheduleId = await SeedScheduleAsync(patient.Id, DateTime.UtcNow.AddDays(-3));
 
-        var (reminders, _) = await RunProcessorAsync();
+        var result = await RunProcessorAsync();
 
-        reminders.Should().Be(1);
+        result.RemindersSent.Should().Be(1);
+        result.DueNoticesSent.Should().Be(0);
 
         var (scope, db) = CreateDbScope();
         using var _ = scope;
         var schedule = await db.IbsSssSchedules.AsNoTracking().SingleAsync(s => s.Id == scheduleId);
         schedule.ReminderSentAt.Should().NotBeNull();
-        (await db.Set<Notification>().AsNoTracking().CountAsync(n => n.UserId == patient.Id)).Should().Be(1);
+        var reminder = (await NotificationsOfAsync(patient.Id)).Should().ContainSingle().Subject;
+        reminder.Type.Should().Be(NotificationType.Reminder);
+        reminder.RelatedEntityType.Should().Be("ibs_sss_schedule");
+        reminder.RelatedEntityId.Should().Be(scheduleId);
+        reminder.Title.Should().Be("Cauce");
+        reminder.Body.Should().Be(PatientPushTexts.FollowUpPendingBody);
 
         // Un segundo pase no reenvía (reminder_sent_at ya está fijado).
-        var (remindersAgain, _) = await RunProcessorAsync();
-        remindersAgain.Should().Be(0);
+        (await RunProcessorAsync()).RemindersSent.Should().Be(0);
     }
 
     [SkippableFact]
@@ -103,13 +117,89 @@ public sealed class IbsSssScheduleApiTests
         var patient = await SeedPatientAsync();
         var scheduleId = await SeedScheduleAsync(patient.Id, DateTime.UtcNow.AddDays(-8));
 
-        var (_, missed) = await RunProcessorAsync();
+        var result = await RunProcessorAsync();
 
-        missed.Should().Be(1);
+        result.MarkedMissed.Should().Be(1);
 
         var (scope, db) = CreateDbScope();
         using var _ = scope;
         var schedule = await db.IbsSssSchedules.AsNoTracking().SingleAsync(s => s.Id == scheduleId);
         schedule.Missed.Should().BeTrue();
+    }
+
+    [SkippableFact]
+    public async Task Processor_ScheduleDueTodayInLima_SendsOneDueNotice()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        var scheduleId = await SeedScheduleAsync(patient.Id, DateTime.UtcNow.Date);
+
+        var result = await RunProcessorAsync();
+
+        result.DueNoticesSent.Should().Be(1);
+        result.RemindersSent.Should().Be(0);
+        var notice = (await NotificationsOfAsync(patient.Id)).Should().ContainSingle().Subject;
+        notice.Type.Should().Be(NotificationType.Info);
+        notice.Channel.Should().Be(NotificationChannel.Push);
+        notice.RelatedEntityType.Should().Be("ibs_sss_schedule");
+        notice.RelatedEntityId.Should().Be(scheduleId);
+        notice.Title.Should().Be("Cauce");
+        notice.Body.Should().Be(PatientPushTexts.FollowUpAvailableBody);
+
+        // Un segundo pase el mismo día no repite el aviso.
+        (await RunProcessorAsync()).DueNoticesSent.Should().Be(0);
+        (await NotificationsOfAsync(patient.Id)).Should().ContainSingle();
+    }
+
+    [SkippableFact]
+    public async Task Processor_ScheduleDueAfterTodayInLima_SendsNothing()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedScheduleAsync(patient.Id, DateTime.UtcNow.Date.AddDays(2));
+
+        var result = await RunProcessorAsync();
+
+        result.Should().Be(new IbsSssScheduleProcessingResult(0, 0, 0));
+        (await NotificationsOfAsync(patient.Id)).Should().BeEmpty();
+    }
+
+    [SkippableFact]
+    public async Task Processor_DueNoticeThen48HourReminder_BothCoexistForTheSameSchedule()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        var dueDate = DateTime.UtcNow.Date;
+        var scheduleId = await SeedScheduleAsync(patient.Id, dueDate);
+
+        var dueDay = await RunProcessorAsync(dueDate.AddHours(14));
+        var twoDaysLater = await RunProcessorAsync(dueDate.AddHours(49));
+        var threeDaysLater = await RunProcessorAsync(dueDate.AddHours(73));
+
+        dueDay.DueNoticesSent.Should().Be(1);
+        twoDaysLater.Should().Be(new IbsSssScheduleProcessingResult(1, 0, 0));
+        threeDaysLater.Should().Be(new IbsSssScheduleProcessingResult(0, 0, 0));
+        var notifications = await NotificationsOfAsync(patient.Id);
+        notifications.Should().HaveCount(2);
+        notifications.Should().OnlyContain(n => n.RelatedEntityType == "ibs_sss_schedule" && n.RelatedEntityId == scheduleId);
+        notifications.Select(n => n.Type).Should().BeEquivalentTo(new[] { NotificationType.Info, NotificationType.Reminder });
+    }
+
+    [SkippableFact]
+    public async Task Processor_CompletedSchedule_SendsNothing()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        var scheduleId = await SeedScheduleAsync(patient.Id, DateTime.UtcNow.Date.AddDays(-3));
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            var schedule = await db.IbsSssSchedules.SingleAsync(s => s.Id == scheduleId);
+            schedule.MarkCompleted(DateTime.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        (await RunProcessorAsync()).Should().Be(new IbsSssScheduleProcessingResult(0, 0, 0));
+        (await NotificationsOfAsync(patient.Id)).Should().BeEmpty();
     }
 }

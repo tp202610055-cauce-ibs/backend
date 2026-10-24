@@ -63,7 +63,7 @@ public sealed class PatientSubtypeChangedEventHandler
             NotificationChannel.Email,
             "Un paciente actualizó su subtipo de SII",
             $"Un paciente de tu seguimiento cambió su subtipo de SII de {domainEvent.OldSubtype} a {domainEvent.NewSubtype}. "
-            + "Revisá su perfil en el portal para más detalles.",
+            + "Revisa su perfil en el portal para más detalles.",
             DateTime.UtcNow,
             RelatedEntityType,
             domainEvent.Id);

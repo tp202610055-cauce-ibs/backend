@@ -49,19 +49,38 @@ public sealed class UpdateFcmTokenCommandHandler : IRequestHandler<UpdateFcmToke
 
         user.RegisterFcmToken(request.FcmToken);
 
-        await _auditLogger.LogAsync(
-            AuditActionType.Update,
-            nameof(User),
-            user.Id,
-            oldValuesHash: null,
-            newValuesHash: null,
-            additionalContext: JsonSerializer.Serialize(new { operation = "fcm_token_updated" }),
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        // Un teléfono tiene un solo token: si otra cuenta lo tenía (cambio de sesión en el mismo equipo),
+        // se le quita en la misma transacción para que sus push no lleguen a este teléfono.
+        if (user.FcmToken is { } fcmToken)
+        {
+            var previousOwners = await _userRepository
+                .ListOthersWithFcmTokenAsync(fcmToken, user.Id, cancellationToken)
+                .ConfigureAwait(false);
+            foreach (var previousOwner in previousOwners)
+            {
+                previousOwner.RegisterFcmToken(null);
+                await AuditAsync(previousOwner.Id, "fcm_token_moved_to_another_account", cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        await AuditAsync(user.Id, "fcm_token_updated", cancellationToken).ConfigureAwait(false);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("FCM token updated for user {UserId}.", user.Id);
 
         return Unit.Value;
+    }
+
+    private Task AuditAsync(Guid userId, string operation, CancellationToken cancellationToken)
+    {
+        return _auditLogger.LogAsync(
+            AuditActionType.Update,
+            nameof(User),
+            userId,
+            oldValuesHash: null,
+            newValuesHash: null,
+            additionalContext: JsonSerializer.Serialize(new { operation }),
+            cancellationToken: cancellationToken);
     }
 }
