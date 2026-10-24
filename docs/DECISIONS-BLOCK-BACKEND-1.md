@@ -17,7 +17,8 @@ por inexistente el Bloque 3, y se agregó A67. El 2026-09-26 se agregaron A68 y 
 listo 1. El 2026-09-30 se agregó A70, del endurecimiento del registro tras el incidente del 28-sep, y el
 2026-10-01 la A71, sobre la baja de cuenta en Keycloak. El 2026-10-12 se agregó A72, del bloque
 Backend-Contract-1, el 2026-10-15 la A74, del bloque Backend-Seed-Volume-1, y el 2026-10-19 la A75, del
-bloque Backend-Portal-B1. El 2026-10-21 se agregó A76, del bloque Backend-Deploy-D1.
+bloque Backend-Portal-B1. El 2026-10-21 se agregó A76, del bloque Backend-Deploy-D1, y el 2026-10-24 la A78, del
+bloque D-2c.
 
 ---
 
@@ -61,6 +62,7 @@ bloque Backend-Portal-B1. El 2026-10-21 se agregó A76, del bloque Backend-Deplo
 | [A74](#acta-a74-paciente-de-desarrollo-con-historial-de-volumen) | Paciente de desarrollo con historial de volumen | Implementada en Backend-Seed-Volume-1. Pendientes el primer arranque real y el pase en teléfono |
 | [A75](#acta-a75-contrato-del-portal-para-el-bloque-b-1) | Contrato del portal para el bloque B-1 | Propuesta. Implementada en Backend-Portal-B1. Queda abierta la expiración al leer sin evento |
 | [A76](#acta-a76-despliegue-en-una-vm-para-la-certificación-qa) | Despliegue en una VM para la certificación QA | Propuesta. Implementada en Backend-Deploy-D1. Pendiente la verificación en la VM |
+| [A78](#acta-a78-evidencias-y-disparos-a-demanda-para-los-pasos-del-operador-de-qa) | Evidencias y disparos a demanda para los pasos del operador de QA | Propuesta. Implementada en D-2c. Pendiente la medición de memoria en la VM |
 
 ---
 
@@ -3229,5 +3231,90 @@ En la VM queda lo que el cierre del bloque lista como no verificado.
 1. Instalación en la VM y pruebas de humo de `README-VM.md`, con la lista de lo no verificado del cierre.
 2. Cuentas y datos de QA, `seed-qa` y `reset-qa`: bloque D-2.
 3. A73 sigue reservada para Docs-Trace-1.
+
+---
+
+## Acta A78: Evidencias y disparos a demanda para los pasos del operador de QA
+
+**Estado:** Propuesta. Implementada en D-2c. Pendiente la medición de memoria en la VM
+**Fecha:** 2026-10-24
+**Aprobado por:** decide Trigo; aprueba Kiwicha
+**Aplicabilidad:** Backend (comandos de QA, workers de recomendaciones y documentación de QA). Rama
+`feature/backend-qa-seed-d2c`, sobre `b2dca30` (tag `v0.20.0-qa-seed`).
+
+---
+
+### Contexto
+
+Durante la semana de QA, 29 casos de prueba piden 33 veces algo al equipo de desarrollo: mostrar un registro,
+confirmar el estado de un dato o disparar un proceso. El modo QA apaga los workers del cuestionario, del recordatorio
+semanal, del archivado y de la expiración, así que esos disparos van a mano. El operador no es técnico y los revisores
+son externos y comparten IP: la salida debe estar en español, poder copiarse tal cual y no traer IP, user agent,
+hashes, tokens ni contraseñas. El realm no activa eventos de Keycloak, así que toda evidencia sale de `audit_logs` o
+del estado en la base.
+
+### Decisión
+
+1. **`audit-log <CPxxx | correo>`**, de solo lectura, con `--since`, `--action` y `--limit` (por omisión 24 horas
+   y 50 filas). Resuelve las cuentas con el manifiesto. Una cuenta exclusiva aporta todas sus filas; una compartida,
+   sus ingresos y lo que hizo sobre los datos del caso. Entran también las filas sobre los datos de los pacientes del
+   caso, los ingresos fallidos sin actor si el caso tiene cuentas que no deben existir y las solicitudes anónimas
+   cuyo correo enmascarado coincide.
+2. **`inspect-qa <CPxxx | correo>`**, de solo lectura, con secciones de consentimiento, comidas, cuestionario,
+   códigos, recomendaciones y estado de la cuenta. Conteos, estados y fechas, sin textos clínicos. Los códigos salen
+   enmascarados; `--reveal-codes` muestra completos solo los que siembra el manifiesto (CP053 y CP088).
+3. **`archive-recommendations` y `expire-recommendations`**, una pasada a demanda de cada worker. La lógica pasa a
+   `RecommendationSweeper` (Infrastructure), que usan los workers y los comandos.
+4. **Una cuenta anonimizada se encuentra por Keycloak.** La baja de cuenta cambia el correo en el backend pero
+   conserva el `KeycloakId`, y Keycloak conserva el correo (A71). Los dos comandos la ubican por ahí (CP066).
+5. **`verify-qa` comprueba además** el consentimiento vigente de cada paciente sembrado y el archivado: ninguna
+   recomendación sembrada nace archivada, y las manuales con la vigencia vencida quedan pendientes de archivo.
+6. **`docs/qa/RUNBOOK-QA.md`**: una fila por cada pedido del operador (35, con los dos disparos de
+   `process-ibs-sss`), con el comando exacto y cuándo cuenta como «pasó».
+7. Los cuatro comandos exigen `QA_MODE=1` y entran a la lista cerrada de `vm/qa.sh`, que los corre con
+   `docker compose run --rm --no-deps api`, en un contenedor aparte con su propio límite de memoria.
+
+### Consecuencias
+
+1. **Lo que el registro no puede atribuir.** Un ingreso con un correo sin cuenta guarda solo el canal y la causa:
+   `audit-log` lo muestra como «correo sin cuenta», junto con todos los de la ventana (CP006 y CP080). La solicitud de
+   recuperación guarda la primera letra y el dominio del correo (`AuditMask`): no distingue cuentas que los
+   compartan (CP018).
+2. **Un intento rechazado de modificar una recomendación aprobada no deja registro propio** (CP048). La evidencia
+   es que no hay cambios después de la aprobación. No se cambió el comportamiento.
+3. **El archivado automático queda con autor nulo**, que `audit-log` muestra como «Sistema». El trigger toma el actor
+   de `cauce.actor_user_id`, que solo fija el interceptor de `SaveChanges`, y el barrido es un `ExecuteUpdate`.
+4. **Los disparos son globales.** `archive-recommendations` y `process-ibs-sss` atienden a todas las cuentas. Una
+   pasada de `process-ibs-sss` sirve a CP031 y a CP084 a la vez, y también avisa a CP030, CP032 y CP033.
+5. **No ejecutables en la VM:** CP073 variante E (la cubre `CreateManual_NutritionistNotAssigned_Returns403`) y
+   CP089 paso 6 (el backend y el portal no tienen la solicitud de términos, HU0027 escenario 3).
+6. Un 429 del límite de peticiones no deja fila de ingreso: el limitador corre antes de la auditoría. En modo QA el
+   límite está apagado.
+7. Los códigos completos de CP053 y CP088 se entregan al revisor por el documento de entrega o por un medio privado.
+
+### Decisiones de implementación
+
+1. **Sin IP, user agent ni hashes desde la consulta.** `QaAuditLogReader` proyecta solo las columnas que muestra; esos
+   campos nunca se leen.
+2. **Lista blanca del contexto adicional.** `QaAuditLogFormatter` muestra canal, causa, operación, motivo, origen,
+   correo enmascarado, alérgenos aceptados, conteos, rol y resultado; lo demás sale como «(otros datos omitidos)».
+3. **Sin conteos de comidas ni síntomas en `verify-qa`.** La siembra los genera también desde `activity` y
+   `supportingData`; contarlos daría falsas FALLA.
+4. **Prueba de Ollama inalcanzable.** Con el puerto cerrado y con un host que no resuelve (el caso de la VM, que no
+   tiene servicio de Ollama), el orquestador devuelve el texto de respaldo sin lanzar y antes del timeout.
+5. El contexto se guarda en `jsonb`, que ordena las claves: la salida muestra `causa` antes que `canal`.
+
+### Verificación
+
+En la laptop, con Docker y la suite en secuencial: 1412 pruebas en `b2dca30` y 1445 después (Domain 411,
+Application 376, Infrastructure 191, integración 467), sin omitidas. Build sin errores y con las 8 advertencias de siempre. Sobre los mismos datos, los dos
+comandos de barrido dejan el mismo estado que sus workers.
+
+### Pendientes
+
+1. Medir en la VM el pico de memoria de `verify-qa --all` con `run --rm --no-deps` y con `exec`, como indica
+   `RUNBOOK-QA.md`.
+2. Confirmar con `infrastructure` los comandos para apagar y encender la API en CP051 variante B.
+3. CP089 queda declarado como no ejecutable en el documento de entrega.
 
 ---

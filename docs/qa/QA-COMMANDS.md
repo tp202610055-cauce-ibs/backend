@@ -1,10 +1,15 @@
-# Comandos de QA: seed-qa, reset-qa y verify-qa
+# Comandos de QA
 
-Preparan y comprueban las cuentas y los datos de los casos de prueba (CP) de la semana de QA. Corren dentro del contenedor de la API, con el mismo binario:
+Preparan, comprueban e inspeccionan las cuentas y los datos de los casos de prueba (CP) de la semana de QA. Usan el mismo binario de la API. En la VM, `bash vm/qa.sh <comando>` los corre en un contenedor aparte (`docker compose run --rm --no-deps api <comando>`), con su propio límite de memoria:
 
-    dc exec api dotnet Cauce.Api.dll seed-qa
-    dc exec api dotnet Cauce.Api.dll reset-qa CP082 CP066
-    dc exec api dotnet Cauce.Api.dll verify-qa --all
+    bash vm/qa.sh seed-qa
+    bash vm/qa.sh reset-qa CP082 CP066
+    bash vm/qa.sh verify-qa --all
+    bash vm/qa.sh audit-log CP045 --action approve
+    bash vm/qa.sh inspect-qa CP066 --state
+    bash vm/qa.sh archive-recommendations
+
+Qué comando usar en cada paso del operador: `docs/qa/RUNBOOK-QA.md`.
 
 La fuente de verdad es el manifiesto `docs/qa/qa-manifest-*.json`. La imagen lo publica en `qa/` junto a la API. Para usar otro sin recompilar: `--manifest <ruta>`, con el archivo montado en el contenedor. El código no contiene datos de ningún CP: si el manifiesto cambia, solo cambia el archivo.
 
@@ -12,7 +17,7 @@ La fuente de verdad es el manifiesto `docs/qa/qa-manifest-*.json`. La imagen lo 
 
 | Variable | Uso | Comandos |
 |---|---|---|
-| `QA_MODE=1` | Habilita los comandos de QA | Los tres |
+| `QA_MODE=1` | Habilita los comandos de QA | Todos |
 | `QA_ALLOW_DESTRUCTIVE=1` | Permite borrar y recrear cuentas | `seed-qa` y `reset-qa` |
 | `QA_PATIENT_PASSWORD` | Contraseña de los pacientes del manifiesto | `seed-qa` y `reset-qa` |
 | `QA_NUTRITIONIST_PASSWORD` | Contraseña de los nutricionistas del manifiesto | `seed-qa` y `reset-qa` |
@@ -79,12 +84,13 @@ Rearma uno o más casos o cuentas, y vuelve a anclar al reloj los datos relativo
 Solo lectura: no escribe en la base ni en Keycloak. Sin argumentos revisa todos los casos. Imprime una línea por caso (`CP036 OK` o `CP036 FALLA: motivo`) y un resumen.
 
 Qué comprueba:
-- **Cuentas:** que existan, con su estado en Keycloak y en el backend, sin bloqueo y sin acciones pendientes.
+- **Cuentas:** que existan, con su estado en Keycloak y en el backend, sin bloqueo y sin acciones pendientes. Cada paciente, con el consentimiento vigente.
 - **Cuentas `mustNotExist`:** que no existan.
 - **Datos del caso:**
   - vínculos activos;
   - perfil y alergias;
   - recomendaciones contadas por estado, con la expiración que se evalúa al leer;
+  - ninguna recomendación archivada, y las manuales con la vigencia vencida (CP075) pendientes de archivo;
   - códigos de invitación;
   - cuestionarios pendientes.
 - **Edad del ancla de los casos con reloj:**
@@ -94,7 +100,65 @@ Qué comprueba:
 | `hours` | 2 horas desde el rearme |
 | `days` | El mismo día de Lima |
 
-Un caso consumido sale en FALLA hasta que se corre `reset-qa` sobre él.
+Un caso consumido sale en FALLA hasta que se corre `reset-qa` sobre él. Después de `archive-recommendations`, CP075 sale en FALLA hasta su rearme.
+
+No comprueba comidas, síntomas, alimentos propios ni cuestionarios respondidos (la siembra los genera también desde `activity` y `supportingData`), ni notas, push, buzón o glosario.
+
+## audit-log
+
+    audit-log <CPxxx | correo> [--since <6h | 2d | 2026-10-24 | 2026-10-24T09:30>] [--action <tipo>[,<tipo>]] [--limit N]
+
+Solo lectura. Muestra las filas de `audit_logs` de las cuentas de un caso, o de una cuenta del manifiesto. Por omisión, las últimas 24 horas y 50 filas, de la más antigua a la más reciente. Una línea por fila: hora de Lima, hora UTC, acción, entidad, contexto y autor.
+
+Qué filas entran:
+- las que hizo una cuenta del caso que no se usa en otros casos;
+- de una cuenta compartida, sus ingresos y lo que hizo sobre los datos del caso;
+- las que tocan los datos de los pacientes del caso (recomendaciones, comidas, perfil, vínculos), también las de los procesos automáticos;
+- si el caso tiene cuentas que no deben existir, los ingresos fallidos sin actor de la ventana;
+- las solicitudes de recuperación y de reenvío cuyo correo enmascarado coincide con una cuenta del caso.
+
+| Autor | Significa |
+|---|---|
+| Un correo `@ejemplo.com` | Lo hizo esa cuenta del caso |
+| Sistema (proceso automático) | Un worker, un comando o un trigger sin sesión |
+| correo sin cuenta (no se puede atribuir) | Ingreso con un correo que no existe; el registro no guarda el correo |
+| sin sesión (coincide el correo enmascarado) | Solicitud anónima; el registro guarda solo la primera letra y el dominio |
+| otra cuenta | Una cuenta que no es del caso |
+
+- Nunca imprime IP, user agent ni hashes: no los lee de la base.
+- Del contexto adicional solo salen las claves de una lista blanca (canal, causa, operación, motivo, origen, correo enmascarado, alérgenos aceptados, conteos, rol y resultado). Lo demás sale como «(otros datos omitidos)».
+- Encuentra al paciente anonimizado por la baja de cuenta por su identidad en Keycloak, que conserva el correo.
+- `--action` acepta el nombre del tipo con o sin guion bajo (`failed_login`, `FailedLogin`).
+- Un intento rechazado de modificar una recomendación aprobada no deja fila propia (CP048).
+
+## inspect-qa
+
+    inspect-qa <CPxxx | correo> [--consent] [--meals] [--ibs] [--codes] [--recs] [--state] [--reveal-codes]
+
+Solo lectura. Sin banderas, muestra todas las secciones. Conteos, estados y fechas, sin textos clínicos ni nombres de alimentos.
+
+| Bandera | Muestra |
+|---|---|
+| `--consent` | Versión aceptada, fecha y si está vigente |
+| `--meals` | Comidas que llegaron hoy (día de Lima): hora de llegada, de registro en el teléfono, de consumo, franja y sincronización |
+| `--ibs` | Cuestionarios respondidos, los pendientes, si salió el aviso o el recordatorio, y la hora del aviso (09:00 de Lima) |
+| `--codes` | Códigos de invitación de los nutricionistas, enmascarados (`2C****FK`), con su estado y fechas |
+| `--recs` | Recomendaciones del paciente: estado, si está activa o archivada, vigencia y la respuesta del paciente |
+| `--state` | Estado de la cuenta, si el correo está anonimizado y qué datos conserva |
+| `--reveal-codes` | Implica `--codes`. Muestra completos solo los códigos de los nutricionistas con códigos sembrados por el manifiesto (CP053 y CP088); los demás siguen enmascarados |
+
+Los códigos completos se entregan al revisor por el documento de entrega o por un medio privado, nunca por un chat público: los repositorios son públicos.
+
+## archive-recommendations y expire-recommendations
+
+Una pasada a demanda de los workers que el modo QA apaga, con la misma lógica (`RecommendationSweeper`). No reciben argumentos y afectan a todas las cuentas.
+
+| Comando | Qué hace | Worker equivalente |
+|---|---|---|
+| `archive-recommendations` | Archiva las recomendaciones aprobadas activas cuya vigencia venció, con el motivo «vigencia vencida» | `RecommendationArchivalWorker` (03:00 UTC) |
+| `expire-recommendations` | Pasa a vencidas las generadas, pendientes o aprobadas sin entregar cuya ventana venció | `RecommendationExpirationWorker` (cada 6 horas) |
+
+Imprimen cuántas recomendaciones afectaron. El archivado queda en la auditoría con «Sistema» como autor.
 
 ## Reloj
 
