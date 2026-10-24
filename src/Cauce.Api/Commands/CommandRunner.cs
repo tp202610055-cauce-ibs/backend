@@ -1,3 +1,4 @@
+using Cauce.Infrastructure.ClinicalRegistry;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Seeders;
 using Microsoft.EntityFrameworkCore;
@@ -6,7 +7,7 @@ namespace Cauce.Api.Commands;
 
 /// <summary>
 /// Comandos de operación que se ejecutan con el mismo binario de la API y terminan sin levantar el servidor
-/// web: <c>dotnet Cauce.Api.dll migrate</c>. Ninguno crea cuentas.
+/// web: <c>dotnet Cauce.Api.dll migrate</c>. Ninguno crea cuentas ni arranca los workers.
 /// </summary>
 internal static class CommandRunner
 {
@@ -29,7 +30,8 @@ internal static class CommandRunner
         new Dictionary<string, Func<IServiceProvider, CancellationToken, Task>>(StringComparer.Ordinal)
         {
             ["migrate"] = MigrateAsync,
-            ["seed-catalogs"] = SeedCatalogsAsync
+            ["seed-catalogs"] = SeedCatalogsAsync,
+            ["process-ibs-sss"] = ProcessIbsSssAsync
         };
 
     /// <summary>
@@ -85,5 +87,18 @@ internal static class CommandRunner
     private static Task SeedCatalogsAsync(IServiceProvider services, CancellationToken ct)
     {
         return services.SeedCatalogsAsync(requireObjectStorage: true, ct);
+    }
+
+    // Una pasada del procesador diario con la hora actual; los push los envía el despachador de la API en marcha.
+    private static async Task ProcessIbsSssAsync(IServiceProvider services, CancellationToken ct)
+    {
+        var processor = services.GetRequiredService<IbsSssScheduleProcessor>();
+        var result = await processor.ProcessAsync(DateTime.UtcNow, ct).ConfigureAwait(false);
+
+        services.GetRequiredService<ILoggerFactory>().CreateLogger("Cauce.Commands").LogInformation(
+            "IBS-SSS schedules processed: {Reminders} 48-hour reminder(s), {DueNotices} due notice(s), {Missed} marked missed.",
+            result.RemindersSent,
+            result.DueNoticesSent,
+            result.MarkedMissed);
     }
 }
