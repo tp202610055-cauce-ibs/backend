@@ -344,6 +344,25 @@ public sealed class User : Entity, IAggregateRoot
     }
 
     /// <summary>
+    /// Retira la cuenta de un nutricionista sin borrarla: la deja inactiva y libera su correo para una cuenta nueva.
+    /// Solo la usan los comandos de QA; la API no la expone.
+    /// </summary>
+    /// <param name="nutritionistRoleId">Identificador del rol nutricionista, para validar el rol de la cuenta.</param>
+    /// <exception cref="InvalidOperationException">Si la cuenta no es de un nutricionista.</exception>
+    public void RetireNutritionist(int nutritionistRoleId)
+    {
+        if (RoleId != nutritionistRoleId)
+        {
+            throw new InvalidOperationException("Solo se puede retirar la cuenta de un nutricionista.");
+        }
+
+        Email = $"retired-{Id}@retired.local";
+        FcmToken = null;
+        Status = UserStatus.Inactive;
+        Touch();
+    }
+
+    /// <summary>
     /// Indica si la cuenta está bloqueada en el momento especificado.
     /// </summary>
     /// <param name="utcNow">Marca de tiempo UTC de referencia.</param>

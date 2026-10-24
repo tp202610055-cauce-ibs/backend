@@ -114,6 +114,13 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
     public FakeKeycloakAdminClient KeycloakClient { get; } = new();
 
     /// <summary>
+    /// Doble de las operaciones de Keycloak de los comandos de QA, con la política del realm de desarrollo.
+    /// </summary>
+    public FakeQaKeycloakAdmin QaKeycloak => _qaKeycloak ??= new FakeQaKeycloakAdmin(KeycloakClient);
+
+    private FakeQaKeycloakAdmin? _qaKeycloak;
+
+    /// <summary>
     /// Doble en memoria del cliente de tokens de Keycloak (login/logout passthrough).
     /// </summary>
     public FakeKeycloakTokenClient TokenClient { get; } = new();
@@ -224,6 +231,9 @@ public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
 
             services.RemoveAll<IKeycloakAdminClient>();
             services.AddSingleton<IKeycloakAdminClient>(KeycloakClient);
+
+            services.RemoveAll<Cauce.Infrastructure.Qa.Identity.IQaKeycloakAdmin>();
+            services.AddSingleton<Cauce.Infrastructure.Qa.Identity.IQaKeycloakAdmin>(QaKeycloak);
 
             services.RemoveAll<IKeycloakTokenClient>();
             services.AddSingleton<IKeycloakTokenClient>(TokenClient);

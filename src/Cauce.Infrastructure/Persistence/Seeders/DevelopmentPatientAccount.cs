@@ -79,6 +79,47 @@ public sealed class DevelopmentPatientAccount
     {
         ArgumentNullException.ThrowIfNull(profile);
 
+        var user = await ProvisionAccountAsync(email, fullName, password, enrolledAtUtc, ct).ConfigureAwait(false);
+
+        var patientProfile = PatientProfile.Create(
+            Guid.NewGuid(),
+            user.Id,
+            profile.DateOfBirth,
+            profile.Sex,
+            profile.WeightKg,
+            profile.HeightCm,
+            profile.Subtype,
+            profile.DiagnosisDate,
+            medications: null,
+            enrolledAtUtc);
+        patientProfile.CompleteOnboarding(baselineAtUtc);
+        _context.Add(patientProfile);
+
+        _context.Add(IbsSssAssessment.Submit(
+            Guid.NewGuid(), user.Id, AssessmentType.Baseline, cycleNumber: 0,
+            profile.PainSeverity, profile.PainFrequency, profile.BloatingSeverity,
+            profile.BowelHabitsDissatisfaction, profile.LifeInterference, baselineAtUtc));
+
+        return user;
+    }
+
+    /// <summary>
+    /// Crea la identidad en Keycloak y agrega al contexto la cuenta local verificada, en el piloto activo y con
+    /// el consentimiento vigente, sin perfil ni línea base y sin guardar.
+    /// </summary>
+    /// <param name="email">Correo ya normalizado.</param>
+    /// <param name="fullName">Nombre completo.</param>
+    /// <param name="password">Contraseña permanente; nunca se registra en logs.</param>
+    /// <param name="enrolledAtUtc">Momento del consentimiento.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El usuario local agregado al contexto.</returns>
+    public async Task<User> ProvisionAccountAsync(
+        string email,
+        string fullName,
+        string password,
+        DateTime enrolledAtUtc,
+        CancellationToken ct = default)
+    {
         var patientRoleId = await _userRepository.GetRoleIdAsync(UserRoles.Patient, ct).ConfigureAwait(false);
 
         var existing = await _keycloakAdminClient.FindByEmailAsync(email, ct).ConfigureAwait(false);
@@ -102,25 +143,6 @@ public sealed class DevelopmentPatientAccount
             _consentService.GetCurrentTextHash(),
             "127.0.0.1",
             enrolledAtUtc));
-
-        var patientProfile = PatientProfile.Create(
-            Guid.NewGuid(),
-            user.Id,
-            profile.DateOfBirth,
-            profile.Sex,
-            profile.WeightKg,
-            profile.HeightCm,
-            profile.Subtype,
-            profile.DiagnosisDate,
-            medications: null,
-            enrolledAtUtc);
-        patientProfile.CompleteOnboarding(baselineAtUtc);
-        _context.Add(patientProfile);
-
-        _context.Add(IbsSssAssessment.Submit(
-            Guid.NewGuid(), user.Id, AssessmentType.Baseline, cycleNumber: 0,
-            profile.PainSeverity, profile.PainFrequency, profile.BloatingSeverity,
-            profile.BowelHabitsDissatisfaction, profile.LifeInterference, baselineAtUtc));
 
         return user;
     }

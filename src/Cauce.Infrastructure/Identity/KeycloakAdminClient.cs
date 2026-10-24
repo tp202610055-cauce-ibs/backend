@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Cauce.Application.Common.Exceptions;
@@ -21,16 +20,10 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 {
     private const string UpdatePasswordAction = "UPDATE_PASSWORD";
 
-    private static readonly TimeSpan TokenRenewalMargin = TimeSpan.FromSeconds(60);
-
-    private readonly HttpClient _httpClient;
+    private readonly KeycloakAdminTransport _transport;
     private readonly KeycloakOptions _options;
     private readonly IClientUrlProvider _clientUrlProvider;
     private readonly ILogger<KeycloakAdminClient> _logger;
-    private readonly SemaphoreSlim _tokenLock = new(1, 1);
-
-    private string? _cachedAccessToken;
-    private DateTime _tokenExpiresAtUtc = DateTime.MinValue;
 
     /// <summary>
     /// Inicializa el cliente con su <see cref="HttpClient"/> y la configuración de Keycloak.
@@ -45,15 +38,13 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         IClientUrlProvider clientUrlProvider,
         ILogger<KeycloakAdminClient> logger)
     {
-        _httpClient = httpClient;
         _options = options.Value;
+        _transport = new KeycloakAdminTransport(httpClient, _options, logger);
         _clientUrlProvider = clientUrlProvider;
         _logger = logger;
     }
 
-    private string AdminBaseUrl => $"{_options.ServerRoot}/admin/realms/{_options.Realm}";
-
-    private string TokenUrl => $"{_options.BackchannelAuthority}/protocol/openid-connect/token";
+    private string AdminBaseUrl => _transport.AdminBaseUrl;
 
     /// <inheritdoc />
     public async Task<string> CreateUserAsync(
@@ -75,7 +66,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
             requiredActions = requireEmailVerification ? new[] { "VERIFY_EMAIL" } : Array.Empty<string>()
         };
 
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Post, $"{AdminBaseUrl}/users")
             {
                 Content = JsonContent.Create(payload)
@@ -84,7 +75,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 
         if (response.StatusCode != HttpStatusCode.Created)
         {
-            throw await BuildExceptionAsync(response, "crear el usuario", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "crear el usuario", ct).ConfigureAwait(false);
         }
 
         var keycloakId = ExtractIdFromLocation(response.Headers.Location)
@@ -110,7 +101,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     {
         var payload = new { type = "password", value = newPassword, temporary = false };
 
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Put, $"{AdminBaseUrl}/users/{keycloakUserId}/reset-password")
             {
                 Content = JsonContent.Create(payload)
@@ -119,20 +110,20 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 
         if (!response.IsSuccessStatusCode)
         {
-            throw await BuildExceptionAsync(response, "establecer la contraseña", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "establecer la contraseña", ct).ConfigureAwait(false);
         }
     }
 
     /// <inheritdoc />
     public async Task SendVerifyEmailAsync(string keycloakUserId, CancellationToken ct = default)
     {
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Put, $"{AdminBaseUrl}/users/{keycloakUserId}/send-verify-email"),
             ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            throw await BuildExceptionAsync(response, "enviar el correo de verificación", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "enviar el correo de verificación", ct).ConfigureAwait(false);
         }
     }
 
@@ -154,7 +145,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
             });
         }
 
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Put, url)
             {
                 Content = JsonContent.Create(new[] { UpdatePasswordAction })
@@ -163,20 +154,20 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 
         if (!response.IsSuccessStatusCode)
         {
-            throw await BuildExceptionAsync(response, "enviar el enlace para definir la contraseña", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "enviar el enlace para definir la contraseña", ct).ConfigureAwait(false);
         }
     }
 
     /// <inheritdoc />
     public async Task DeleteUserAsync(string keycloakUserId, CancellationToken ct = default)
     {
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Delete, $"{AdminBaseUrl}/users/{keycloakUserId}"),
             ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
         {
-            throw await BuildExceptionAsync(response, "eliminar el usuario", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "eliminar el usuario", ct).ConfigureAwait(false);
         }
     }
 
@@ -185,7 +176,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     {
         var payload = new { enabled = false };
 
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Put, $"{AdminBaseUrl}/users/{keycloakUserId}")
             {
                 Content = JsonContent.Create(payload)
@@ -194,7 +185,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 
         if (!response.IsSuccessStatusCode && response.StatusCode != HttpStatusCode.NotFound)
         {
-            throw await BuildExceptionAsync(response, "deshabilitar el usuario", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "deshabilitar el usuario", ct).ConfigureAwait(false);
         }
     }
 
@@ -202,13 +193,13 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     public async Task<KeycloakUserDto?> FindByEmailAsync(string email, CancellationToken ct = default)
     {
         var encodedEmail = Uri.EscapeDataString(email);
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, $"{AdminBaseUrl}/users?email={encodedEmail}&exact=true"),
             ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            throw await BuildExceptionAsync(response, "buscar el usuario por correo", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "buscar el usuario por correo", ct).ConfigureAwait(false);
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -230,7 +221,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     /// <inheritdoc />
     public async Task<bool> GetUserEmailVerifiedAsync(string keycloakUserId, CancellationToken ct = default)
     {
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, $"{AdminBaseUrl}/users/{keycloakUserId}"),
             ct).ConfigureAwait(false);
 
@@ -239,7 +230,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
             // Incluye el 404 del usuario desincronizado: no se normaliza a false, porque "no lo pude
             // averiguar" y "no está verificado" son cosas distintas y el llamador debe poder
             // distinguirlas para no degradar el estado local (acta A39).
-            throw await BuildExceptionAsync(response, "consultar la verificación del correo", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "consultar la verificación del correo", ct).ConfigureAwait(false);
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -252,13 +243,13 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     /// <inheritdoc />
     public async Task<KeycloakUserState> GetUserStateAsync(string keycloakUserId, CancellationToken ct = default)
     {
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, $"{AdminBaseUrl}/users/{keycloakUserId}"),
             ct).ConfigureAwait(false);
 
         if (!response.IsSuccessStatusCode)
         {
-            throw await BuildExceptionAsync(response, "consultar el estado del usuario", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "consultar el estado del usuario", ct).ConfigureAwait(false);
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -282,7 +273,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
     /// <inheritdoc />
     public async Task<BruteForceStatus?> GetBruteForceStatusAsync(string keycloakUserId, CancellationToken ct = default)
     {
-        using var response = await SendAsync(
+        using var response = await _transport.SendAsync(
             () => new HttpRequestMessage(
                 HttpMethod.Get,
                 $"{AdminBaseUrl}/attack-detection/brute-force/users/{keycloakUserId}"),
@@ -290,7 +281,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 
         if (!response.IsSuccessStatusCode)
         {
-            throw await BuildExceptionAsync(response, "consultar el estado de fuerza bruta", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(response, "consultar el estado de fuerza bruta", ct).ConfigureAwait(false);
         }
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -326,13 +317,13 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 
     private async Task AssignRealmRoleAsync(string keycloakUserId, string roleName, CancellationToken ct)
     {
-        using var roleResponse = await SendAsync(
+        using var roleResponse = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Get, $"{AdminBaseUrl}/roles/{Uri.EscapeDataString(roleName)}"),
             ct).ConfigureAwait(false);
 
         if (!roleResponse.IsSuccessStatusCode)
         {
-            throw await BuildExceptionAsync(roleResponse, "obtener el rol del realm", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(roleResponse, "obtener el rol del realm", ct).ConfigureAwait(false);
         }
 
         await using var stream = await roleResponse.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
@@ -342,7 +333,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         var resolvedRoleName = document.RootElement.GetProperty("name").GetString();
         var rolePayload = new[] { new { id = roleId, name = resolvedRoleName } };
 
-        using var assignResponse = await SendAsync(
+        using var assignResponse = await _transport.SendAsync(
             () => new HttpRequestMessage(HttpMethod.Post, $"{AdminBaseUrl}/users/{keycloakUserId}/role-mappings/realm")
             {
                 Content = JsonContent.Create(rolePayload)
@@ -351,123 +342,8 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
 
         if (!assignResponse.IsSuccessStatusCode)
         {
-            throw await BuildExceptionAsync(assignResponse, "asignar el rol del realm", ct).ConfigureAwait(false);
+            throw await _transport.BuildExceptionAsync(assignResponse, "asignar el rol del realm", ct).ConfigureAwait(false);
         }
-    }
-
-    private async Task<HttpResponseMessage> SendAsync(Func<HttpRequestMessage> requestFactory, CancellationToken ct)
-    {
-        var token = await GetAccessTokenAsync(forceRefresh: false, ct).ConfigureAwait(false);
-        var request = requestFactory();
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        var response = await SendOverNetworkAsync(request, ct).ConfigureAwait(false);
-
-        if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-        {
-            response.Dispose();
-            token = await GetAccessTokenAsync(forceRefresh: true, ct).ConfigureAwait(false);
-            var retry = requestFactory();
-            retry.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            response = await SendOverNetworkAsync(retry, ct).ConfigureAwait(false);
-        }
-
-        return response;
-    }
-
-    /// <summary>
-    /// Envía una petición a Keycloak y traduce las fallas de transporte a
-    /// <see cref="KeycloakIntegrationException"/>, que el API responde como 502 (acta A70). Solo el timeout
-    /// y los errores de conexión: si la cancelación la pidió el llamador (por ejemplo, el cliente cortó la
-    /// petición), se propaga tal cual y no se disfraza de falla del proveedor.
-    /// </summary>
-    /// <param name="request">Petición ya armada, con su autorización.</param>
-    /// <param name="ct">Token de cancelación del llamador.</param>
-    /// <returns>La respuesta de Keycloak, con cualquier código de estado.</returns>
-    /// <exception cref="KeycloakIntegrationException">Si Keycloak no es alcanzable o no responde a tiempo.</exception>
-    private async Task<HttpResponseMessage> SendOverNetworkAsync(HttpRequestMessage request, CancellationToken ct)
-    {
-        try
-        {
-            return await _httpClient.SendAsync(request, ct).ConfigureAwait(false);
-        }
-        catch (HttpRequestException exception)
-        {
-            _logger.LogError(exception, "Keycloak could not be reached ({Method} request).", request.Method);
-            throw new KeycloakIntegrationException("No se pudo conectar con el proveedor de identidad.", exception);
-        }
-        catch (OperationCanceledException exception) when (!ct.IsCancellationRequested)
-        {
-            // La cancelación no vino del llamador: es el timeout del HttpClient.
-            _logger.LogError(exception, "Keycloak did not respond in time ({Method} request).", request.Method);
-            throw new KeycloakIntegrationException("El proveedor de identidad no respondió a tiempo.", exception);
-        }
-    }
-
-    private async Task<string> GetAccessTokenAsync(bool forceRefresh, CancellationToken ct)
-    {
-        if (!forceRefresh && _cachedAccessToken is not null && DateTime.UtcNow < _tokenExpiresAtUtc)
-        {
-            return _cachedAccessToken;
-        }
-
-        await _tokenLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (!forceRefresh && _cachedAccessToken is not null && DateTime.UtcNow < _tokenExpiresAtUtc)
-            {
-                return _cachedAccessToken;
-            }
-
-            var form = new FormUrlEncodedContent(new Dictionary<string, string>
-            {
-                ["grant_type"] = "client_credentials",
-                ["client_id"] = _options.ClientId,
-                ["client_secret"] = _options.ClientSecret
-            });
-
-            using var request = new HttpRequestMessage(HttpMethod.Post, TokenUrl) { Content = form };
-            using var response = await SendOverNetworkAsync(request, ct).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-            {
-                throw await BuildExceptionAsync(response, "obtener el token de administración", ct).ConfigureAwait(false);
-            }
-
-            await using var stream = await response.Content.ReadAsStreamAsync(ct).ConfigureAwait(false);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: ct).ConfigureAwait(false);
-
-            var accessToken = document.RootElement.GetProperty("access_token").GetString()
-                ?? throw new KeycloakIntegrationException("Keycloak no devolvió un token de acceso.");
-            var expiresIn = document.RootElement.TryGetProperty("expires_in", out var expiresElement)
-                ? expiresElement.GetInt32()
-                : 60;
-
-            _cachedAccessToken = accessToken;
-            _tokenExpiresAtUtc = DateTime.UtcNow.AddSeconds(expiresIn) - TokenRenewalMargin;
-
-            return accessToken;
-        }
-        finally
-        {
-            _tokenLock.Release();
-        }
-    }
-
-    private async Task<KeycloakIntegrationException> BuildExceptionAsync(
-        HttpResponseMessage response,
-        string operation,
-        CancellationToken ct)
-    {
-        // Se lee el cuerpo solo para diagnóstico interno; no se propaga al cliente.
-        var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        _logger.LogError(
-            "Keycloak operation '{Operation}' failed with status {StatusCode}. Body length: {BodyLength}.",
-            operation,
-            (int)response.StatusCode,
-            body.Length);
-
-        return new KeycloakIntegrationException(
-            $"Error al {operation} en el proveedor de identidad.",
-            (int)response.StatusCode);
     }
 
     private static (string FirstName, string LastName) SplitFullName(string fullName)

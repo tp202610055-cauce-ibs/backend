@@ -1,5 +1,5 @@
 # Imagen de la API de Cauce. Una sola imagen sirve para el servidor y para los comandos
-# de línea (migrate, seed-catalogs): docker run <imagen> migrate.
+# de línea (migrate, seed-catalogs, seed-qa): docker run <imagen> migrate.
 
 FROM mcr.microsoft.com/dotnet/sdk:9.0-bookworm-slim AS build
 WORKDIR /src
@@ -12,6 +12,8 @@ COPY src/Cauce.Api/Cauce.Api.csproj src/Cauce.Api/
 RUN dotnet restore src/Cauce.Api/Cauce.Api.csproj
 
 COPY src/ src/
+# El manifiesto de QA se publica junto a la API (qa/); el resto de docs/ no entra a la imagen.
+COPY docs/qa/ docs/qa/
 RUN dotnet publish src/Cauce.Api/Cauce.Api.csproj -c Release --no-restore -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0-bookworm-slim AS runtime

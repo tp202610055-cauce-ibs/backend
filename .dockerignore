@@ -3,6 +3,7 @@
 **/logs/
 tests/
 docs/
+!docs/qa/qa-manifest-*.json
 tools/
 .git/
 .gitignore

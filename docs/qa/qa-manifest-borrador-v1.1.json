@@ -1,0 +1,5198 @@
+{
+ "manifestVersion": "1.1-draft2",
+ "source": "Casos_de_Prueba-PY20261049_v3.xlsx + reemplazos de catálogo propuestos (pendientes de Mirian)",
+ "counts": {
+  "cases": 90,
+  "emailsInCp": 116,
+  "toSeed": 105,
+  "patients": 89,
+  "nutritionists": 16,
+  "mustNotExist": 11
+ },
+ "rules": [
+  "Contraseñas: NUNCA en este archivo ni en el repositorio. Cada rol toma la suya de una variable de entorno de la VM (QA_PATIENT_PASSWORD, QA_NUTRITIONIST_PASSWORD). Los comandos que borran o recrean cuentas exigen además QA_ALLOW_DESTRUCTIVE=1.",
+  "Toda cuenta sembrada nace habilitada, con el correo verificado, sin acciones pendientes en Keycloak y, si es paciente, con el consentimiento v1.0 aceptado. Excepciones: status pendingActivation (enlace de activación vigente en el buzón) y status disabled.",
+  "Ninguna cuenta lleva token FCM: lo registra la app en el teléfono donde el revisor inicia sesión.",
+  "Tiempo: todo «hace N horas/días» se ancla al instante en que corre seed-qa o reset-qa (hora de Lima para «hoy»). Los datos con clock=hours vencen en horas y los de clock=days se desplazan: el operador corre reset-qa del CP justo antes de la prueba.",
+  "Pendientes de revisión: ExpiresAt explícito a +10 días, no la ventana de 72 h. La expiración se evalúa también al leer o decidir (no solo en el worker), así que una pendiente sembrada con la ventana normal vence sola.",
+  "Una cuenta exclusiva de un CP se rearma borrándola y volviéndola a sembrar (reset-qa CPxxx). Las cuentas compartidas (nutricionista.demo, paciente.demo) no se borran: solo se rearman los pacientes del CP.",
+  "Los 11 correos mustNotExist deben NO existir antes de cada ejecución del CP; reset-qa los borra si el CP los creó (Keycloak y base de datos).",
+  "Nombres visibles: nutricionista.demo = «Ana Gómez»; paciente.vista = «María Fernanda López Quispe»; el resto son sintéticos (el CP no los fija).",
+  "Valores por omisión cuando el CP no los da: perfil clínico 62 kg, 165 cm, subtipo SII-D, sin alergias declaradas (el «Ninguna conocida» de los CP significa lista vacía).",
+  "Las explicaciones personalizadas NO se generan (no hay Ollama en la VM): se siembran con origen LlmGenerated (CP040) o con origen de respaldo (CP077). Ningún CP genera una recomendación en vivo.",
+  "Modo QA: workers IbsSssReminder, WeeklyReminder, RecommendationArchival y RecommendationExpiration apagados; OutboxDispatcher y NotificationDispatcher encendidos. Los disparos van por comandos a demanda.",
+  "Ítems de las recomendaciones del motor (status pendingReview, approvedAsGenerated, approvedModified, rejected, expired): suggests produce ítems Suggest, reduce produce Reduce y avoid produce Avoid, cada uno sobre un alimento del catálogo. El título del motor no se guarda: las apps muestran un título compuesto («Reducir 2 alimentos») y la descripción lista los alimentos. Solo las recomendaciones createdByNutritionist (manuales) llevan título propio; para ellas, si faltan description o clinicalNote, usa valores por omisión deterministas.",
+  "CP075: sus dos recomendaciones son manuales (createdByNutritionist) con ValidUntil = ancla - 2 días y ancla + 30 días; el archivado temporal solo aplica a recomendaciones con ValidUntil.",
+  "La siembra no debe generar notificaciones, correos ni filas de outbox como efecto secundario (salvo el correo de activación de las cuentas pendingActivation): CP037, CP046 y CP073 verifican que NO llegue un aviso.",
+  "Este manifiesto es el BORRADOR 1.1: aplica los reemplazos de catálogo propuestos a Mirian. Si ella acepta otros, solo cambian los textos de este archivo, no el código."
+ ],
+ "catalogRequirements": {
+  "status": "ALINEADO con el catálogo actual del backend (26 alimentos, 10 alergias)",
+  "replacements": [
+   {
+    "cpOrOriginal": "Arroz con pollo",
+    "catalogEquivalent": "Causa rellena",
+    "usedBy": "CP021, CP022, CP023, CP024, CP028, CP034, CP035, CP062, CP064, CP066, CP067, CP076, CP087"
+   },
+   {
+    "cpOrOriginal": "Papa a la huancaína",
+    "catalogEquivalent": "Papa amarilla cocida",
+    "usedBy": "CP024"
+   },
+   {
+    "cpOrOriginal": "Ají de gallina",
+    "catalogEquivalent": "Aji de gallina",
+    "usedBy": "CP062 (el catálogo lo escribe sin tilde)"
+   },
+   {
+    "cpOrOriginal": "Lomo de res",
+    "catalogEquivalent": "Carne de res magra",
+    "usedBy": "CP025"
+   },
+   {
+    "cpOrOriginal": "Cebolla",
+    "catalogEquivalent": "Cebolla cocida",
+    "usedBy": "CP025 y recomendaciones"
+   },
+   {
+    "cpOrOriginal": "Tomate",
+    "catalogEquivalent": "Zanahoria cocida",
+    "usedBy": "CP025"
+   },
+   {
+    "cpOrOriginal": "Arroz",
+    "catalogEquivalent": "Arroz blanco cocido",
+    "usedBy": "CP026"
+   },
+   {
+    "cpOrOriginal": "Ajo",
+    "catalogEquivalent": "Pan de trigo blanco",
+    "usedBy": "16 CP con «cebolla y ajo»: CP036, CP038, CP040, CP041, CP042, CP043, CP044, CP047, CP048, CP058, CP062, CP064, CP068, CP074, CP077, CP086"
+   },
+   {
+    "cpOrOriginal": "Maní tostado + alergia Maní",
+    "catalogEquivalent": "Queso fresco + alergia Lactosa",
+    "usedBy": "CP027"
+   }
+  ],
+  "rule": "Todo alimento y alergia que aparece en una siembra debe existir en el catálogo; si falta, seed-qa falla antes de escribir nada y lista TODO lo que falta.",
+  "allergenDetection": "Heurística por nombre (AllergyHeuristicMatcher). «Maní» no tiene regla; «Frutos secos» sí. CP027 usa Lactosa + Queso fresco.",
+  "noKnownAllergies": "«Ninguna conocida» no es una alergia del catálogo: se siembra sin alergias declaradas (lista vacía)."
+ },
+ "accounts": [
+  {
+   "email": "registro.cp001@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP001"
+   ]
+  },
+  {
+   "email": "paciente.demo@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP002",
+    "CP004",
+    "CP014",
+    "CP017",
+    "CP020",
+    "CP080"
+   ]
+  },
+  {
+   "email": "registro.cp002@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP002"
+   ]
+  },
+  {
+   "email": "registro.cp003@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP003"
+   ]
+  },
+  {
+   "email": "nutricionista.nuevo@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "pendingActivation",
+   "usedBy": [
+    "CP005"
+   ]
+  },
+  {
+   "email": "nutricionista.demo@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP006",
+    "CP009",
+    "CP012",
+    "CP016",
+    "CP017",
+    "CP030",
+    "CP031",
+    "CP034",
+    "CP036",
+    "CP037",
+    "CP038",
+    "CP040",
+    "CP041",
+    "CP042",
+    "CP043",
+    "CP044",
+    "CP045",
+    "CP046",
+    "CP047",
+    "CP048",
+    "CP056",
+    "CP057",
+    "CP068",
+    "CP069",
+    "CP070",
+    "CP072",
+    "CP073",
+    "CP074",
+    "CP075",
+    "CP077",
+    "CP086",
+    "CP087",
+    "CP090"
+   ],
+   "displayName": "Ana Gómez"
+  },
+  {
+   "email": "nutricionista.inactivo@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "disabled",
+   "usedBy": [
+    "CP006",
+    "CP017"
+   ]
+  },
+  {
+   "email": "nutricionista.noexiste@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP006"
+   ]
+  },
+  {
+   "email": "nutricionista.pendiente@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "pendingActivation",
+   "usedBy": [
+    "CP006",
+    "CP017"
+   ]
+  },
+  {
+   "email": "paciente.perfil1@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP007"
+   ]
+  },
+  {
+   "email": "paciente.perfil2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP008"
+   ]
+  },
+  {
+   "email": "paciente.edicion@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP009"
+   ]
+  },
+  {
+   "email": "paciente.perfil3@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP010"
+   ]
+  },
+  {
+   "email": "paciente.perfil4@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP011"
+   ]
+  },
+  {
+   "email": "paciente.base@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP012"
+   ]
+  },
+  {
+   "email": "paciente.base2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP013"
+   ]
+  },
+  {
+   "email": "paciente.bloqueo@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP015"
+   ]
+  },
+  {
+   "email": "nutricionista.reset1@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP018"
+   ]
+  },
+  {
+   "email": "paciente.reset1@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP018"
+   ]
+  },
+  {
+   "email": "tester.sincuenta@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP018",
+    "CP081"
+   ]
+  },
+  {
+   "email": "paciente.reset2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP019"
+   ]
+  },
+  {
+   "email": "nutricionista.sesion@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP021"
+   ]
+  },
+  {
+   "email": "paciente.sesion@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP021"
+   ]
+  },
+  {
+   "email": "paciente.diario@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP022"
+   ]
+  },
+  {
+   "email": "paciente.offline@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP023"
+   ]
+  },
+  {
+   "email": "paciente.sugerencias@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP024"
+   ]
+  },
+  {
+   "email": "paciente.platos@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP025"
+   ]
+  },
+  {
+   "email": "paciente.platos2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP026"
+   ]
+  },
+  {
+   "email": "paciente.alergia@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP027"
+   ]
+  },
+  {
+   "email": "paciente.sintomas@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP028"
+   ]
+  },
+  {
+   "email": "paciente.sintomas2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP029"
+   ]
+  },
+  {
+   "email": "paciente.cuest@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP030"
+   ]
+  },
+  {
+   "email": "paciente.recordatorio1@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP031"
+   ]
+  },
+  {
+   "email": "paciente.recordatorio2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP031"
+   ]
+  },
+  {
+   "email": "paciente.resultado2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP032"
+   ]
+  },
+  {
+   "email": "paciente.resultado@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP032"
+   ]
+  },
+  {
+   "email": "paciente.sinpuntaje@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP033"
+   ]
+  },
+  {
+   "email": "paciente.notas@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP034"
+   ]
+  },
+  {
+   "email": "paciente.notas2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP035"
+   ]
+  },
+  {
+   "email": "paciente.entrega@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP036"
+   ]
+  },
+  {
+   "email": "paciente.revision@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP037"
+   ]
+  },
+  {
+   "email": "paciente.filtro@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP038"
+   ]
+  },
+  {
+   "email": "paciente.resumen2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP039"
+   ]
+  },
+  {
+   "email": "paciente.resumen3@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP039"
+   ]
+  },
+  {
+   "email": "paciente.resumen@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP039"
+   ]
+  },
+  {
+   "email": "paciente.explic@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP040"
+   ]
+  },
+  {
+   "email": "paciente.revisada@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP041"
+   ]
+  },
+  {
+   "email": "paciente.bloques@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP042"
+   ]
+  },
+  {
+   "email": "paciente.feedback@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP043"
+   ]
+  },
+  {
+   "email": "paciente.feedback2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP044"
+   ]
+  },
+  {
+   "email": "paciente.aprob@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP045"
+   ]
+  },
+  {
+   "email": "paciente.rechazo@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP046"
+   ]
+  },
+  {
+   "email": "paciente.modif@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP047"
+   ]
+  },
+  {
+   "email": "paciente.inmutable@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP048"
+   ]
+  },
+  {
+   "email": "nutricionista.panel@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP049"
+   ]
+  },
+  {
+   "email": "paciente.panel1@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP049"
+   ]
+  },
+  {
+   "email": "paciente.panel2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP049"
+   ]
+  },
+  {
+   "email": "paciente.panel3@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP049"
+   ]
+  },
+  {
+   "email": "paciente.panel4@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP049"
+   ]
+  },
+  {
+   "email": "paciente.panel5@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP049"
+   ]
+  },
+  {
+   "email": "paciente.panel6@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP049"
+   ]
+  },
+  {
+   "email": "nutricionista.sinpacientes@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP050"
+   ]
+  },
+  {
+   "email": "nutricionista.error@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP051"
+   ]
+  },
+  {
+   "email": "nutricionista.codigo1@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP052"
+   ]
+  },
+  {
+   "email": "nutricionista.codigo2@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP053"
+   ]
+  },
+  {
+   "email": "paciente.vinc1@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP053"
+   ]
+  },
+  {
+   "email": "registro.cp053@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP053"
+   ]
+  },
+  {
+   "email": "registro.cp053b@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP053"
+   ]
+  },
+  {
+   "email": "nutricionista.vinc@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP054"
+   ]
+  },
+  {
+   "email": "registro.cp054@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP054"
+   ]
+  },
+  {
+   "email": "registro.cp055@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP055"
+   ]
+  },
+  {
+   "email": "paciente.evol2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP056"
+   ]
+  },
+  {
+   "email": "paciente.evol@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP056"
+   ]
+  },
+  {
+   "email": "paciente.linea@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP057"
+   ]
+  },
+  {
+   "email": "nutricionista.reporte@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP058"
+   ]
+  },
+  {
+   "email": "paciente.reporte1@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP058"
+   ]
+  },
+  {
+   "email": "nutricionista.reporte2@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP059"
+   ]
+  },
+  {
+   "email": "paciente.reporte2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP059"
+   ]
+  },
+  {
+   "email": "paciente.graf@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP060"
+   ]
+  },
+  {
+   "email": "paciente.solobase@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP061"
+   ]
+  },
+  {
+   "email": "paciente.reporte@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP062"
+   ]
+  },
+  {
+   "email": "paciente.sindatos@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP063"
+   ]
+  },
+  {
+   "email": "paciente.export@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP064"
+   ]
+  },
+  {
+   "email": "paciente.export2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP065"
+   ]
+  },
+  {
+   "email": "paciente.eliminar@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP066"
+   ]
+  },
+  {
+   "email": "paciente.cancelar@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP067"
+   ]
+  },
+  {
+   "email": "paciente.glosario@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP068"
+   ]
+  },
+  {
+   "email": "paciente.glosario2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP069"
+   ]
+  },
+  {
+   "email": "paciente.vista2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP070"
+   ]
+  },
+  {
+   "email": "paciente.vista3@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP070"
+   ]
+  },
+  {
+   "email": "paciente.vista@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP070"
+   ],
+   "displayName": "María Fernanda López Quispe"
+  },
+  {
+   "email": "paciente.editar@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP071"
+   ]
+  },
+  {
+   "email": "paciente.manual@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP072"
+   ]
+  },
+  {
+   "email": "paciente.ajeno@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP073"
+   ]
+  },
+  {
+   "email": "paciente.manual2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP073"
+   ]
+  },
+  {
+   "email": "paciente.archivar@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP074"
+   ]
+  },
+  {
+   "email": "paciente.vencida@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP075"
+   ]
+  },
+  {
+   "email": "paciente.diario2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP076"
+   ]
+  },
+  {
+   "email": "paciente.respaldo@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP077"
+   ]
+  },
+  {
+   "email": "paciente.editar2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP078"
+   ]
+  },
+  {
+   "email": "nutricionista.activar@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "pendingActivation",
+   "usedBy": [
+    "CP079"
+   ]
+  },
+  {
+   "email": "noexiste.cp080@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP080"
+   ]
+  },
+  {
+   "email": "paciente.inactivo@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "disabled",
+   "usedBy": [
+    "CP081"
+   ]
+  },
+  {
+   "email": "paciente.reset4@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP081"
+   ]
+  },
+  {
+   "email": "paciente.reset3@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP082"
+   ]
+  },
+  {
+   "email": "paciente.sintomas3@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP083"
+   ]
+  },
+  {
+   "email": "paciente.notif@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP084"
+   ]
+  },
+  {
+   "email": "paciente.sinnutri@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP085"
+   ]
+  },
+  {
+   "email": "paciente.modexito@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP086"
+   ]
+  },
+  {
+   "email": "paciente.vinculo2@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP087"
+   ]
+  },
+  {
+   "email": "paciente.vinculo@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP087"
+   ]
+  },
+  {
+   "email": "paciente.codigo@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP088"
+   ]
+  },
+  {
+   "email": "registro.cp088@ejemplo.com",
+   "role": null,
+   "disposition": "mustNotExist",
+   "usedBy": [
+    "CP088"
+   ]
+  },
+  {
+   "email": "nutricionista.glosario@ejemplo.com",
+   "role": "nutritionist",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP089"
+   ]
+  },
+  {
+   "email": "paciente.glosario3@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP089"
+   ]
+  },
+  {
+   "email": "paciente.manual3@ejemplo.com",
+   "role": "patient",
+   "disposition": "seed",
+   "status": "active",
+   "usedBy": [
+    "CP090"
+   ]
+  }
+ ],
+ "cases": [
+  {
+   "cp": "CP001",
+   "title": "REGISTRO EXITOSO CON DATOS VÁLIDOS",
+   "platform": "mobile",
+   "accounts": [],
+   "mustNotExist": [
+    "registro.cp001@ejemplo.com"
+   ],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [
+    {
+     "step": 11,
+     "text": "Pedir al equipo de desarrollo que confirme el registro de la aceptación del consentimiento de esa cuenta."
+    }
+   ],
+   "seed": [],
+   "note": "Registro desde la app; el consentimiento aceptado debe quedar registrado."
+  },
+  {
+   "cp": "CP002",
+   "title": "RECHAZO POR DATOS INVÁLIDOS O CORREO DUPLICADO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.demo@ejemplo.com"
+   ],
+   "mustNotExist": [
+    "registro.cp002@ejemplo.com"
+   ],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": []
+  },
+  {
+   "cp": "CP003",
+   "title": "BLOQUEO SIN ACEPTACIÓN DEL CONSENTIMIENTO INFORMADO",
+   "platform": "mobile",
+   "accounts": [],
+   "mustNotExist": [
+    "registro.cp003@ejemplo.com"
+   ],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": []
+  },
+  {
+   "cp": "CP004",
+   "title": "CONSULTA DEL CONSENTIMIENTO ACEPTADO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.demo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "note",
+     "text": "paciente.demo: consentimiento v1.0 aceptado al registrarse."
+    }
+   ]
+  },
+  {
+   "cp": "CP005",
+   "title": "PRIMER ACCESO EXITOSO TRAS ACTIVAR LA CUENTA",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.nuevo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "account",
+     "email": "nutricionista.nuevo@ejemplo.com",
+     "role": "nutritionist",
+     "status": "pendingActivation"
+    },
+    {
+     "t": "note",
+     "text": "Correo de activación con enlace vigente en el buzón de prueba. reset-qa debe reenviarlo."
+    }
+   ]
+  },
+  {
+   "cp": "CP006",
+   "title": "RECHAZO POR CREDENCIALES INCORRECTAS O CUENTA INACTIVA",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "nutricionista.inactivo@ejemplo.com",
+    "nutricionista.pendiente@ejemplo.com"
+   ],
+   "mustNotExist": [
+    "nutricionista.noexiste@ejemplo.com"
+   ],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 7,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de los intentos de ingreso de las cuatro variantes."
+    }
+   ],
+   "seed": [
+    {
+     "t": "account",
+     "email": "nutricionista.inactivo@ejemplo.com",
+     "role": "nutritionist",
+     "status": "disabled"
+    },
+    {
+     "t": "account",
+     "email": "nutricionista.pendiente@ejemplo.com",
+     "role": "nutritionist",
+     "status": "pendingActivation"
+    }
+   ]
+  },
+  {
+   "cp": "CP007",
+   "title": "PERFIL CLÍNICO GUARDADO CORRECTAMENTE",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.perfil1@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.perfil1@ejemplo.com",
+     "complete": false
+    }
+   ]
+  },
+  {
+   "cp": "CP008",
+   "title": "BLOQUEO POR CAMPOS INCOMPLETOS O VALORES FUERA DE RANGO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.perfil2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.perfil2@ejemplo.com",
+     "complete": false
+    }
+   ]
+  },
+  {
+   "cp": "CP009",
+   "title": "EDICIÓN POSTERIOR DEL PERFIL",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.edicion@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.edicion@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.edicion@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    }
+   ]
+  },
+  {
+   "cp": "CP010",
+   "title": "CÁLCULO EN VIVO DEL ÍNDICE DE MASA CORPORAL",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.perfil3@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.perfil3@ejemplo.com",
+     "complete": false
+    }
+   ]
+  },
+  {
+   "cp": "CP011",
+   "title": "APLAZAMIENTO DEL ONBOARDING SIN BLOQUEO DE ACCESO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.perfil4@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.perfil4@ejemplo.com",
+     "complete": false
+    },
+    {
+     "t": "note",
+     "text": "Sin ningún avance de onboarding guardado."
+    }
+   ]
+  },
+  {
+   "cp": "CP012",
+   "title": "LÍNEA BASE REGISTRADA EXITOSAMENTE",
+   "platform": "mobile",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.base@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.base@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.base@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "note",
+     "text": "Sin línea base IBS-SSS todavía."
+    }
+   ]
+  },
+  {
+   "cp": "CP013",
+   "title": "BLOQUEO POR CUESTIONARIO INCOMPLETO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.base2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.base2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "Sin línea base IBS-SSS; sin nutricionista."
+    }
+   ]
+  },
+  {
+   "cp": "CP014",
+   "title": "AUTENTICACIÓN EXITOSA",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.demo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 6,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de accesos de esa cuenta."
+    }
+   ],
+   "seed": [
+    {
+     "t": "note",
+     "text": "Sin intentos fallidos de ingreso (limpiar bloqueo de Keycloak)."
+    }
+   ]
+  },
+  {
+   "cp": "CP015",
+   "title": "BLOQUEO POR INTENTOS FALLIDOS CONSECUTIVOS",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.bloqueo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 9,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de seguridad de esa cuenta."
+    }
+   ],
+   "seed": [
+    {
+     "t": "note",
+     "text": "No bloqueado y sin intentos fallidos. reset-qa limpia el estado de fuerza bruta de Keycloak."
+    }
+   ]
+  },
+  {
+   "cp": "CP016",
+   "title": "ACCESO EXITOSO AL PORTAL CLÍNICO",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 7,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de accesos de esa cuenta."
+    }
+   ],
+   "seed": []
+  },
+  {
+   "cp": "CP017",
+   "title": "RECHAZO POR CUENTA INACTIVA O CREDENCIALES INCORRECTAS",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "nutricionista.inactivo@ejemplo.com",
+    "nutricionista.pendiente@ejemplo.com",
+    "paciente.demo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 7,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de los intentos de ingreso de las cuatro variantes."
+    }
+   ],
+   "seed": []
+  },
+  {
+   "cp": "CP018",
+   "title": "ENLACE DE RECUPERACIÓN ENVIADO EXITOSAMENTE",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.reset1@ejemplo.com",
+    "paciente.reset1@ejemplo.com"
+   ],
+   "mustNotExist": [
+    "tester.sincuenta@ejemplo.com"
+   ],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [
+    {
+     "step": 10,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de las solicitudes de recuperación de las dos cuentas activas."
+    }
+   ],
+   "seed": []
+  },
+  {
+   "cp": "CP019",
+   "title": "ENLACE EXPIRADO O YA UTILIZADO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.reset2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": [],
+   "timerMinutes": 30,
+   "note": "La prueba dura más de 30 min (enlace que vence)."
+  },
+  {
+   "cp": "CP020",
+   "title": "CIERRE DE SESIÓN EXITOSO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.demo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": []
+  },
+  {
+   "cp": "CP021",
+   "title": "CIERRE AUTOMÁTICO DE SESIÓN POR INACTIVIDAD",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.sesion@ejemplo.com",
+    "paciente.sesion@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "days",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.sesion@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sesion@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "today": true
+     },
+     "grams": 150,
+     "slot": "almuerzo"
+    },
+    {
+     "t": "link",
+     "patient": "paciente.sesion@ejemplo.com",
+     "nutritionist": "nutricionista.sesion@ejemplo.com"
+    }
+   ],
+   "timerMinutes": 20
+  },
+  {
+   "cp": "CP022",
+   "title": "REGISTRO EXITOSO DE COMIDA CON PORCIÓN DEFINIDA",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.diario@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.diario@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "Ninguna comida registrada hoy. Requiere «Causa rellena» en el catálogo."
+    }
+   ]
+  },
+  {
+   "cp": "CP023",
+   "title": "REGISTRO OFFLINE CON SINCRONIZACIÓN DIFERIDA",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.offline@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 10,
+     "text": "Pedir al equipo de desarrollo que confirme que la comida llegó al servidor."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.offline@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "Ninguna comida registrada hoy."
+    }
+   ]
+  },
+  {
+   "cp": "CP024",
+   "title": "BÚSQUEDA CON SUGERENCIAS CONTEXTUALES POR TRES DIMENSIONES",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.sugerencias@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "hours",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.sugerencias@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sugerencias@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 2
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sugerencias@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 7
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sugerencias@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 12
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sugerencias@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 18
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sugerencias@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 25
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sugerencias@ejemplo.com",
+     "food": "Papa amarilla cocida",
+     "ago": {
+      "hours": 12
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sugerencias@ejemplo.com",
+     "food": "Lomo saltado",
+     "ago": {
+      "hours": 30
+     }
+    },
+    {
+     "t": "note",
+     "text": "Causa rellena debe ser el alimento más registrado (5 veces en 30 días). La búsqueda por «quin» devuelve «Quinua blanca cocida»."
+    }
+   ]
+  },
+  {
+   "cp": "CP025",
+   "title": "CREACIÓN EXITOSA DE ALIMENTO PERSONALIZADO CON INGREDIENTES DEL CATÁLOGO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.platos@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.platos@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "Sin alimentos personalizados. «Lomo saltado casero» NO debe existir en el catálogo (el catálogo tiene «Lomo saltado», que no coincide con la búsqueda completa). Ingredientes del catálogo: Carne de res magra, Cebolla cocida y Zanahoria cocida."
+    }
+   ]
+  },
+  {
+   "cp": "CP026",
+   "title": "RECHAZO POR NOMBRE DUPLICADO O SIN INGREDIENTES SELECCIONADOS",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.platos2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.platos2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "customFood",
+     "patient": "paciente.platos2@ejemplo.com",
+     "name": "Mi arroz con pollo",
+     "ingredients": [
+      "Arroz blanco cocido"
+     ]
+    },
+    {
+     "t": "note",
+     "text": "Es el único alimento personalizado. El nombre «Mi arroz con pollo» es libre; su ingrediente es «Arroz blanco cocido»."
+    }
+   ]
+  },
+  {
+   "cp": "CP027",
+   "title": "ADVERTENCIA POR ALÉRGENO DETECTADO EN INGREDIENTES SELECCIONADOS",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.alergia@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 8,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la decisión del paciente."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.alergia@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": [
+      "Lactosa"
+     ]
+    },
+    {
+     "t": "note",
+     "text": "Alergia declarada «Lactosa» (el backend detecta alérgenos por reglas sobre el nombre del alimento; «Maní» no tiene regla). Ingrediente que dispara la advertencia: «Queso fresco». Plato del CP: «Salsa de queso casera». La advertencia muestra el nombre de la alergia: «Lactosa»."
+    }
+   ]
+  },
+  {
+   "cp": "CP028",
+   "title": "REGISTRO EXITOSO DE SÍNTOMA CON CATÁLOGO CLÍNICAMENTE EXTENDIDO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.sintomas@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "hours",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.sintomas@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sintomas@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "hours": 2
+     }
+    },
+    {
+     "t": "note",
+     "text": "Sin síntomas hoy. La comida debe quedar dentro de la ventana de 4 h al momento de la prueba."
+    }
+   ]
+  },
+  {
+   "cp": "CP029",
+   "title": "REGISTRO DE SÍNTOMA SIN COMIDA RECIENTE ASOCIADA",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.sintomas2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "hours",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.sintomas2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sintomas2@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "hours": 5
+     }
+    },
+    {
+     "t": "note",
+     "text": "Ninguna comida en las últimas 4 h."
+    }
+   ]
+  },
+  {
+   "cp": "CP030",
+   "title": "CUESTIONARIO PERIÓDICO COMPLETADO EXITOSAMENTE",
+   "platform": "mobile",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.cuest@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "days",
+   "push": "N",
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.cuest@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.cuest@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.cuest@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.cuest@ejemplo.com",
+     "kind": "periodic",
+     "score": 300,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibsDue",
+     "patient": "paciente.cuest@ejemplo.com",
+     "note": "Último cuestionario hace 14 días: tiene pendiente el de las dos semanas."
+    }
+   ]
+  },
+  {
+   "cp": "CP031",
+   "title": "RECORDATORIO ANTE CUESTIONARIO NO COMPLETADO EN EL PLAZO INICIAL",
+   "platform": "unknown",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.recordatorio1@ejemplo.com",
+    "paciente.recordatorio2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "hours",
+   "push": "A",
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.recordatorio1@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.recordatorio1@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.recordatorio2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.recordatorio2@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "ibsInvitation",
+     "patient": "paciente.recordatorio1@ejemplo.com",
+     "sentAgo": {
+      "hours": 48
+     },
+     "answered": false
+    },
+    {
+     "t": "ibsInvitation",
+     "patient": "paciente.recordatorio2@ejemplo.com",
+     "sentAgo": {
+      "days": 9
+     },
+     "answered": false
+    },
+    {
+     "t": "note",
+     "text": "Sin token FCM sembrado: lo registra la app en el teléfono del revisor al iniciar sesión. El recordatorio lo dispara process-ibs-sss."
+    }
+   ]
+  },
+  {
+   "cp": "CP032",
+   "title": "VISUALIZACIÓN DEL RESULTADO DESPUÉS DE ENVIAR EL CUESTIONARIO",
+   "platform": "unknown",
+   "accounts": [
+    "paciente.resultado2@ejemplo.com",
+    "paciente.resultado@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.resultado@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resultado@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resultado@ejemplo.com",
+     "kind": "periodic",
+     "score": 280,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibsDue",
+     "patient": "paciente.resultado@ejemplo.com",
+     "note": "Cuestionario de las dos semanas pendiente."
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.resultado2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resultado2@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibsDue",
+     "patient": "paciente.resultado2@ejemplo.com",
+     "note": "Cuestionario de las dos semanas pendiente."
+    }
+   ]
+  },
+  {
+   "cp": "CP033",
+   "title": "SIN EXPOSICIÓN DEL PUNTAJE ANTES DEL ENVÍO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.sinpuntaje@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.sinpuntaje@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.sinpuntaje@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibsDue",
+     "patient": "paciente.sinpuntaje@ejemplo.com",
+     "note": "Cuestionario de las dos semanas pendiente."
+    }
+   ]
+  },
+  {
+   "cp": "CP034",
+   "title": "NOTA DE CONTEXTO GUARDADA Y ASOCIADA CORRECTAMENTE",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.notas@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.notas@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.notas@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.notas@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "today": true
+     },
+     "slot": "almuerzo"
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.notas@ejemplo.com",
+     "name": "Dolor abdominal",
+     "intensity": null,
+     "ago": {
+      "today": true
+     }
+    },
+    {
+     "t": "note",
+     "text": "Ambos registros de hoy sin nota."
+    }
+   ]
+  },
+  {
+   "cp": "CP035",
+   "title": "NOTA VACÍA O QUE SUPERA EL LÍMITE DE CARACTERES",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.notas2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.notas2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.notas2@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "today": true
+     },
+     "slot": "almuerzo"
+    },
+    {
+     "t": "note",
+     "text": "Registro de hoy sin nota."
+    }
+   ]
+  },
+  {
+   "cp": "CP036",
+   "title": "ENTREGA EXITOSA DE RECOMENDACIÓN APROBADA",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.entrega@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": "A",
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.entrega@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.entrega@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.entrega@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "pendingReview",
+     "explanation": "personalized",
+     "suggests": [
+      "Zanahoria cocida"
+     ],
+     "substitutes": "con justificación por contenido de FODMAP",
+     "expiresInDays": 10,
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP037",
+   "title": "AVISO EN LA APLICACIÓN CUANDO LA RECOMENDACIÓN ESTÁ EN REVISIÓN",
+   "platform": "unknown",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.revision@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": "B",
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.revision@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.revision@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.revision@ejemplo.com",
+     "title": "Recomendación en revisión",
+     "status": "pendingReview",
+     "explanation": "personalized",
+     "expiresInDays": 10,
+     "reduce": [
+      "Cebolla cocida"
+     ]
+    },
+    {
+     "t": "note",
+     "text": "Es su única recomendación y no tiene ninguna aprobada. El aviso «en revisión» ya no se envía."
+    }
+   ]
+  },
+  {
+   "cp": "CP038",
+   "title": "SOLO SE MUESTRAN AL PACIENTE LAS RECOMENDACIONES APROBADAS",
+   "platform": "unknown",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.filtro@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.filtro@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.filtro@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.filtro@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "patientOpened": false,
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.filtro@ejemplo.com",
+     "title": "Aumentar la fibra soluble",
+     "status": "approvedModified",
+     "patientOpened": true,
+     "suggests": [
+      "Avena en hojuelas cocida",
+      "Zanahoria cocida"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.filtro@ejemplo.com",
+     "title": "Hidratación entre comidas",
+     "status": "createdByNutritionist",
+     "patientOpened": true,
+     "patientResponded": true
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.filtro@ejemplo.com",
+     "title": "Probar avena en el desayuno",
+     "status": "pendingReview",
+     "expiresInDays": 10,
+     "suggests": [
+      "Avena en hojuelas cocida"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.filtro@ejemplo.com",
+     "title": "Eliminar todos los lácteos",
+     "status": "rejected",
+     "avoid": [
+      "Leche entera de vaca",
+      "Queso fresco"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.filtro@ejemplo.com",
+     "title": "Reducir legumbres",
+     "status": "expired",
+     "note": "Vencida sin haber sido revisada.",
+     "reduce": [
+      "Lentejas cocidas",
+      "Frejol canario cocido"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP039",
+   "title": "VISUALIZACIÓN RESUMIDA DE EVOLUCIÓN EN LA PANTALLA DE INICIO",
+   "platform": "unknown",
+   "accounts": [
+    "paciente.resumen2@ejemplo.com",
+    "paciente.resumen3@ejemplo.com",
+    "paciente.resumen@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.resumen@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen@ejemplo.com",
+     "kind": "periodic",
+     "score": 280,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen@ejemplo.com",
+     "kind": "periodic",
+     "score": 245,
+     "ago": {
+      "days": 0
+     }
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.resumen2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen2@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen2@ejemplo.com",
+     "kind": "periodic",
+     "score": 300,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen2@ejemplo.com",
+     "kind": "periodic",
+     "score": 290,
+     "ago": {
+      "days": 0
+     }
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.resumen3@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen3@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen3@ejemplo.com",
+     "kind": "periodic",
+     "score": 300,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.resumen3@ejemplo.com",
+     "kind": "periodic",
+     "score": 270,
+     "ago": {
+      "days": 0
+     }
+    }
+   ]
+  },
+  {
+   "cp": "CP040",
+   "title": "EXPLICACIÓN Y NIVEL DE CONFIANZA VISIBLES CORRECTAMENTE",
+   "platform": "mobile",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.explic@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.explic@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.explic@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.explic@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "confidence": "high",
+     "explanation": "personalized",
+     "explanationSource": "LlmGenerated",
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.explic@ejemplo.com",
+     "title": "Aumentar la fibra soluble",
+     "status": "approvedAsGenerated",
+     "confidence": "medium",
+     "explanation": "personalized",
+     "explanationSource": "LlmGenerated",
+     "suggests": [
+      "Avena en hojuelas cocida",
+      "Zanahoria cocida"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.explic@ejemplo.com",
+     "title": "Reducir legumbres",
+     "status": "approvedAsGenerated",
+     "confidence": "low",
+     "explanation": "personalized",
+     "explanationSource": "LlmGenerated",
+     "reduce": [
+      "Lentejas cocidas",
+      "Frejol canario cocido"
+     ]
+    },
+    {
+     "t": "note",
+     "text": "Historial con dolor abdominal después de comidas con cebolla y pan de trigo. Las 3 explicaciones se siembran (no hay servicio de IA en la VM)."
+    }
+   ]
+  },
+  {
+   "cp": "CP041",
+   "title": "INDICACIÓN VISIBLE DE REVISIÓN POR EL NUTRICIONISTA",
+   "platform": "mobile",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.revisada@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.revisada@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.revisada@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.revisada@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "clinicalNote": "Reducir cebolla y pan de trigo por intolerancia a FODMAP",
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.revisada@ejemplo.com",
+     "title": "Aumentar la fibra soluble",
+     "status": "approvedModified",
+     "clinicalNote": "Aumentar la fibra de forma gradual",
+     "suggests": [
+      "Avena en hojuelas cocida",
+      "Zanahoria cocida"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.revisada@ejemplo.com",
+     "title": "Hidratación entre comidas",
+     "status": "createdByNutritionist",
+     "clinicalNote": "Tomar agua entre comidas y no durante ellas"
+    }
+   ]
+  },
+  {
+   "cp": "CP042",
+   "title": "DETALLE ESTRUCTURADO EN CUATRO BLOQUES DIFERENCIADOS",
+   "platform": "mobile",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.bloques@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.bloques@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.bloques@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.bloques@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "explanation": "personalized",
+     "explanationMentions": "clasificaciones FODMAP",
+     "clinicalNote": "Reducir cebolla y pan de trigo por intolerancia a FODMAP",
+     "stepsCount": 3,
+     "supportingData": {
+      "painRecords": 4,
+      "windowDays": 14,
+      "afterMeals": "cebolla"
+     },
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP043",
+   "title": "RETROALIMENTACIÓN REGISTRADA EXITOSAMENTE",
+   "platform": "unknown",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.feedback@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "hours",
+   "push": "N",
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 11,
+     "text": "Pedir al equipo de desarrollo que confirme las respuestas registradas de esta cuenta."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.feedback@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.feedback@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.feedback@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "receivedAgo": {
+      "hours": 30
+     },
+     "patientResponded": false,
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.feedback@ejemplo.com",
+     "title": "Aumentar la fibra soluble",
+     "status": "approvedAsGenerated",
+     "receivedAgo": {
+      "hours": 20
+     },
+     "patientResponded": false,
+     "suggests": [
+      "Avena en hojuelas cocida",
+      "Zanahoria cocida"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.feedback@ejemplo.com",
+     "title": "Hidratación entre comidas",
+     "status": "createdByNutritionist",
+     "receivedAgo": {
+      "days": 3
+     },
+     "patientResponded": false
+    },
+    {
+     "t": "note",
+     "text": "Límite de 24 h para responder: la de 20 h sí admite respuesta y la de 30 h no (verificar contra el CP)."
+    }
+   ]
+  },
+  {
+   "cp": "CP044",
+   "title": "RETROALIMENTACIÓN GUARDADA LOCALMENTE SIN CONEXIÓN",
+   "platform": "unknown",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.feedback2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "hours",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 10,
+     "text": "Pedir al equipo de desarrollo que confirme las respuestas registradas de esta cuenta."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.feedback2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.feedback2@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.feedback2@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "receivedAgo": {
+      "hours": 30
+     },
+     "patientResponded": false,
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP045",
+   "title": "APROBACIÓN EXITOSA DE RECOMENDACIÓN CON NOTA CLÍNICA",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.aprob@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": "A",
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 9,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la decisión."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.aprob@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.aprob@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.aprob@ejemplo.com",
+     "title": "Recomendación pendiente de revisión",
+     "status": "pendingReview",
+     "explanation": "personalized",
+     "expiresInDays": 10,
+     "withRecentHistory": true,
+     "reduce": [
+      "Cebolla cocida"
+     ]
+    },
+    {
+     "t": "note",
+     "text": "Historial reciente de comidas y síntomas visible para el nutricionista."
+    }
+   ]
+  },
+  {
+   "cp": "CP046",
+   "title": "RECHAZO DE RECOMENDACIÓN CON JUSTIFICACIÓN CLÍNICA OBLIGATORIA",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.rechazo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": "B",
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 8,
+     "text": "Pedir al equipo de desarrollo que muestre el registro del rechazo."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.rechazo@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.rechazo@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.rechazo@ejemplo.com",
+     "title": "Eliminar todos los lácteos",
+     "status": "pendingReview",
+     "explanation": "personalized",
+     "expiresInDays": 10,
+     "avoid": [
+      "Leche entera de vaca",
+      "Queso fresco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP047",
+   "title": "VALIDACIÓN OBLIGATORIA DE NOTA CLÍNICA AL MODIFICAR",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.modif@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.modif@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.modif@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.modif@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "pendingReview",
+     "explanation": "personalized",
+     "expiresInDays": 10,
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP048",
+   "title": "INMUTABILIDAD POST-APROBACIÓN",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.inmutable@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 9,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de los intentos de cambio."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.inmutable@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.inmutable@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.inmutable@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.inmutable@ejemplo.com",
+     "title": "Aumentar la fibra soluble",
+     "status": "approvedModified",
+     "suggests": [
+      "Avena en hojuelas cocida",
+      "Zanahoria cocida"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.inmutable@ejemplo.com",
+     "title": "Hidratación entre comidas",
+     "status": "createdByNutritionist",
+     "explanation": "none"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.inmutable@ejemplo.com",
+     "title": "Eliminar todos los lácteos",
+     "status": "rejected",
+     "avoid": [
+      "Leche entera de vaca",
+      "Queso fresco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP049",
+   "title": "PANEL CARGADO CON PRIORIZACIÓN CLÍNICA CORRECTA",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.panel@ejemplo.com",
+    "paciente.panel1@ejemplo.com",
+    "paciente.panel2@ejemplo.com",
+    "paciente.panel3@ejemplo.com",
+    "paciente.panel4@ejemplo.com",
+    "paciente.panel5@ejemplo.com",
+    "paciente.panel6@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "hours",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "account",
+     "email": "nutricionista.panel@ejemplo.com",
+     "role": "nutritionist",
+     "status": "active"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.panel1@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.panel1@ejemplo.com",
+     "nutritionist": "nutricionista.panel@ejemplo.com"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.panel2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.panel2@ejemplo.com",
+     "nutritionist": "nutricionista.panel@ejemplo.com"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.panel3@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.panel3@ejemplo.com",
+     "nutritionist": "nutricionista.panel@ejemplo.com"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.panel4@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.panel4@ejemplo.com",
+     "nutritionist": "nutricionista.panel@ejemplo.com"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.panel5@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.panel5@ejemplo.com",
+     "nutritionist": "nutricionista.panel@ejemplo.com"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.panel6@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.panel6@ejemplo.com",
+     "nutritionist": "nutricionista.panel@ejemplo.com"
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.panel1@ejemplo.com",
+     "kind": "periodic",
+     "score": 340,
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.panel2@ejemplo.com",
+     "kind": "periodic",
+     "score": 180,
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.panel2@ejemplo.com",
+     "title": "Recomendación pendiente",
+     "status": "pendingReview",
+     "pendingSinceAgo": {
+      "hours": 30
+     },
+     "expiresInDays": 10,
+     "reduce": [
+      "Cebolla cocida"
+     ]
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.panel3@ejemplo.com",
+     "kind": "periodic",
+     "score": 300,
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.panel4@ejemplo.com",
+     "kind": "periodic",
+     "score": 200,
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.panel4@ejemplo.com",
+     "title": "Recomendación pendiente",
+     "status": "pendingReview",
+     "pendingSinceAgo": {
+      "hours": 20
+     },
+     "expiresInDays": 10,
+     "reduce": [
+      "Cebolla cocida"
+     ]
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.panel5@ejemplo.com",
+     "kind": "periodic",
+     "score": 200,
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.panel6@ejemplo.com",
+     "kind": "periodic",
+     "score": 150,
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "note",
+     "text": "P1,P2,P3,P4,P6 con registros al día (comidas y síntomas hoy). P5 sin ningún registro de comida ni síntoma desde hace 4 días. El límite de 24 h separa a P2 (30 h) de P4 (20 h): reset-qa antes de cada prueba."
+    }
+   ]
+  },
+  {
+   "cp": "CP050",
+   "title": "PANEL INFORMATIVO SIN PACIENTES ASIGNADOS",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.sinpacientes@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": []
+  },
+  {
+   "cp": "CP051",
+   "title": "MANEJO DE ERROR AL CARGAR EL PANEL",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.error@ejemplo.com",
+    "paciente.ajeno@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 7,
+     "text": "Variante B (servicio no disponible): pedir al equipo de desarrollo que deje el portal no disponible y volver a abrir el panel desde el menú."
+    },
+    {
+     "step": 9,
+     "text": "Pedir al equipo de desarrollo que restablezca el servicio y pulsar la opción de reintentar."
+    }
+   ],
+   "seed": [
+    {
+     "t": "link",
+     "patient": "paciente.ajeno@ejemplo.com",
+     "nutritionist": "nutricionista.error@ejemplo.com"
+    },
+    {
+     "t": "note",
+     "text": "Cumple «al menos un paciente asignado» con paciente.ajeno (cuenta compartida con CP073)."
+    }
+   ],
+   "exclusiveWindow": true,
+   "note": "La variante B tumba la API para todos: horario exclusivo."
+  },
+  {
+   "cp": "CP052",
+   "title": "CÓDIGO DE INVITACIÓN GENERADO CORRECTAMENTE",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.codigo1@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 6,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de los dos códigos."
+    }
+   ],
+   "seed": []
+  },
+  {
+   "cp": "CP053",
+   "title": "CÓDIGO EXPIRADO O YA UTILIZADO AL INTENTAR REGISTRARSE",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.codigo2@ejemplo.com",
+    "paciente.vinc1@ejemplo.com"
+   ],
+   "mustNotExist": [
+    "registro.cp053@ejemplo.com",
+    "registro.cp053b@ejemplo.com"
+   ],
+   "consumed": true,
+   "clock": "hours",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "inviteCode",
+     "nutritionist": "nutricionista.codigo2@ejemplo.com",
+     "state": "expired",
+     "ageDays": 4
+    },
+    {
+     "t": "inviteCode",
+     "nutritionist": "nutricionista.codigo2@ejemplo.com",
+     "state": "used",
+     "usedByAnotherPatient": true
+    },
+    {
+     "t": "note",
+     "text": "El operador entrega el valor de cada código al revisor."
+    }
+   ]
+  },
+  {
+   "cp": "CP054",
+   "title": "VINCULACIÓN EXITOSA CON CÓDIGO VÁLIDO",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.vinc@ejemplo.com"
+   ],
+   "mustNotExist": [
+    "registro.cp054@ejemplo.com"
+   ],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 8,
+     "text": "Pedir al equipo de desarrollo que confirme el estado del código del paso 1."
+    }
+   ],
+   "seed": []
+  },
+  {
+   "cp": "CP055",
+   "title": "REGISTRO SIN CÓDIGO DE INVITACIÓN",
+   "platform": "mobile",
+   "accounts": [],
+   "mustNotExist": [
+    "registro.cp055@ejemplo.com"
+   ],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": []
+  },
+  {
+   "cp": "CP056",
+   "title": "GRÁFICO DE EVOLUCIÓN DISPONIBLE CON DATOS SUFICIENTES",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.evol2@ejemplo.com",
+    "paciente.evol@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "days",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.evol@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.evol@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.evol@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.evol@ejemplo.com",
+     "kind": "periodic",
+     "score": 280,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.evol@ejemplo.com",
+     "kind": "periodic",
+     "score": 245,
+     "ago": {
+      "days": 0
+     }
+    },
+    {
+     "t": "activity",
+     "patient": "paciente.evol@ejemplo.com",
+     "daysWithRecordsLast14": 10
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.evol2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.evol2@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.evol2@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.evol2@ejemplo.com",
+     "kind": "periodic",
+     "score": 290,
+     "ago": {
+      "days": 14
+     }
+    }
+   ]
+  },
+  {
+   "cp": "CP057",
+   "title": "VISTA INFORMATIVA CUANDO SOLO EXISTE LA LÍNEA BASE",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.linea@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "days",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.linea@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.linea@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.linea@ejemplo.com",
+     "kind": "baseline",
+     "score": 310,
+     "ago": {
+      "days": 5
+     }
+    }
+   ]
+  },
+  {
+   "cp": "CP058",
+   "title": "REPORTE PDF GENERADO CORRECTAMENTE CON PROTECCIÓN",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.reporte@ejemplo.com",
+    "paciente.reporte1@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "absolute",
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [
+    {
+     "step": 11,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la generación del reporte."
+    }
+   ],
+   "seed": [
+    {
+     "t": "account",
+     "email": "nutricionista.reporte@ejemplo.com",
+     "role": "nutritionist",
+     "status": "active"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.reporte1@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.reporte1@ejemplo.com",
+     "nutritionist": "nutricionista.reporte@ejemplo.com"
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.reporte1@ejemplo.com",
+     "kind": "periodic",
+     "score": 320,
+     "ago": {
+      "date": "2026-08-05"
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.reporte1@ejemplo.com",
+     "kind": "periodic",
+     "score": 280,
+     "ago": {
+      "date": "2026-08-19"
+     }
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.reporte1@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "clinicalNote": "Reducir cebolla y pan de trigo por intolerancia a FODMAP",
+     "approvedInMonth": "2026-08",
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "activity",
+     "patient": "paciente.reporte1@ejemplo.com",
+     "daysWithRecordsInMonth": 20,
+     "month": "2026-08",
+     "monthDays": 31
+    }
+   ]
+  },
+  {
+   "cp": "CP059",
+   "title": "ERROR DE GENERACIÓN POR DATOS INSUFICIENTES EN EL PERÍODO",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.reporte2@ejemplo.com",
+    "paciente.reporte2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "absolute",
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "account",
+     "email": "nutricionista.reporte2@ejemplo.com",
+     "role": "nutritionist",
+     "status": "active"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.reporte2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.reporte2@ejemplo.com",
+     "nutritionist": "nutricionista.reporte2@ejemplo.com"
+    },
+    {
+     "t": "note",
+     "text": "El paciente ingresó al sistema el 2026-09-15 y no tiene ningún registro anterior a esa fecha."
+    }
+   ]
+  },
+  {
+   "cp": "CP060",
+   "title": "GRÁFICO DE EVOLUCIÓN DISPONIBLE CON DATOS SUFICIENTES",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.graf@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "days",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.graf@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.graf@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 42
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.graf@ejemplo.com",
+     "kind": "periodic",
+     "score": 280,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.graf@ejemplo.com",
+     "kind": "periodic",
+     "score": 260,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.graf@ejemplo.com",
+     "kind": "periodic",
+     "score": 245,
+     "ago": {
+      "days": 0
+     }
+    }
+   ]
+  },
+  {
+   "cp": "CP061",
+   "title": "ESTADO INFORMATIVO CON UNA SOLA EVALUACIÓN DISPONIBLE",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.solobase@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "days",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.solobase@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.solobase@ejemplo.com",
+     "kind": "baseline",
+     "score": 310,
+     "ago": {
+      "days": 5
+     }
+    }
+   ]
+  },
+  {
+   "cp": "CP062",
+   "title": "REPORTE PERSONAL GENERADO CORRECTAMENTE",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.reporte@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "days",
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.reporte@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.reporte@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 10
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.reporte@ejemplo.com",
+     "food": "Lomo saltado",
+     "ago": {
+      "days": 60
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.reporte@ejemplo.com",
+     "food": "Aji de gallina",
+     "ago": {
+      "days": 120
+     }
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.reporte@ejemplo.com",
+     "name": "Dolor abdominal",
+     "intensity": 65,
+     "ago": {
+      "days": 10
+     }
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.reporte@ejemplo.com",
+     "name": "Distensión abdominal",
+     "intensity": 40,
+     "ago": {
+      "days": 60
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.reporte@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 70
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.reporte@ejemplo.com",
+     "kind": "periodic",
+     "score": 280,
+     "ago": {
+      "days": 42
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.reporte@ejemplo.com",
+     "kind": "periodic",
+     "score": 245,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.reporte@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "receivedAgo": {
+      "days": 12
+     },
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.reporte@ejemplo.com",
+     "title": "Aumentar la fibra soluble",
+     "status": "approvedAsGenerated",
+     "receivedAgo": {
+      "days": 50
+     },
+     "suggests": [
+      "Avena en hojuelas cocida",
+      "Zanahoria cocida"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP063",
+   "title": "SIN DATOS EN EL PERÍODO SELECCIONADO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.sindatos@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "days",
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.sindatos@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.sindatos@ejemplo.com",
+     "food": "Lomo saltado",
+     "ago": {
+      "days": 40
+     }
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.sindatos@ejemplo.com",
+     "name": "Dolor abdominal",
+     "intensity": 50,
+     "ago": {
+      "days": 40
+     }
+    },
+    {
+     "t": "note",
+     "text": "Ningún registro de comidas ni síntomas en los últimos 30 días."
+    }
+   ]
+  },
+  {
+   "cp": "CP064",
+   "title": "EXPORTACIÓN EXITOSA DE TODOS LOS DATOS DEL PACIENTE",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.export@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 12,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la exportación."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.export@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.export@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 3
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.export@ejemplo.com",
+     "food": "Lomo saltado",
+     "ago": {
+      "days": 2
+     }
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.export@ejemplo.com",
+     "name": "Dolor abdominal",
+     "intensity": 65,
+     "ago": {
+      "days": 2
+     }
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.export@ejemplo.com",
+     "name": "Distensión abdominal",
+     "intensity": 40,
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.export@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.export@ejemplo.com",
+     "kind": "periodic",
+     "score": 280,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.export@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "receivedAgo": {
+      "days": 5
+     },
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "note",
+     "text": "Exactamente estos registros: la exportación se compara contra ellos."
+    }
+   ]
+  },
+  {
+   "cp": "CP065",
+   "title": "EXPORTACIÓN CUANDO SOLO EXISTE EL PERFIL CLÍNICO SIN REGISTROS ADICIONALES",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.export2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.export2@ejemplo.com",
+     "complete": true,
+     "weightKg": 70,
+     "heightCm": 170,
+     "subtype": "SII-E",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "SOLO el perfil clínico: sin comidas, síntomas, cuestionarios ni recomendaciones."
+    }
+   ]
+  },
+  {
+   "cp": "CP066",
+   "title": "ELIMINACIÓN EXITOSA CON RETENCIÓN NORMATIVA INFORMADA AL PACIENTE",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.eliminar@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [
+    {
+     "step": 9,
+     "text": "Pedir al equipo de desarrollo que muestre el estado de los datos del paciente."
+    },
+    {
+     "step": 10,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la operación."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.eliminar@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.eliminar@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.eliminar@ejemplo.com",
+     "name": "Dolor abdominal",
+     "intensity": 65,
+     "ago": {
+      "days": 1
+     }
+    }
+   ]
+  },
+  {
+   "cp": "CP067",
+   "title": "CANCELACIÓN DE LA SOLICITUD DE ELIMINACIÓN",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.cancelar@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.cancelar@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.cancelar@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 1
+     }
+    },
+    {
+     "t": "note",
+     "text": "Buzón sin ningún correo de eliminación de cuenta."
+    }
+   ]
+  },
+  {
+   "cp": "CP068",
+   "title": "CONSULTA EXITOSA DE UN TÉRMINO DEL GLOSARIO",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.glosario@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.glosario@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.glosario@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.glosario@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "explanation": "personalized",
+     "textMarksTerms": [
+      "FODMAP"
+     ],
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP069",
+   "title": "TÉRMINO NO ENCONTRADO EN EL GLOSARIO",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.glosario2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "note",
+     "text": "El glosario NO debe tener «disacaridasas» ni «xyzqw» y SÍ «Disacáridos»."
+    }
+   ]
+  },
+  {
+   "cp": "CP070",
+   "title": "VISUALIZACIÓN EXITOSA DEL PERFIL COMPLETO",
+   "platform": "mobile",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.vista2@ejemplo.com",
+    "paciente.vista3@ejemplo.com",
+    "paciente.vista@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": "days",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.vista@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.vista@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com",
+     "since": {
+      "days": 20
+     }
+    },
+    {
+     "t": "account",
+     "email": "paciente.vista@ejemplo.com",
+     "role": "patient",
+     "status": "active",
+     "displayName": "María Fernanda López Quispe"
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.vista@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.vista@ejemplo.com",
+     "kind": "periodic",
+     "score": 250,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.vista2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.vista2@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com",
+     "since": {
+      "days": 20
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.vista2@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.vista2@ejemplo.com",
+     "kind": "periodic",
+     "score": 290,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.vista3@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.vista3@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com",
+     "since": {
+      "days": 20
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.vista3@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.vista3@ejemplo.com",
+     "kind": "periodic",
+     "score": 270,
+     "ago": {
+      "days": 14
+     }
+    }
+   ]
+  },
+  {
+   "cp": "CP071",
+   "title": "EDICIÓN DE INFORMACIÓN PERSONAL",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.editar@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 9,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la modificación."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.editar@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    }
+   ]
+  },
+  {
+   "cp": "CP072",
+   "title": "CREACIÓN EXITOSA DE RECOMENDACIÓN MANUAL",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.manual@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": "A",
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 8,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la creación."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.manual@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.manual@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    }
+   ]
+  },
+  {
+   "cp": "CP073",
+   "title": "RECHAZO POR DATOS OBLIGATORIOS INCOMPLETOS O PACIENTE NO ASIGNADO",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "nutricionista.error@ejemplo.com",
+    "paciente.ajeno@ejemplo.com",
+    "paciente.manual2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": "B",
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 6,
+     "text": "Variante E (paciente no asignado): como el portal solo muestra los pacientes asignados, pedir al equipo de desarrollo que intente crear, con la sesión de este nutricionista, una recomendación con todos los datos válidos para un paciente que no es suyo."
+    },
+    {
+     "step": 7,
+     "text": "Pedir al equipo de desarrollo que muestre las recomendaciones de los dos pacientes."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.manual2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.manual2@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.ajeno@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.ajeno@ejemplo.com",
+     "nutritionist": "nutricionista.error@ejemplo.com"
+    },
+    {
+     "t": "note",
+     "text": "paciente.ajeno debe estar asignado a OTRO nutricionista: se propone nutricionista.error (ver CP051), sin crear cuentas fuera del Excel."
+    }
+   ]
+  },
+  {
+   "cp": "CP074",
+   "title": "ARCHIVADO EXITOSO CON MOTIVO REGISTRADO",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.archivar@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 8,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la acción."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.archivar@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.archivar@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.archivar@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "validDaysLeft": 30,
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.archivar@ejemplo.com",
+     "title": "Aumentar la fibra soluble",
+     "status": "approvedAsGenerated",
+     "validDaysLeft": 30,
+     "suggests": [
+      "Avena en hojuelas cocida",
+      "Zanahoria cocida"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP075",
+   "title": "ARCHIVADO AUTOMÁTICO POR CADUCIDAD TEMPORAL",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.vencida@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "days",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 3,
+     "text": "Pedir al equipo de desarrollo que ejecute la revisión automática diaria de recomendaciones vencidas (o esperar a su ejecución programada)."
+    },
+    {
+     "step": 6,
+     "text": "Pedir al equipo de desarrollo que confirme quién realizó el archivado."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.vencida@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.vencida@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.vencida@ejemplo.com",
+     "title": "Reducir legumbres",
+     "status": "createdByNutritionist",
+     "validDaysLeft": -2
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.vencida@ejemplo.com",
+     "title": "Aumentar la fibra soluble",
+     "status": "createdByNutritionist",
+     "validDaysLeft": 30
+    },
+    {
+     "t": "note",
+     "text": "La revisión automática de vencidas aún no se ejecutó: el worker de archivado queda apagado y se dispara a mano."
+    }
+   ]
+  },
+  {
+   "cp": "CP076",
+   "title": "BLOQUEO POR CANTIDAD INVÁLIDA O CAMPOS INCOMPLETOS AL REGISTRAR UNA COMIDA",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.diario2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.diario2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "Ninguna comida registrada hoy."
+    }
+   ]
+  },
+  {
+   "cp": "CP077",
+   "title": "EXPLICACIÓN DE RESPALDO CUANDO NO SE PUEDE GENERAR LA EXPLICACIÓN PERSONALIZADA",
+   "platform": "mobile",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.respaldo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.respaldo@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.respaldo@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.respaldo@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "approvedAsGenerated",
+     "explanation": "fallback",
+     "explanationSource": "Fallback",
+     "clinicalNote": "Reducir cebolla y pan de trigo por intolerancia a FODMAP",
+     "stepsCount": 3,
+     "supportingData": {
+      "painRecords": 4,
+      "windowDays": 14
+     },
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP078",
+   "title": "BLOQUEO POR DATOS INVÁLIDOS AL EDITAR LA INFORMACIÓN PERSONAL",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.editar2@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.editar2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    }
+   ]
+  },
+  {
+   "cp": "CP079",
+   "title": "CORREO DE ACTIVACIÓN CON ENLACE DE UN SOLO USO",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.activar@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "account",
+     "email": "nutricionista.activar@ejemplo.com",
+     "role": "nutritionist",
+     "status": "pendingActivation"
+    },
+    {
+     "t": "note",
+     "text": "Enlace de activación de un solo uso y vigente: reset-qa lo reenvía."
+    }
+   ]
+  },
+  {
+   "cp": "CP080",
+   "title": "RECHAZO POR CREDENCIALES INCORRECTAS",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.demo@ejemplo.com"
+   ],
+   "mustNotExist": [
+    "noexiste.cp080@ejemplo.com"
+   ],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 6,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de intentos de ingreso de esa prueba."
+    }
+   ],
+   "seed": [
+    {
+     "t": "note",
+     "text": "Sin bloqueo ni intentos previos. Dos fallos seguidos NO deben bloquear."
+    }
+   ]
+  },
+  {
+   "cp": "CP081",
+   "title": "SOLICITUD CON UN CORREO NO REGISTRADO, INACTIVO O MAL ESCRITO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.inactivo@ejemplo.com",
+    "paciente.reset4@ejemplo.com"
+   ],
+   "mustNotExist": [
+    "tester.sincuenta@ejemplo.com"
+   ],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "account",
+     "email": "paciente.inactivo@ejemplo.com",
+     "role": "patient",
+     "status": "disabled"
+    }
+   ]
+  },
+  {
+   "cp": "CP082",
+   "title": "RESTABLECIMIENTO EXITOSO DE LA CONTRASEÑA",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.reset3@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": true,
+   "operatorSteps": [],
+   "seed": []
+  },
+  {
+   "cp": "CP083",
+   "title": "INTENSIDAD FUERA DEL RANGO PERMITIDO",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.sintomas3@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.sintomas3@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "Ningún síntoma registrado hoy."
+    }
+   ]
+  },
+  {
+   "cp": "CP084",
+   "title": "NOTIFICACIÓN DEL CUESTIONARIO CADA DOS SEMANAS",
+   "platform": "unknown",
+   "accounts": [
+    "paciente.notif@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "days",
+   "push": "A",
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 1,
+     "text": "Pedir al equipo de desarrollo la hora programada de hoy para la notificación del cuestionario de esta cuenta."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.notif@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.notif@ejemplo.com",
+     "kind": "baseline",
+     "score": 320,
+     "ago": {
+      "days": 28
+     }
+    },
+    {
+     "t": "ibs",
+     "patient": "paciente.notif@ejemplo.com",
+     "kind": "periodic",
+     "score": 300,
+     "ago": {
+      "days": 14
+     }
+    },
+    {
+     "t": "ibsDue",
+     "patient": "paciente.notif@ejemplo.com",
+     "note": "El siguiente cuestionario le toca hoy."
+    }
+   ]
+  },
+  {
+   "cp": "CP085",
+   "title": "AVISO PARA EL PACIENTE QUE AÚN NO TIENE NUTRICIONISTA",
+   "platform": "mobile",
+   "accounts": [
+    "paciente.sinnutri@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.sinnutri@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "Sin nutricionista."
+    }
+   ]
+  },
+  {
+   "cp": "CP086",
+   "title": "MODIFICACIÓN EXITOSA DE RECOMENDACIÓN CON NOTA CLÍNICA",
+   "platform": "portal",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.modexito@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": "A",
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 8,
+     "text": "Pedir al equipo de desarrollo que muestre el registro de la decisión."
+    }
+   ],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.modexito@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.modexito@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    },
+    {
+     "t": "rec",
+     "patient": "paciente.modexito@ejemplo.com",
+     "title": "Reducir cebolla y pan de trigo",
+     "status": "pendingReview",
+     "explanation": "personalized",
+     "suggests": [
+      "Zanahoria cocida"
+     ],
+     "steps": [
+      "Cocinar la zanahoria al vapor"
+     ],
+     "expiresInDays": 10,
+     "reduce": [
+      "Cebolla cocida",
+      "Pan de trigo blanco"
+     ]
+    }
+   ]
+  },
+  {
+   "cp": "CP087",
+   "title": "VINCULACIÓN POSTERIOR DESDE EL PERFIL CON UN CÓDIGO VÁLIDO",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.vinculo2@ejemplo.com",
+    "paciente.vinculo@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": "days",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.vinculo@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.vinculo@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 3
+     },
+     "slot": "almuerzo"
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.vinculo@ejemplo.com",
+     "name": "Dolor abdominal",
+     "intensity": 65,
+     "ago": {
+      "days": 3
+     }
+    },
+    {
+     "t": "profile",
+     "patient": "paciente.vinculo2@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "note",
+     "text": "Ninguno de los dos pacientes tiene nutricionista."
+    }
+   ]
+  },
+  {
+   "cp": "CP088",
+   "title": "AVISO CLARO CUANDO EL CÓDIGO DE INVITACIÓN NO ES VÁLIDO",
+   "platform": "mobile",
+   "accounts": [
+    "nutricionista.codigo2@ejemplo.com",
+    "paciente.codigo@ejemplo.com"
+   ],
+   "mustNotExist": [
+    "registro.cp088@ejemplo.com"
+   ],
+   "consumed": true,
+   "clock": "hours",
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.codigo@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "inviteCode",
+     "nutritionist": "nutricionista.codigo2@ejemplo.com",
+     "state": "used",
+     "usedByAnotherPatient": true
+    },
+    {
+     "t": "inviteCode",
+     "nutritionist": "nutricionista.codigo2@ejemplo.com",
+     "state": "expired",
+     "ageDays": 4
+    },
+    {
+     "t": "inviteCode",
+     "nutritionist": "nutricionista.codigo2@ejemplo.com",
+     "state": "valid",
+     "validHoursLeft": 60
+    },
+    {
+     "t": "note",
+     "text": "El CP no dice de qué nutricionista son los códigos: se propone nutricionista.codigo2 (ya existe)."
+    },
+    {
+     "t": "note",
+     "text": "Un código usado, uno vencido y uno vigente (dura 72 h: reset-qa lo regenera). El operador entrega los valores."
+    }
+   ]
+  },
+  {
+   "cp": "CP089",
+   "title": "SOLICITUD DE UN TÉRMINO NUEVO POR EL NUTRICIONISTA",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.glosario@ejemplo.com",
+    "paciente.glosario3@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": false,
+   "clock": null,
+   "push": null,
+   "mailbox": false,
+   "operatorSteps": [
+    {
+     "step": 6,
+     "text": "Pedir al equipo de desarrollo que muestre las solicitudes de términos pendientes de revisión."
+    }
+   ],
+   "seed": [
+    {
+     "t": "note",
+     "text": "El glosario NO tiene «disacaridasas»."
+    }
+   ]
+  },
+  {
+   "cp": "CP090",
+   "title": "CREACIÓN DE RECOMENDACIÓN MANUAL SIN PASOS DE APLICACIÓN",
+   "platform": "both",
+   "accounts": [
+    "nutricionista.demo@ejemplo.com",
+    "paciente.manual3@ejemplo.com"
+   ],
+   "mustNotExist": [],
+   "consumed": true,
+   "clock": null,
+   "push": "A",
+   "mailbox": false,
+   "operatorSteps": [],
+   "seed": [
+    {
+     "t": "profile",
+     "patient": "paciente.manual3@ejemplo.com",
+     "complete": true,
+     "weightKg": 62,
+     "heightCm": 165,
+     "subtype": "SII-D",
+     "allergies": []
+    },
+    {
+     "t": "link",
+     "patient": "paciente.manual3@ejemplo.com",
+     "nutritionist": "nutricionista.demo@ejemplo.com"
+    }
+   ]
+  }
+ ]
+}

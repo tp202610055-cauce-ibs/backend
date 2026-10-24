@@ -1,13 +1,15 @@
 using Cauce.Infrastructure.ClinicalRegistry;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Seeders;
+using Cauce.Infrastructure.Qa;
+using Cauce.Infrastructure.Qa.Manifest;
 using Microsoft.EntityFrameworkCore;
 
 namespace Cauce.Api.Commands;
 
 /// <summary>
 /// Comandos de operación que se ejecutan con el mismo binario de la API y terminan sin levantar el servidor
-/// web: <c>dotnet Cauce.Api.dll migrate</c>. Ninguno crea cuentas ni arranca los workers.
+/// web: <c>dotnet Cauce.Api.dll migrate</c>. Ninguno arranca los workers; solo los de QA crean cuentas.
 /// </summary>
 internal static class CommandRunner
 {
@@ -26,13 +28,13 @@ internal static class CommandRunner
     /// </summary>
     public const int UnknownCommand = 2;
 
-    private static readonly IReadOnlyDictionary<string, Func<IServiceProvider, CancellationToken, Task>> Commands =
-        new Dictionary<string, Func<IServiceProvider, CancellationToken, Task>>(StringComparer.Ordinal)
-        {
-            ["migrate"] = MigrateAsync,
-            ["seed-catalogs"] = SeedCatalogsAsync,
-            ["process-ibs-sss"] = ProcessIbsSssAsync
-        };
+    /// <summary>
+    /// Código de salida de un comando que el entorno o sus argumentos no permiten ejecutar; no escribió nada.
+    /// </summary>
+    public const int Refused = 2;
+
+    private static readonly IReadOnlyDictionary<string, Func<IServiceProvider, IReadOnlyList<string>, CancellationToken, Task>> Commands =
+        BuildCommands();
 
     /// <summary>
     /// Indica si los argumentos piden un comando y no el servidor. Las opciones (<c>--urls</c>) y las
@@ -67,15 +69,55 @@ internal static class CommandRunner
         try
         {
             using var scope = services.CreateScope();
-            await command(scope.ServiceProvider, ct).ConfigureAwait(false);
+            await command(scope.ServiceProvider, args.Skip(1).ToList(), ct).ConfigureAwait(false);
             logger.LogInformation("Command {Command} finished.", name);
             return Success;
+        }
+        catch (QaGuardException exception)
+        {
+            logger.LogError("Command {Command} refused: {Reason}", name, exception.Message);
+            return Refused;
+        }
+        catch (QaFailureException exception)
+        {
+            logger.LogError("Command {Command} found failures: {Summary}", name, exception.Message);
+            return Failure;
+        }
+        catch (QaManifestException exception)
+        {
+            logger.LogError(
+                "Command {Command} stopped before writing; {Count} problem(s):{NewLine}{Problems}",
+                name,
+                exception.Errors.Count,
+                Environment.NewLine,
+                string.Join(Environment.NewLine, exception.Errors));
+            return Failure;
         }
         catch (Exception exception)
         {
             logger.LogError(exception, "Command {Command} failed.", name);
             return Failure;
         }
+    }
+
+    private static Dictionary<string, Func<IServiceProvider, IReadOnlyList<string>, CancellationToken, Task>> BuildCommands()
+    {
+        var commands = new Dictionary<string, Func<IServiceProvider, IReadOnlyList<string>, CancellationToken, Task>>(StringComparer.Ordinal)
+        {
+            ["migrate"] = (services, _, ct) => MigrateAsync(services, ct),
+            ["seed-catalogs"] = (services, _, ct) => SeedCatalogsAsync(services, ct),
+            ["process-ibs-sss"] = (services, _, ct) => ProcessIbsSssAsync(services, ct)
+        };
+
+        var operations = typeof(CommandRunner).Assembly.GetTypes()
+            .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IOperationCommand).IsAssignableFrom(type))
+            .Select(type => (IOperationCommand)Activator.CreateInstance(type)!);
+        foreach (var operation in operations)
+        {
+            commands.Add(operation.Name, operation.RunAsync);
+        }
+
+        return commands;
     }
 
     private static async Task MigrateAsync(IServiceProvider services, CancellationToken ct)

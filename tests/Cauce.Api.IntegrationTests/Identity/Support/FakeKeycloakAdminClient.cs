@@ -161,6 +161,11 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
     public Task DeleteUserAsync(string keycloakUserId, CancellationToken ct = default)
     {
         DeletedUsers.Add(keycloakUserId);
+        foreach (var entry in _usersByEmail.Where(entry => entry.Value == keycloakUserId).ToList())
+        {
+            _usersByEmail.TryRemove(entry.Key, out _);
+        }
+
         return Task.CompletedTask;
     }
 

@@ -245,6 +245,9 @@ public static class DependencyInjection
         // Cliente de administración de Keycloak (cliente HTTP tipado).
         services.AddHttpClient<IKeycloakAdminClient, KeycloakAdminClient>();
 
+        // Operaciones de Keycloak que solo usan los comandos de QA (seed-qa, reset-qa, verify-qa).
+        services.AddHttpClient<Cauce.Infrastructure.Qa.Identity.IQaKeycloakAdmin, Cauce.Infrastructure.Qa.Identity.QaKeycloakAdmin>();
+
         return services;
     }
 
