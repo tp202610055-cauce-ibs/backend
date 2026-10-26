@@ -2,6 +2,7 @@ using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Identity.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -53,7 +54,8 @@ public sealed class RequestPasswordResetCommandHandler : IRequestHandler<Request
     public async Task Handle(RequestPasswordResetCommand request, CancellationToken cancellationToken)
     {
         var user = await _userRepository.FindByEmailAsync(request.Email, cancellationToken).ConfigureAwait(false);
-        if (user is null)
+        // Una cuenta suspendida o inactiva no recibe enlace; la respuesta externa es la misma que si no existiera.
+        if (user is null || user.Status is UserStatus.Suspended or UserStatus.Inactive)
         {
             return;
         }
