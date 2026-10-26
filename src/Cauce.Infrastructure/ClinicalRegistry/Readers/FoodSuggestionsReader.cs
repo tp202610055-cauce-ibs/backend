@@ -96,14 +96,14 @@ public sealed class FoodSuggestionsReader : IFoodSuggestionsReader
     }
 
     /// <summary>
-    /// Selecciona hasta 10 alimentos del catálogo de forma determinista según la semilla semanal: se
-    /// ordena por nombre y se toma una ventana desplazada por la semilla, que rota cada semana.
+    /// Selecciona hasta 10 alimentos peruanos del catálogo de forma determinista según la semilla semanal:
+    /// se ordena por nombre y se toma una ventana desplazada por la semilla, que rota cada semana.
     /// </summary>
     private async Task<IReadOnlyList<FoodItemSummary>> LoadCatalogSuggestionsAsync(int catalogSeed, CancellationToken ct)
     {
         var total = await _context.FoodItems
             .AsNoTracking()
-            .CountAsync(food => food.IsActive, ct)
+            .CountAsync(food => food.IsActive && food.IsPeruvian, ct)
             .ConfigureAwait(false);
         if (total == 0)
         {
@@ -115,7 +115,7 @@ public sealed class FoodSuggestionsReader : IFoodSuggestionsReader
 
         var foods = await _context.FoodItems
             .AsNoTracking()
-            .Where(food => food.IsActive)
+            .Where(food => food.IsActive && food.IsPeruvian)
             .OrderBy(food => food.Name)
             .ThenBy(food => food.Id)
             .Skip(offset)
