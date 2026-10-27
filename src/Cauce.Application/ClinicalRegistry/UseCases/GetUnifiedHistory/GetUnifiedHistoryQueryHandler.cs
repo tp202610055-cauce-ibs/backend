@@ -1,5 +1,5 @@
 using Cauce.Application.ClinicalRegistry.Dtos;
-using Cauce.Application.ClinicalRegistry.Mapping;
+using Cauce.Application.ClinicalRegistry.Services;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.ClinicalRegistry;
 using Cauce.Application.Common.Interfaces.Identity;
@@ -15,8 +15,6 @@ namespace Cauce.Application.ClinicalRegistry.UseCases.GetUnifiedHistory;
 /// </summary>
 public sealed class GetUnifiedHistoryQueryHandler : IRequestHandler<GetUnifiedHistoryQuery, IReadOnlyList<HistoryEvent>>
 {
-    private const int MaxPerSource = 500;
-
     private readonly ICurrentUserService _currentUserService;
     private readonly IUserRepository _userRepository;
     private readonly IMealRepository _mealRepository;
@@ -48,31 +46,12 @@ public sealed class GetUnifiedHistoryQueryHandler : IRequestHandler<GetUnifiedHi
     {
         var patientId = await ResolveCurrentPatientIdAsync(cancellationToken).ConfigureAwait(false);
 
-        var meals = await _mealRepository
-            .ListByPatientInRangeAsync(patientId, request.From, request.To, 0, MaxPerSource, cancellationToken)
+        return await UnifiedHistoryReader
+            .ReadAsync(
+                patientId, request.From, request.To,
+                _mealRepository, _symptomRepository, _clinicalNoteRepository, _fodmapResolver,
+                cancellationToken)
             .ConfigureAwait(false);
-
-        var symptoms = await _symptomRepository
-            .ListByPatientInRangeAsync(patientId, request.From, request.To, 0, MaxPerSource, cancellationToken)
-            .ConfigureAwait(false);
-
-        var notes = await _clinicalNoteRepository
-            .ListByPatientInRangeAsync(patientId, request.From, request.To, cancellationToken)
-            .ConfigureAwait(false);
-
-        var events = new List<HistoryEvent>(meals.Count + symptoms.Count + notes.Count);
-        var fodmapByMeal = await _fodmapResolver.ResolveAsync(meals, cancellationToken).ConfigureAwait(false);
-        events.AddRange(meals.Select(meal => new MealHistoryEvent(
-            meal.ConsumedAt,
-            ClinicalRegistryMappings.ToHistoryItem(
-                meal,
-                fodmapByMeal.TryGetValue(meal.Id, out var level) ? level : null))));
-        events.AddRange(symptoms.Select(symptom => new SymptomHistoryEvent(symptom.OccurredAt, ClinicalRegistryMappings.ToHistoryItem(symptom))));
-        events.AddRange(notes.Select(note => new ClinicalNoteHistoryEvent(note.CreatedAt, ClinicalRegistryMappings.ToSummary(note))));
-
-        return events
-            .OrderByDescending(historyEvent => historyEvent.OccurredAt)
-            .ToList();
     }
 
     private async Task<Guid> ResolveCurrentPatientIdAsync(CancellationToken ct)

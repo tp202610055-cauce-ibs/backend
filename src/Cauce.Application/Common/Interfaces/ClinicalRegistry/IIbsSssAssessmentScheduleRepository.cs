@@ -17,6 +17,14 @@ public interface IIbsSssAssessmentScheduleRepository
     Task<IbsSssAssessmentSchedule?> FindOpenByPatientAsync(Guid patientId, CancellationToken ct = default);
 
     /// <summary>
+    /// Busca la agenda más reciente del paciente por fecha de vencimiento, en cualquier estado. Solo lectura.
+    /// </summary>
+    /// <param name="patientId">Identificador del paciente.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>La agenda, o <see langword="null"/> si el paciente no tiene ninguna.</returns>
+    Task<IbsSssAssessmentSchedule?> FindLatestByPatientAsync(Guid patientId, CancellationToken ct = default);
+
+    /// <summary>
     /// Agrega una nueva agenda al contexto de persistencia.
     /// </summary>
     /// <param name="schedule">Agenda a agregar.</param>

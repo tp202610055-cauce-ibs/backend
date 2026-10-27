@@ -30,6 +30,16 @@ public sealed class IbsSssAssessmentScheduleRepository : IIbsSssAssessmentSchedu
     }
 
     /// <inheritdoc />
+    public Task<IbsSssAssessmentSchedule?> FindLatestByPatientAsync(Guid patientId, CancellationToken ct = default)
+    {
+        return _context.IbsSssSchedules
+            .AsNoTracking()
+            .Where(schedule => schedule.PatientId == patientId)
+            .OrderByDescending(schedule => schedule.DueDate)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <inheritdoc />
     public async Task AddAsync(IbsSssAssessmentSchedule schedule, CancellationToken ct = default)
     {
         await _context.IbsSssSchedules.AddAsync(schedule, ct).ConfigureAwait(false);
