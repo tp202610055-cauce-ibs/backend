@@ -137,6 +137,10 @@ public sealed class QaPatientRetirer : IQaAccountRetirer
             link.Deactivate(utcNow);
         }
 
+        // Igual que la baja de cuenta: los avisos de la bandeja que lo mencionan se borran.
+        var alerts = await _db.NutritionistAlerts.Where(alert => alert.PatientId == user.Id).ToListAsync(ct).ConfigureAwait(false);
+        _db.NutritionistAlerts.RemoveRange(alerts);
+
         // users no tiene trigger: el retiro queda en la bitácora con una fila explícita.
         await _auditLogger.LogAsync(
             AuditActionType.Delete,

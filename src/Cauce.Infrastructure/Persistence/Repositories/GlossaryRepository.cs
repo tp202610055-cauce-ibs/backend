@@ -48,4 +48,12 @@ public sealed class GlossaryRepository : IGlossaryRepository
             .ToListAsync(ct)
             .ConfigureAwait(false);
     }
+
+    /// <inheritdoc />
+    public Task<bool> ExistsByTermAsync(string term, CancellationToken ct = default)
+    {
+        return _context.GlossaryTerms
+            .AsNoTracking()
+            .AnyAsync(entry => EF.Functions.Unaccent(entry.Term).ToLower() == EF.Functions.Unaccent(term).ToLower(), ct);
+    }
 }

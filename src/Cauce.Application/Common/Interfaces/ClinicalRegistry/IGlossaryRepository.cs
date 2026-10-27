@@ -22,4 +22,12 @@ public interface IGlossaryRepository
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Los términos coincidentes, ordenados por término.</returns>
     Task<IReadOnlyList<GlossaryTerm>> SearchAsync(string query, CancellationToken ct = default);
+
+    /// <summary>
+    /// Indica si el glosario ya tiene ese término exacto, sin distinguir mayúsculas ni tildes.
+    /// </summary>
+    /// <param name="term">Término a comprobar, ya recortado.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns><see langword="true"/> si el término ya existe.</returns>
+    Task<bool> ExistsByTermAsync(string term, CancellationToken ct = default);
 }

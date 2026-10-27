@@ -94,6 +94,28 @@ public sealed class ResetQaTests
     }
 
     [SkippableFact]
+    public async Task ResetQa_PatientWithAlerts_RemovesThemAndCreatesNoNewOnes()
+    {
+        SkipIfUnavailable();
+        var before = await UserAsync("paciente.entrega@ejemplo.com");
+        var nutritionist = await UserAsync("nutricionista.demo@ejemplo.com");
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            (await db.NutritionistAlerts.CountAsync()).Should().Be(0, "seed-qa no genera avisos");
+            db.NutritionistAlerts.Add(Domain.Notifications.NutritionistAlert.Record(
+                nutritionist.Id, before.Id, Domain.Notifications.Enums.NutritionistAlertType.PatientLinked, DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
+        (await RunAsync("reset-qa", "CP036")).Should().Be(CommandRunner.Success);
+
+        var (checkScope, checkDb) = CreateDbScope();
+        using var _ = checkScope;
+        (await checkDb.NutritionistAlerts.CountAsync()).Should().Be(0);
+    }
+
+    [SkippableFact]
     public async Task ResetQa_LockedAccountInCp015_IsRecreatedWithoutLock()
     {
         SkipIfUnavailable();

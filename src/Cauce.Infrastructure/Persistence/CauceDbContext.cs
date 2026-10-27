@@ -160,6 +160,16 @@ public sealed class CauceDbContext : DbContext
     public DbSet<Notification> Notifications => Set<Notification>();
 
     /// <summary>
+    /// Avisos de la bandeja del nutricionista.
+    /// </summary>
+    public DbSet<NutritionistAlert> NutritionistAlerts => Set<NutritionistAlert>();
+
+    /// <summary>
+    /// Solicitudes de términos nuevos del glosario.
+    /// </summary>
+    public DbSet<GlossaryTermRequest> GlossaryTermRequests => Set<GlossaryTermRequest>();
+
+    /// <summary>
     /// Mensajes del patrón outbox transaccional pendientes de publicar.
     /// </summary>
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();

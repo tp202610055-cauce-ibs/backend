@@ -297,6 +297,10 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status422UnprocessableEntity, "Sin datos en el período", "patient_has_no_data_in_period", exception.Message),
             ReportPeriodInvalidException => (
                 StatusCodes.Status422UnprocessableEntity, "Período de reporte inválido", "report_period_invalid", exception.Message),
+            GlossaryTermAlreadyExistsException => (
+                StatusCodes.Status409Conflict, "Término existente", "glossary_term_already_exists", exception.Message),
+            NutritionistAlertNotFoundException => (
+                StatusCodes.Status404NotFound, "Aviso no encontrado", "nutritionist_alert_not_found", exception.Message),
             InvalidNotificationStateTransitionException => (
                 StatusCodes.Status500InternalServerError, "Transición de notificación inválida", "invalid_notification_state_transition",
                 "Ocurrió un error al procesar una notificación."),

@@ -46,6 +46,7 @@ public sealed class SeedQaFullManifestTests
         (await db.Users.CountAsync(user => user.FcmToken != null)).Should().Be(0);
         (await db.Notifications.CountAsync()).Should().Be(0);
         (await db.OutboxMessages.CountAsync()).Should().Be(0);
+        (await db.NutritionistAlerts.CountAsync()).Should().Be(0);
         Factory.EmailSender.SentEmails.Should().BeEmpty();
         var pending = await db.Users.Where(user => user.Status == UserStatus.PendingActivation).Select(user => user.KeycloakId).ToListAsync();
         pending.Should().HaveCount(3 + 1);
