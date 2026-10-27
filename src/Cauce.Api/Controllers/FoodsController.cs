@@ -1,5 +1,6 @@
 using Cauce.Api.Configuration;
 using Cauce.Application.ClinicalRegistry.Dtos;
+using Cauce.Application.ClinicalRegistry.UseCases.CheckFoodAllergens;
 using Cauce.Application.ClinicalRegistry.UseCases.GetFoodItemDetail;
 using Cauce.Application.ClinicalRegistry.UseCases.GetFoodSuggestions;
 using Cauce.Application.ClinicalRegistry.UseCases.ListFoodItemsCatalog;
@@ -104,6 +105,24 @@ public sealed class FoodsController : BaseApiController
     public async Task<IActionResult> GetDetail(Guid foodId, CancellationToken ct)
     {
         var result = await _mediator.Send(new GetFoodItemDetailQuery(foodId), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Indica si un alimento del catálogo choca con las alergias declaradas del paciente y con cuáles, con la misma regla que el chequeo al guardar un alimento personalizado.
+    /// </summary>
+    /// <param name="foodId">Identificador del alimento.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El resultado del cruce con las alergias declaradas.</returns>
+    [HttpGet("{foodId:guid}/allergen-check")]
+    [Authorize(Policy = "Patient")]
+    [ProducesResponseType(typeof(FoodAllergenCheckResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> CheckAllergens(Guid foodId, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new CheckFoodAllergensQuery(foodId), ct);
         return Ok(result);
     }
 }
