@@ -1,12 +1,17 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.5.0 · **Fecha:** 26 de octubre de 2026 · **Backend:** rama `feature/backend-qa-release2`
+**Versión:** 1.5.1 · **Fecha:** 27 de octubre de 2026 · **Backend:** rama `feature/backend-qa-release2`
 **Alcance:** endpoints de identidad que consumen la app móvil Flutter (US01, US05, US07, US08, US19, US20) y,
 desde v1.4, el portal web de nutricionistas (§2.12).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
 `src/Cauce.Application/Identity/`. Cada afirmación de este documento lleva su evidencia en `archivo:línea`.
 
+> **v1.5.1 (contrato v1.10.0).** Sin cambios en los endpoints de identidad. Corrige §2.5: un token ya usado
+> responde 400 `invalid_password_reset_token`, no `expired_password_reset_token`; este último queda solo para
+> un token vencido sin usar. El contrato v1.10.0 suma rutas fuera de identidad (detalle en `ENDPOINTS.md`
+> v1.11.0).
+>
 > **v1.5.0 (contrato v1.9.0).** Cambio aditivo en identidad:
 > - Nueva ruta anónima `POST /auth/password-reset/validate` (§2.13): comprueba si un enlace de
 >   restablecimiento sirve, sin consumirlo. 204 si sirve; 400 `invalid_password_reset_token` si no.
@@ -372,8 +377,8 @@ Confirma el restablecimiento con el token recibido por correo.
 | HTTP | `errorCode` | Cuándo |
 |---|---|---|
 | 400 | `validation_error` | Falla una regla de FluentValidation |
-| 400 | `invalid_password_reset_token` | El token no existe |
-| 400 | `expired_password_reset_token` | El token venció o ya se usó |
+| 400 | `invalid_password_reset_token` | El token no existe, ya se usó o su usuario no existe (`PasswordResetTokenVerifier.cs:60`) |
+| 400 | `expired_password_reset_token` | El token venció sin haberse usado (`ConfirmPasswordResetCommandHandler.cs:47-49`) |
 | 429 | *(sin `errorCode`)* | Se superó el límite |
 | 502 | `keycloak_integration_error` | Keycloak respondió con un error, no fue alcanzable o no respondió a tiempo (timeout del `HttpClient`) al fijar la contraseña nueva (acta A70) |
 | 500 | `internal_server_error` | Error inesperado |

@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.10.0 · **Actualizado:** 2026-10-26 · **Contrato:** [`openapi-v1.9.0.json`](openapi-v1.9.0.json) (373 KB, 73 operaciones, 65 paths)
+**Versión:** 1.11.0 · **Actualizado:** 2026-10-27 · **Contrato:** [`openapi-v1.10.0.json`](openapi-v1.10.0.json) (399 KB, 78 operaciones, 70 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -10,7 +10,21 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > **Nota.** `CLAUDE.md` es un documento operativo local: está en el `.gitignore` del backend y no viaja en
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los endpoints de identidad, la fuente autoritativa versionada es
-> [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.4.
+> [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.5.1.
+
+**Novedades de la v1.11.0 (contrato v1.10.0).** Cambio aditivo: 5 operaciones y 5 paths nuevos (78 y 70),
+8 esquemas nuevos (137) y un campo nuevo. Ninguna respuesta, código de error ni parámetro existente cambia.
+- **`GET /foods/{foodId}/allergen-check`** (paciente): si un alimento del catálogo choca con sus alergias
+  declaradas y con cuáles, con la misma regla que el guardado del alimento personalizado (CP027).
+- **`GET /nutritionists/me/alerts`**, **`POST /nutritionists/me/alerts/{alertId}/read`** y
+  **`POST /nutritionists/me/alerts/read-all`** (nutricionista): bandeja de avisos de paciente vinculado y de
+  cambio de subtipo de SII, con el conteo de no leídos (CP009, CP054, CP087). Sin push.
+- **`POST /glossary/term-requests`** (nutricionista): solicitud de un término nuevo del glosario (CP089).
+- **`GET /nutritionists/me/patients/{patientId}/recommendations`**: cada fila suma `foods`, los alimentos con
+  su acción (CP074, CP075).
+- Dos `errorCode` nuevos: `nutritionist_alert_not_found` (404) y `glossary_term_already_exists` (409).
+- El PDF del reporte sale en español con horas de Lima, cuenta la frecuencia de registro sobre los días del
+  período e incluye cada recomendación aprobada con sus alimentos o su texto manual y la nota clínica.
 
 **Novedades de la v1.10.0 (contrato v1.9.0).** Cambio aditivo: 5 operaciones y 5 paths nuevos (73 y 65),
 y 6 esquemas nuevos (129). Ninguna respuesta, código de error ni parámetro existente cambia.
@@ -137,7 +151,7 @@ cliente, y el paso de las claves de `errors` a camelCase.
 - **Auth:** `Authorization: Bearer <accessToken>` (JWT de Keycloak, realm `cauce`). Roles `patient` /
   `nutritionist` → políticas ASP.NET `Patient` / `Nutritionist`. El móvil obtiene los tokens por
   `/auth/login`; el portal, por `/auth/portal/login` (§2.b). Ninguno de los dos habla con Keycloak.
-- **Schemas:** los DTOs de request y response viven en `openapi-v1.8.0.json` bajo
+- **Schemas:** los DTOs de request y response viven en `openapi-v1.10.0.json` bajo
   `#/components/schemas/<Nombre>`. En las tablas se citan por nombre (ej. `CreateMealRequest`).
 - **Errores:** RFC 7807 `application/problem+json` con extensiones `errorCode` (máquina) y `traceId`. El
   cuerpo de todo error 4xx/5xx es un `ProblemDetails`. Los `429` incluyen la extensión `retryAfterSeconds`;
@@ -204,9 +218,11 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `custom_food_in_use` | 409 | El alimento personalizado está referenciado por comidas. |
 | `unconfirmed_allergens` | 409 | Coincidencias de alérgenos sin confirmar (extensiones `detected`, `allergens[]`). |
 | `idempotency_mismatch` | 409 | La misma `Idempotency-Key` se reusó con carga distinta. |
-| `conflict_state` | 409 | Transición de estado inválida en la máquina HITL. |
+| `conflict_state` | 409 | Transición de estado inválida en la máquina HITL. Sobre una recomendación cerrada, el intento queda auditado como `blocked_change_attempt`. |
 | `recommendation_expired` | 409 | La recomendación superó su vigencia. |
 | `recommendation_not_archivable` | 409 | La recomendación no está en un estado archivable. |
+| `glossary_term_already_exists` | 409 | El término pedido ya está en el glosario, sin distinguir mayúsculas ni tildes. |
+| `nutritionist_alert_not_found` | 404 | El aviso no existe o no pertenece a la bandeja del nutricionista. |
 | `active_pilot_retention` | 409 | Baja bloqueada por retención de piloto activo (falta el acuse). |
 | `patient_already_assigned` | 409 | El paciente ya tiene un nutricionista activo y no se sobrescribe. |
 | `nutritionist_assignment_exists` | 409 | El canje no pudo crear el vínculo porque ya existe una asignación activa. Solo ocurre si otra operación la creó entre la verificación y el canje. |
@@ -325,7 +341,7 @@ obligatorio igual: siempre viene, vacío si no hay acciones.
 ## 2. Autenticación
 
 Los endpoints de identidad tienen contrato detallado y versionado en
-[`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.4, incluida la lista completa de `errorCode` por
+[`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.5.1, incluida la lista completa de `errorCode` por
 flujo. Lo de aquí es el resumen operativo.
 
 Cada intento de iniciar sesión, renovarla o cerrarla queda en `audit_logs` con fecha, IP de origen, canal
@@ -961,6 +977,16 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 | Idempotencia | — |
 | Respuestas | List **200** `PagedResult<FoodItemSummary>` · Search **200** `FoodItemSummary[]` · Detail **200** `FoodItemDetail` (404 `food_item_not_found`) · 400 (list; en search, 400 de binding sin `errorCode` si falta `q` o llega vacío) · 401 · 429 · 500 |
 
+### `GET /api/v1/foods/{foodId}/allergen-check`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Indica si un alimento del catálogo choca con las alergias declaradas del paciente y con cuáles. Usa el mismo chequeo que `POST /custom-foods` y `PUT /custom-foods/{id}`, así que el aviso al elegir el ingrediente coincide con el 409 `unconfirmed_allergens` al guardar. No reemplaza ese chequeo. |
+| US/TS | US10 CA03 (CP027) |
+| Autorización | **`Policy = Patient`** · `default-auth` |
+| Path | `{foodId}` obligatorio y distinto de `00000000-0000-0000-0000-000000000000` |
+| Idempotencia | — |
+| Respuestas | **200** `FoodAllergenCheckResult` (`foodId`, `foodName`, `hasAllergenConflict`, `allergens[]` con los nombres de las alergias, en orden alfabético) · 400 `validation_error` · 404 `food_item_not_found` (inexistente o retirado del catálogo) · 401 · **403** · 429 · 500 |
+
 ### `GET /api/v1/foods/suggestions`
 | Campo | Valor |
 | --- | --- |
@@ -991,6 +1017,16 @@ Catálogos y consulta. `GET /allergies` es transversal (cualquier autenticado); 
 | Query | Search: `q` **obligatorio y no vacío** |
 | Idempotencia | — |
 | Respuestas | **200** `GlossaryResult` · 400 de binding sin `errorCode` (search, si falta `q` o llega vacío) · 401 · 429 · 500 |
+
+### `POST /api/v1/glossary/term-requests`
+| Campo | Valor |
+| --- | --- |
+| Resumen | El nutricionista pide que se agregue un término que no está en el glosario. Queda pendiente con el nutricionista, el término y la fecha y hora, y se audita (`create` sobre `GlossaryTermRequest`). La revisión de las solicitudes no está implementada. |
+| US/TS | US27 (CP089) |
+| Autorización | **`Policy = Nutritionist`** · `default-auth`. El paciente recibe 403. |
+| Request body | `RequestGlossaryTermRequest` (`term`: obligatorio, de 1 a 100 caracteres sin contar los espacios de los extremos; se guarda recortado) |
+| Idempotencia | Natural: si el mismo nutricionista ya tiene pendiente el mismo término (sin distinguir mayúsculas ni tildes), responde **200** con esa solicitud y no crea otra. |
+| Respuestas | **201** `GlossaryTermRequestResult` (`id`, `term`, `status: Pending`, `requestedAt`) · **200** el mismo esquema si ya existía · 400 `validation_error` · 409 `glossary_term_already_exists` · 401 · **403** · 429 · 500 |
 
 ---
 
@@ -1079,10 +1115,43 @@ anteriores a la vinculación, compararlos con `assignedAt` del detalle del pacie
 | Respuestas | **200** `PagedResult<PatientRecommendationForNutritionistDto>` · 400 `validation_error` · 401 · 403 `unauthorized_patient_access` · 500 |
 
 Cada fila trae `status`, `source`, `title`, `itemsCount`, `generatedAt`, `reviewedAt`, `expiresAt`,
-`validUntil`, `isActive`, `archivedAt` y `archiveReason`. Las vigentes son las de `isActive: true`; el
+`validUntil`, `isActive`, `archivedAt`, `archiveReason` y, desde la v1.11.0, `foods`: un arreglo, nunca
+`null`, de `RecommendationFoodPreviewDto` (`foodName`, `actionType`, `substituteFoodName` en una
+sustitución). Sirve para distinguir dos recomendaciones del sistema sin abrirlas; una manual sin alimentos
+lo trae vacío. Las vigentes son las de `isActive: true`; el
 historial de archivadas, las de `isActive: false` con su motivo y fecha. El contenido completo se lee en
 `GET /recommendations/{id}`. Es solo lectura: una en revisión ya vencida aparece con su estado guardado
 hasta que el barrido la pase a `Expired`.
+
+### `GET /api/v1/nutritionists/me/alerts`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Bandeja de avisos del nutricionista, del más reciente al más antiguo, con el conteo de no leídos de toda la bandeja. |
+| US/TS | US03 CA03 y US20 (CP009, CP054, CP087) |
+| Query | `page=1`, `pageSize=20` (1 a 100) |
+| Idempotencia | — |
+| Rate limit | `default-auth` |
+| Respuestas | **200** `NutritionistAlertListResult` (`items`, `page`, `pageSize`, `totalCount`, `unreadCount`) · 400 `validation_error` · 401 · 403 · 429 · 500 |
+
+Cada `NutritionistAlertDto` trae `id`, `type` (`NutritionistAlertType`: `PatientLinked` o
+`PatientSubtypeChanged`), `patientId`, `patientName` y `patientCode` (leídos al listar), `message` (texto en
+español listo para mostrar), `occurredAt`, `isRead` y `readAt`. La tabla guarda solo el tipo, el paciente, el
+nutricionista, la fecha y la lectura. Los avisos nacen del outbox:
+- `PatientLinked`: al registrarse con el código del nutricionista y al canjearlo desde el perfil.
+- `PatientSubtypeChanged`: al actualizar el perfil, solo si el subtipo cambió y el paciente tiene nutricionista activo.
+
+Son idempotentes, no envían push y no los genera `seed-qa`. La baja de la cuenta del paciente borra los
+avisos que lo mencionan.
+
+### `POST /api/v1/nutritionists/me/alerts/{alertId}/read` · `POST /api/v1/nutritionists/me/alerts/read-all`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Marca como leído un aviso propio, o todos. Repetirlo responde igual y conserva la fecha de la primera lectura. |
+| US/TS | CP009, CP054, CP087 |
+| Request body | — |
+| Idempotencia | Natural |
+| Rate limit | `default-auth` |
+| Respuestas | **204** · 400 `validation_error` (id vacío) · 404 `nutritionist_alert_not_found` (inexistente o de otro nutricionista; solo en `/{alertId}/read`) · 401 · 403 · 429 · 500 |
 
 ### `GET /api/v1/nutritionists/me/patients/{patientId}/ibs-sss-cycle`
 | Campo | Valor |
@@ -1136,6 +1205,11 @@ hasta que el barrido la pase a `Expired`.
 | Idempotencia | **Sí — requerido** |
 | Rate limit | `default-auth` |
 | Respuestas | **204** · 400 · 404 `recommendation_not_found` · 409 (`conflict_state`, `recommendation_expired`, `idempotency_mismatch`) · 401 · 403 `recommendation_access_denied` · 429 · 500 |
+
+Aprobar, rechazar, modificar o archivar una recomendación cerrada responde 409 (`conflict_state`,
+`recommendation_expired` o `recommendation_not_archivable`) y deja una fila de auditoría
+`blocked_change_attempt` con el nutricionista, la recomendación, la acción intentada y el estado, sin el
+texto de la nota (CP048).
 
 ### `POST /api/v1/recommendations/{id}/reject`
 | Campo | Valor |
@@ -1197,6 +1271,13 @@ Desde la v1.9.0 el período **no tiene tope de duración** (antes, 90 días) y p
 período responde 422 `patient_has_no_data_in_period`. El PDF lista como máximo `Reports:MaxDetailRows` (200)
 comidas y otros tantos síntomas; los agregados cubren todo el período. El autoreporte del paciente
 (`POST /patients/me/report`) conserva su tope de 90 días.
+
+El PDF sale en español de Perú con fechas `dd/MM/yyyy` y horas de Lima, y el período se cuenta en días de
+Lima. Muestra la frecuencia de registro como «N días con registros de M», sobre los días del período con
+alguna comida o síntoma. Lista cada recomendación aprobada (también las modificadas y las manuales): las del
+sistema con sus alimentos agrupados por acción y la nota clínica; las manuales con título, descripción, pasos
+y nota. La auditoría `export_pdf` guarda `patient_id`, `period_start` y `period_end`. El detalle del 422
+dice «No hay datos suficientes en el período solicitado» y sugiere ampliar el rango.
 
 ---
 
