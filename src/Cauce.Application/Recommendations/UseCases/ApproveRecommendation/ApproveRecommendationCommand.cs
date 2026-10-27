@@ -14,4 +14,8 @@ namespace Cauce.Application.Recommendations.UseCases.ApproveRecommendation;
 public sealed record ApproveRecommendationCommand(
     Guid RecommendationId,
     string Note,
-    Guid ClientGuid) : IRequest<Unit>, IIdempotentCommand;
+    Guid ClientGuid) : IRequest<Unit>, IIdempotentCommand, IRecommendationDecisionCommand
+{
+    /// <inheritdoc />
+    public string AttemptedAction => "approve";
+}

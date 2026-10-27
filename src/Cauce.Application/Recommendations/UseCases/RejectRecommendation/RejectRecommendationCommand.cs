@@ -14,4 +14,8 @@ namespace Cauce.Application.Recommendations.UseCases.RejectRecommendation;
 public sealed record RejectRecommendationCommand(
     Guid RecommendationId,
     string Reason,
-    Guid ClientGuid) : IRequest<Unit>, IIdempotentCommand;
+    Guid ClientGuid) : IRequest<Unit>, IIdempotentCommand, IRecommendationDecisionCommand
+{
+    /// <inheritdoc />
+    public string AttemptedAction => "reject";
+}

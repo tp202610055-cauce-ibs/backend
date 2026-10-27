@@ -148,5 +148,11 @@ public enum AuditActionType
     /// Cierre de sesión rechazado, por ejemplo porque la ruta del móvil recibió un cliente OIDC que no le
     /// corresponde. Lo escribe el middleware de auditoría con el canal y la causa interna (acta A68).
     /// </summary>
-    FailedLogout
+    FailedLogout,
+
+    /// <summary>
+    /// Intento rechazado con 409 de aprobar, modificar, rechazar o archivar una recomendación cerrada.
+    /// Guarda la acción intentada y el estado, nunca el texto de la nota.
+    /// </summary>
+    BlockedChangeAttempt
 }
