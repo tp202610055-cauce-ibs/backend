@@ -64,6 +64,27 @@ public interface IRecommendationRepository
         CancellationToken ct = default);
 
     /// <summary>
+    /// Lista paginadas todas las recomendaciones del paciente, en cualquier estado y también las
+    /// archivadas, de la más reciente a la más antigua. Solo lectura.
+    /// </summary>
+    /// <param name="patientId">Identificador del paciente.</param>
+    /// <param name="page">Número de página (base 1).</param>
+    /// <param name="pageSize">Tamaño de página.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>La página de recomendaciones.</returns>
+    Task<PagedResult<Recommendation>> ListAllByPatientAsync(Guid patientId, int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>
+    /// Indica si el paciente tiene alguna recomendación activa en revisión que aún no venció
+    /// (<c>ExpiresAt</c> nulo o no anterior a <paramref name="now"/>).
+    /// </summary>
+    /// <param name="patientId">Identificador del paciente.</param>
+    /// <param name="now">Marca de tiempo UTC de referencia.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns><see langword="true"/> si existe al menos una.</returns>
+    Task<bool> ExistsInReviewForPatientAsync(Guid patientId, DateTime now, CancellationToken ct = default);
+
+    /// <summary>
     /// Agrega una nueva recomendación al contexto de persistencia.
     /// </summary>
     /// <param name="recommendation">Recomendación a agregar.</param>

@@ -4,6 +4,7 @@ using Cauce.Application.Common.Models;
 using Cauce.Application.Recommendations.Dtos;
 using Cauce.Application.Recommendations.UseCases.DeliverRecommendation;
 using Cauce.Application.Recommendations.UseCases.GenerateRecommendation;
+using Cauce.Application.Recommendations.UseCases.GetPatientReviewStatus;
 using Cauce.Application.Recommendations.UseCases.ListPatientRecommendations;
 using Cauce.Application.Recommendations.UseCases.SubmitFeedback;
 using Cauce.Domain.Recommendations.Enums;
@@ -81,6 +82,20 @@ public sealed class PatientRecommendationsController : BaseApiController
         CancellationToken ct = default)
     {
         var result = await _mediator.Send(new ListPatientRecommendationsQuery(status, page, pageSize), ct);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Indica si el paciente autenticado tiene una recomendación en revisión por su nutricionista, sin
+    /// mostrar su contenido.
+    /// </summary>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>El indicador de revisión.</returns>
+    [HttpGet("me/review-status")]
+    [ProducesResponseType(typeof(RecommendationReviewStatusDto), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetMyReviewStatus(CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetPatientReviewStatusQuery(), ct);
         return Ok(result);
     }
 

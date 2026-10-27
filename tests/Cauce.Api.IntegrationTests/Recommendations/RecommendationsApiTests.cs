@@ -797,6 +797,100 @@ public sealed class RecommendationsApiTests
         supporting.GetProperty("correlationWindowHours").GetInt32().Should().Be(4);
     }
 
+    // ----- Indicador de revisión del paciente -----
+
+    [SkippableFact]
+    public async Task ReviewStatus_WithoutRecommendations_ReturnsFalse()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+
+        (await ReviewStatusAsync(patient.KeycloakId)).Should().BeFalse();
+    }
+
+    [SkippableFact]
+    public async Task ReviewStatus_WithPendingReview_ReturnsOnlyTheFlag()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        await GenerateAsync(patient.KeycloakId);
+
+        var response = await PatientClient(patient.KeycloakId).GetAsync("/api/v1/recommendations/me/review-status");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.EnumerateObject().Select(p => p.Name).Should().Equal("hasRecommendationInReview");
+        body.GetProperty("hasRecommendationInReview").GetBoolean().Should().BeTrue();
+    }
+
+    [SkippableTheory]
+    [InlineData("UPDATE recommendations SET expires_at = now() - interval '1 hour' WHERE recommendation_id = {0}")]
+    [InlineData("UPDATE recommendations SET is_active = false WHERE recommendation_id = {0}")]
+    public async Task ReviewStatus_PendingButExpiredOrInactive_ReturnsFalse(string sql)
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<CauceDbContext>().Database.ExecuteSqlRawAsync(sql, recommendationId);
+        }
+
+        (await ReviewStatusAsync(patient.KeycloakId)).Should().BeFalse();
+    }
+
+    [SkippableFact]
+    public async Task ReviewStatus_PendingWithoutExpiration_ReturnsTrue()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        using (var scope = _factory.Services.CreateScope())
+        {
+            await scope.ServiceProvider.GetRequiredService<CauceDbContext>().Database.ExecuteSqlRawAsync(
+                "UPDATE recommendations SET expires_at = NULL WHERE recommendation_id = {0}", recommendationId);
+        }
+
+        (await ReviewStatusAsync(patient.KeycloakId)).Should().BeTrue();
+    }
+
+    [SkippableFact]
+    public async Task ReviewStatus_OnlyApproved_ReturnsFalse()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientWithHistoryAsync();
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var recommendationId = await GenerateAsync(patient.KeycloakId);
+        (await Approve(nutritionist.KeycloakId, recommendationId)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        (await ReviewStatusAsync(patient.KeycloakId)).Should().BeFalse();
+    }
+
+    [SkippableFact]
+    public async Task ReviewStatus_AsNutritionist_Returns403()
+    {
+        SkipIfUnavailable();
+        var nutritionist = await SeedNutritionistAsync();
+
+        var response = await NutritionistClient(nutritionist.KeycloakId).GetAsync("/api/v1/recommendations/me/review-status");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    private async Task<bool> ReviewStatusAsync(string patientKeycloakId)
+    {
+        var response = await PatientClient(patientKeycloakId).GetAsync("/api/v1/recommendations/me/review-status");
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("hasRecommendationInReview").GetBoolean();
+    }
+
     // ----- Helpers -----
 
     private void SkipIfUnavailable()
