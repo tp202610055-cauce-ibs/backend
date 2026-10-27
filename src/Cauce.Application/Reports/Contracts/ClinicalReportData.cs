@@ -25,6 +25,8 @@ namespace Cauce.Application.Reports.Contracts;
 /// <param name="Assessments">Evaluaciones IBS-SSS del período.</param>
 /// <param name="ApprovedRecommendations">Recomendaciones aprobadas del período.</param>
 /// <param name="Feedback">Retroalimentación recibida.</param>
+/// <param name="DaysWithRecords">Días de Lima del período con al menos una comida o un síntoma.</param>
+/// <param name="PeriodDays">Días del período, contando el inicio y el fin.</param>
 public sealed record ClinicalReportData(
     string PatientCode,
     string PatientInitials,
@@ -45,7 +47,9 @@ public sealed record ClinicalReportData(
     IReadOnlyList<ReportSymptomEntry> SymptomEntries,
     IReadOnlyList<ReportAssessment> Assessments,
     IReadOnlyList<ReportRecommendation> ApprovedRecommendations,
-    IReadOnlyList<ReportFeedback> Feedback);
+    IReadOnlyList<ReportFeedback> Feedback,
+    int DaysWithRecords,
+    int PeriodDays);
 
 /// <summary>Alergia declarada para el reporte.</summary>
 /// <param name="Name">Nombre de la alergia.</param>
@@ -94,10 +98,27 @@ public sealed record ReportSymptomEntry(
 public sealed record ReportAssessment(DateOnly Date, int Score, string Category);
 
 /// <summary>Recomendación aprobada del reporte.</summary>
-/// <param name="ApprovedAt">Momento de aprobación.</param>
-/// <param name="ItemsCount">Cantidad de ítems.</param>
-/// <param name="ExplanationText">Explicación, o <see langword="null"/>.</param>
-public sealed record ReportRecommendation(DateTime ApprovedAt, int ItemsCount, string? ExplanationText);
+/// <param name="ApprovedAt">Momento de aprobación, en UTC.</param>
+/// <param name="IsManual">Indica si la creó el nutricionista en vez del sistema.</param>
+/// <param name="Title">Título de la recomendación manual, o <see langword="null"/>.</param>
+/// <param name="Description">Descripción de la recomendación manual, o <see langword="null"/>.</param>
+/// <param name="Steps">Pasos de aplicación de la recomendación manual.</param>
+/// <param name="Foods">Alimentos con su acción.</param>
+/// <param name="ClinicalNote">Nota clínica del nutricionista, o <see langword="null"/>.</param>
+public sealed record ReportRecommendation(
+    DateTime ApprovedAt,
+    bool IsManual,
+    string? Title,
+    string? Description,
+    IReadOnlyList<string> Steps,
+    IReadOnlyList<ReportRecommendationFood> Foods,
+    string? ClinicalNote);
+
+/// <summary>Alimento de una recomendación del reporte.</summary>
+/// <param name="ActionType">Acción sobre el alimento (nombre de <c>ActionType</c>).</param>
+/// <param name="FoodName">Nombre del alimento.</param>
+/// <param name="SubstituteName">Nombre del alimento sustituto, o <see langword="null"/>.</param>
+public sealed record ReportRecommendationFood(string ActionType, string FoodName, string? SubstituteName);
 
 /// <summary>Retroalimentación del reporte.</summary>
 /// <param name="SubmittedAt">Momento de envío.</param>

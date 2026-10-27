@@ -2,6 +2,9 @@ using Cauce.Api.IntegrationTests.Identity.Support;
 using Cauce.Application.Common.Interfaces.Reports;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.ClinicalRegistry.Enums;
+using Cauce.Domain.Recommendations;
+using Cauce.Domain.Recommendations.Enums;
+using Cauce.Domain.Recommendations.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -145,5 +148,76 @@ public sealed class ClinicalReportDataApiTests
         data.Meals.Should().BeEmpty();
         data.SymptomEntries.Should().BeEmpty();
         data.Symptoms.Should().BeEmpty();
+    }
+    private async Task<Application.Reports.Contracts.ClinicalReportData> ReadPeriodAsync(Guid patientId, DateOnly start, DateOnly end)
+    {
+        var (scope, _) = CreateDbScope();
+        using var _scope = scope;
+        var reader = scope.ServiceProvider.GetRequiredService<IClinicalReportDataReader>();
+        return await reader.GetReportDataAsync(patientId, start, end, nutritionistId: null);
+    }
+
+    [SkippableFact]
+    public async Task ReportData_CountsDaysWithRecordsByLimaDayOverThePeriodDays()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedPatientProfileAsync(patient.Id);
+        // 01/08 13:00 Lima y 02/08 22:00 Lima (03/08 03:00 UTC) son dos días de Lima distintos.
+        await SeedMealAsync(patient.Id, new DateTime(2026, 8, 1, 18, 0, 0, DateTimeKind.Utc));
+        await SeedSymptomAsync(patient.Id, SymptomType.Bloating, 40, new DateTime(2026, 8, 1, 20, 0, 0, DateTimeKind.Utc));
+        await SeedMealAsync(patient.Id, new DateTime(2026, 8, 3, 3, 0, 0, DateTimeKind.Utc));
+        // 01/09 02:00 UTC todavía es 31/08 en Lima: entra al período de agosto.
+        await SeedSymptomAsync(patient.Id, SymptomType.Nausea, 30, new DateTime(2026, 9, 1, 2, 0, 0, DateTimeKind.Utc));
+
+        var data = await ReadPeriodAsync(patient.Id, new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31));
+
+        data.PeriodDays.Should().Be(31);
+        data.DaysWithRecords.Should().Be(3);
+        data.SymptomEntries.Should().HaveCount(2);
+    }
+
+    [SkippableFact]
+    public async Task ReportData_ApprovedRecommendations_CarryFoodsWithActionTheNoteAndManualText()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedPatientProfileAsync(patient.Id);
+        var nutritionist = await SeedNutritionistAsync();
+        await SeedMealAsync(patient.Id, DateTime.UtcNow.AddDays(-2));
+
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            var modelVersionId = await db.ModelVersions.AsNoTracking().Select(v => v.Id).FirstAsync();
+            var foods = await db.FoodItems.AsNoTracking().OrderBy(f => f.Name).Take(2).ToListAsync();
+            var generatedAt = DateTime.UtcNow.AddDays(-3);
+            var generated = Recommendation.Generate(
+                patient.Id, modelVersionId, ConfidenceScore.Create(0.80m), ExplanationSource.LlmGenerated, "Explicación.",
+                foods.Select(f => RecommendationItem.Create(f.Id, ActionType.Reduce, null, null)).ToList(),
+                generatedAt, TimeSpan.FromHours(72));
+            generated.MarkPendingReview(generatedAt);
+            generated.Approve(nutritionist.Id, "Reducir por intolerancia a FODMAP", generatedAt.AddHours(1));
+            var manual = Recommendation.CreateManual(
+                patient.Id, nutritionist.Id, "Hidratación entre comidas", "Beber agua entre comidas.",
+                ["Un vaso a media mañana."], "Indicada por estreñimiento leve.", null, DateTime.UtcNow.AddDays(-1));
+            db.Recommendations.AddRange(generated, manual);
+            await db.SaveChangesAsync();
+
+            var data = await ReadAsync(patient.Id);
+
+            data.ApprovedRecommendations.Should().HaveCount(2);
+            var system = data.ApprovedRecommendations[0];
+            system.IsManual.Should().BeFalse();
+            system.ClinicalNote.Should().Be("Reducir por intolerancia a FODMAP");
+            system.Foods.Select(f => f.FoodName).Should().BeEquivalentTo(foods.Select(f => f.Name));
+            system.Foods.Should().OnlyContain(f => f.ActionType == nameof(ActionType.Reduce));
+            var manualRow = data.ApprovedRecommendations[1];
+            manualRow.IsManual.Should().BeTrue();
+            manualRow.Title.Should().Be("Hidratación entre comidas");
+            manualRow.Description.Should().Be("Beber agua entre comidas.");
+            manualRow.Steps.Should().Equal("Un vaso a media mañana.");
+            manualRow.ClinicalNote.Should().Be("Indicada por estreñimiento leve.");
+        }
     }
 }

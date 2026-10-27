@@ -51,7 +51,9 @@ public sealed class ClinicalReportDocumentTests
         SymptomEntries: symptomEntries ?? [],
         Assessments: [],
         ApprovedRecommendations: [],
-        Feedback: []);
+        Feedback: [],
+        DaysWithRecords: meals?.Count ?? 0,
+        PeriodDays: PeriodEnd.DayNumber - PeriodStart.DayNumber + 1);
 
     private static byte[] Render(ClinicalReportData data) =>
         new ClinicalReportDocument(data, ibsSssChartPng: null).GeneratePdf();
