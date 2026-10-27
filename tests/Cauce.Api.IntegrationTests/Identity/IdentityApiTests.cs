@@ -237,6 +237,48 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [SkippableFact]
+    public async Task ValidatePasswordReset_WithValidToken_Returns204AndKeepsTokenUsable()
+    {
+        SkipIfNoDocker();
+        var (userId, _) = await SeedPatientAsync(UniqueEmail());
+        const string plain = "valid-plain-token";
+        await SeedResetTokenAsync(userId, plain, expired: false, used: false);
+        var client = _factory.CreateClient();
+
+        var first = await client.PostAsJsonAsync("/api/v1/auth/password-reset/validate", new { token = plain });
+        var second = await client.PostAsJsonAsync("/api/v1/auth/password-reset/validate", new { token = plain });
+
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        second.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        (await db.PasswordResetTokens.AsNoTracking().AnyAsync(t => t.UserId == userId && t.IsUsed)).Should().BeFalse();
+    }
+
+    [SkippableTheory]
+    [InlineData("unknown")]
+    [InlineData("expired")]
+    [InlineData("used")]
+    public async Task ValidatePasswordReset_WithUnusableToken_Returns400WithSingleErrorCode(string kind)
+    {
+        SkipIfNoDocker();
+        var (userId, _) = await SeedPatientAsync(UniqueEmail());
+        var plain = $"{kind}-validate-token-{Guid.NewGuid():N}";
+        if (kind != "unknown")
+        {
+            await SeedResetTokenAsync(userId, plain, expired: kind == "expired", used: kind == "used");
+        }
+
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/password-reset/validate", new { token = plain });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var document = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("errorCode").GetString().Should().Be("invalid_password_reset_token");
+    }
+
     // Los antiguos endpoints /auth/sessions (RegisterLoginEvent/RegisterLogoutEvent) se eliminaron en
     // el Prompt 5 (acta A3). El login/logout passthrough y su auditoría se cubren en AuditMiddlewareTests.
 

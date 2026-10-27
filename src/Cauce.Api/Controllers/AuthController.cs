@@ -8,6 +8,7 @@ using Cauce.Application.Identity.UseCases.RefreshToken;
 using Cauce.Application.Identity.UseCases.RegisterPatient;
 using Cauce.Application.Identity.UseCases.RequestPasswordReset;
 using Cauce.Application.Identity.UseCases.ResendVerificationEmail;
+using Cauce.Application.Identity.UseCases.ValidatePasswordResetToken;
 using Cauce.Domain.Identity;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -191,6 +192,27 @@ public sealed class AuthController : BaseApiController
         var command = new ConfirmPasswordResetCommand(request.Token, request.NewPassword);
         await _mediator.Send(command, ct);
         return Ok();
+    }
+
+    /// <summary>
+    /// Comprueba si un enlace de restablecimiento todavía sirve, sin consumirlo. Responde lo mismo
+    /// para un token inexistente, vencido o ya usado.
+    /// </summary>
+    /// <param name="request">Token recibido por correo.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>204 si el token sirve; 400 <c>invalid_password_reset_token</c> si no.</returns>
+    [AllowAnonymous]
+    [HttpPost("password-reset/validate")]
+    [EnableRateLimiting(RateLimitingPolicies.AuthPasswordResetValidate)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> ValidatePasswordReset(
+        [FromBody] ValidatePasswordResetRequest request,
+        CancellationToken ct)
+    {
+        await _mediator.Send(new ValidatePasswordResetTokenQuery(request.Token), ct);
+        return NoContent();
     }
 
     /// <summary>
