@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.9.0 · **Actualizado:** 2026-10-19 · **Contrato:** [`openapi-v1.8.0.json`](openapi-v1.8.0.json) (351 KB, 68 operaciones, 60 paths)
+**Versión:** 1.10.0 · **Actualizado:** 2026-10-26 · **Contrato:** [`openapi-v1.9.0.json`](openapi-v1.9.0.json) (373 KB, 73 operaciones, 65 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -11,6 +11,20 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los endpoints de identidad, la fuente autoritativa versionada es
 > [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.4.
+
+**Novedades de la v1.10.0 (contrato v1.9.0).** Cambio aditivo: 5 operaciones y 5 paths nuevos (73 y 65),
+y 6 esquemas nuevos (129). Ninguna respuesta, código de error ni parámetro existente cambia.
+- **`POST /auth/password-reset/validate`**: comprueba si un enlace de restablecimiento sirve, sin
+  consumirlo. 204 si sirve; 400 `invalid_password_reset_token` si no existe, venció o ya se usó.
+- **`GET /recommendations/me/review-status`**: indica al paciente si tiene una recomendación en revisión,
+  sin contenido (`hasRecommendationInReview`).
+- **`GET /nutritionists/me/patients/{patientId}/history`**, **`/recommendations`** e **`/ibs-sss-cycle`**:
+  diario, recomendaciones (vigentes y archivadas) y ciclo IBS-SSS de un paciente asignado. Exigen
+  asignación activa y cada lectura queda auditada como `view_patient_record`.
+- **`POST /recommendations`** ya no se describe con «notificación de espera»: mientras la recomendación
+  está en revisión el paciente no recibe push.
+- **`POST /auth/password-reset/request`** no envía el enlace a cuentas suspendidas o inactivas; la
+  respuesta sigue siendo 200, igual que para un correo sin cuenta.
 
 **Novedades de la v1.9.0 (bloque Backend-Portal-B1, acta A75).** El contrato v1.8.0 es aditivo: mismos 60
 paths y 68 operaciones, y un esquema nuevo (123 en total). Los clientes generados ganan dos campos y un enum.
@@ -439,6 +453,21 @@ plaintext; en base de datos solo se guarda su hash SHA-256, con vigencia de 30 m
 | Rate limit | `auth-pwreset` (3/h·IP) |
 | Respuestas | **200** · 400 (`validation_error`, `invalid_password_reset_token`, `expired_password_reset_token`) · 429 · 500 |
 
+### `POST /api/v1/auth/password-reset/validate`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Comprueba si el token de un enlace de restablecimiento todavía sirve, **sin consumirlo**. Usa las mismas condiciones que `confirm`: el token existe, no se usó, no venció y su usuario existe. |
+| US/TS | US07 (HU0007 #2 y #4: avisar al abrir un enlace vencido o ya usado) |
+| Autorización | Anónimo |
+| Request body | `ValidatePasswordResetRequest` (token) |
+| Idempotencia | — (no modifica nada; se puede repetir) |
+| Rate limit | `auth-pwreset-validate` (20/min·IP), independiente de la cuota de `request` y `confirm` |
+| Respuestas | **204** · 400 `invalid_password_reset_token` · 429 · 500 |
+
+Responde lo mismo para un token inexistente, vencido o ya usado: un solo `errorCode` y el mismo mensaje,
+sin pistas sobre cuál de los tres casos es. A diferencia de `confirm`, nunca devuelve
+`expired_password_reset_token`.
+
 ### `POST /api/v1/auth/verification-email/resend`
 | Campo | Valor |
 | --- | --- |
@@ -818,7 +847,7 @@ responde 400 de binding sin `errorCode`; con una fecha sin zona o con `to` anter
 ### `POST /api/v1/recommendations`
 | Campo | Valor |
 | --- | --- |
-| Resumen | **Solicitud explícita** del paciente para generar una recomendación (no es automático). Nace en `PendingReview` (auto-aprobación off en piloto) + notificación de espera; el paciente la ve tras la aprobación. Replay con la misma clave → 200 con la misma recomendación. |
+| Resumen | **Solicitud explícita** del paciente para generar una recomendación (no es automático). Nace en `PendingReview` (auto-aprobación off en piloto), sin push al paciente mientras está en revisión; el paciente la ve tras la aprobación y el primer push llega con ella. Replay con la misma clave → 200 con la misma recomendación. |
 | US/TS | US14 (CA02 espera, CA03 filtros) |
 | Request body | — (solo header) |
 | Idempotencia | **Sí — requerido** (header `Idempotency-Key`, UUID v4) |
@@ -834,6 +863,20 @@ responde 400 de binding sin `errorCode`; con una fecha sin zona o con `to` anter
 | Idempotencia | — |
 | Rate limit | `default-auth` |
 | Respuestas | **200** `PagedResult<RecommendationSummaryDto>` · 400 · 401 · 403 · 429 · 500 |
+
+### `GET /api/v1/recommendations/me/review-status`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Indica si el paciente tiene una recomendación en revisión por su nutricionista, sin mostrar su contenido. Cuenta las recomendaciones activas en `PendingReview` cuyo `expiresAt` es nulo o no pasó. |
+| US/TS | US14 (HU0014 #2: aviso «Tu recomendación está en revisión») |
+| Request body | — |
+| Idempotencia | — |
+| Rate limit | `default-auth` |
+| Respuestas | **200** `RecommendationReviewStatusDto` (`hasRecommendationInReview`) · 401 · 403 · 429 · 500 |
+
+Solo devuelve el booleano: sin alimentos, justificación, fechas ni conteos. No cambia lo que devuelven
+`GET /recommendations/me` ni `GET /recommendations/{id}`: una recomendación en revisión sigue fuera de la
+lista y su detalle sigue respondiendo 404 al paciente.
 
 ### `POST /api/v1/recommendations/{id}/deliver`
 | Campo | Valor |
@@ -1006,6 +1049,55 @@ consulta, en UTC. Un vínculo anterior ya cerrado no cuenta. La ficha lo muestra
 | Rate limit | — |
 | Respuestas | **200** `PatientEvolutionForNutritionistResult` · 401 · 403 `unauthorized_patient_access` · 500 |
 
+Las tres lecturas siguientes exigen una asignación activa con el paciente (403
+`unauthorized_patient_access` si no la hay) y cada llamada exitosa deja una fila de auditoría
+`view_patient_record` sobre el paciente, con la vista consultada en el contexto (`history`,
+`recommendations` o `ibs_sss_cycle`).
+
+### `GET /api/v1/nutritionists/me/patients/{patientId}/history`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Diario del paciente en un rango: comidas, síntomas y notas clínicas, del más reciente al más antiguo. Mismo formato que `GET /history` del paciente. |
+| US/TS | US13, US17 y US20 (CP034, CP045, CP087) |
+| Query | `from` y `to` obligatorios, con zona horaria, `to >= from`. Mismas reglas que `GET /history` |
+| Idempotencia | — |
+| Rate limit | — |
+| Respuestas | **200** `HistoryEvent[]` · 400 `validation_error` · 401 · 403 `unauthorized_patient_access` · 500 |
+
+Devuelve como máximo 500 comidas y 500 síntomas del rango; las notas no tienen tope. Cada nota trae
+`mealId` o `symptomId`, así que el portal puede mostrarla junto a su registro. Para marcar los registros
+anteriores a la vinculación, compararlos con `assignedAt` del detalle del paciente.
+
+### `GET /api/v1/nutritionists/me/patients/{patientId}/recommendations`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Todas las recomendaciones del paciente, en cualquier estado: en revisión, aprobadas, rechazadas, vencidas y archivadas. De la más reciente a la más antigua. |
+| US/TS | US17, US29 y US30 (CP048, CP072, CP074, CP075, CP090) |
+| Query | `page=1`, `pageSize=20` (1 a 100) |
+| Idempotencia | — |
+| Rate limit | — |
+| Respuestas | **200** `PagedResult<PatientRecommendationForNutritionistDto>` · 400 `validation_error` · 401 · 403 `unauthorized_patient_access` · 500 |
+
+Cada fila trae `status`, `source`, `title`, `itemsCount`, `generatedAt`, `reviewedAt`, `expiresAt`,
+`validUntil`, `isActive`, `archivedAt` y `archiveReason`. Las vigentes son las de `isActive: true`; el
+historial de archivadas, las de `isActive: false` con su motivo y fecha. El contenido completo se lee en
+`GET /recommendations/{id}`. Es solo lectura: una en revisión ya vencida aparece con su estado guardado
+hasta que el barrido la pase a `Expired`.
+
+### `GET /api/v1/nutritionists/me/patients/{patientId}/ibs-sss-cycle`
+| Campo | Valor |
+| --- | --- |
+| Resumen | Estado del ciclo vigente del cuestionario IBS-SSS: la agenda más reciente del paciente. |
+| US/TS | US12 (CP031) |
+| Request body | — |
+| Idempotencia | — |
+| Rate limit | — |
+| Respuestas | **200** `IbsSssCycleStatusDto` · 401 · 403 `unauthorized_patient_access` · 500 |
+
+`status` (`IbsSssCycleStatus`) vale `None` (sin agenda), `Pending` (agendado y sin responder), `Missed`
+(7 días después del vencimiento sin respuesta: no completado) o `Completed`. Trae además `dueDate`,
+`reminderSentAt` y `completedAt`, en UTC y nulos si no aplican.
+
 ### `PUT /api/v1/symptoms/{id}/meal-association`
 | Campo | Valor |
 | --- | --- |
@@ -1016,9 +1108,8 @@ consulta, en UTC. Un vínculo anterior ya cerrado no cuenta. La ficha lo muestra
 | Rate limit | `default-auth` |
 | Respuestas | **204** · 400 `validation_error` · 404 (`symptom_not_found`, `meal_not_found`) · 409 `idempotency_mismatch` · 401 · 403 (`unauthorized_patient_access`, `patient_resource_access_denied`) · 429 · 500 |
 
-> **Sin consumidor todavía.** Ningún endpoint del nutricionista expone hoy los identificadores de los
-> síntomas y las comidas de su paciente (`GET /symptoms`, `GET /meals` y `GET /history` son solo del
-> paciente), así que el endpoint queda disponible a la espera de la vista del portal que los muestre.
+> Los identificadores de los síntomas y las comidas del paciente llegan al portal por
+> `GET /nutritionists/me/patients/{patientId}/history`.
 
 ---
 
