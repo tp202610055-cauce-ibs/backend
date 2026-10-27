@@ -4,6 +4,7 @@ using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Common.Interfaces.Recommendations;
 using Cauce.Application.Common.Models;
 using Cauce.Application.Patients.Services;
+using Cauce.Application.Recommendations.Contracts;
 using Cauce.Application.Recommendations.Dtos;
 using MediatR;
 
@@ -20,6 +21,7 @@ public sealed class ListPatientRecommendationsForNutritionistQueryHandler
     private readonly IUserRepository _userRepository;
     private readonly INutritionistPatientRepository _nutritionistPatientRepository;
     private readonly IRecommendationRepository _recommendationRepository;
+    private readonly IFoodCatalogReader _foodCatalogReader;
     private readonly IAuditLogger _auditLogger;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -31,6 +33,7 @@ public sealed class ListPatientRecommendationsForNutritionistQueryHandler
         IUserRepository userRepository,
         INutritionistPatientRepository nutritionistPatientRepository,
         IRecommendationRepository recommendationRepository,
+        IFoodCatalogReader foodCatalogReader,
         IAuditLogger auditLogger,
         IUnitOfWork unitOfWork)
     {
@@ -38,6 +41,7 @@ public sealed class ListPatientRecommendationsForNutritionistQueryHandler
         _userRepository = userRepository;
         _nutritionistPatientRepository = nutritionistPatientRepository;
         _recommendationRepository = recommendationRepository;
+        _foodCatalogReader = foodCatalogReader;
         _auditLogger = auditLogger;
         _unitOfWork = unitOfWork;
     }
@@ -56,6 +60,15 @@ public sealed class ListPatientRecommendationsForNutritionistQueryHandler
             .ListAllByPatientAsync(request.PatientUserId, request.Page, request.PageSize, cancellationToken)
             .ConfigureAwait(false);
 
+        var foodIds = page.Items
+            .SelectMany(recommendation => recommendation.Items)
+            .SelectMany(item => item.SubstituteFoodId is { } substitute ? new[] { item.FoodId, substitute } : [item.FoodId])
+            .Distinct()
+            .ToList();
+        IReadOnlyDictionary<Guid, FoodNameInfo> foodNames = foodIds.Count == 0
+            ? new Dictionary<Guid, FoodNameInfo>()
+            : await _foodCatalogReader.GetFoodNamesAsync(foodIds, cancellationToken).ConfigureAwait(false);
+
         await NutritionistPatientRecordAccess
             .RecordViewAsync(_auditLogger, _unitOfWork, request.PatientUserId, "recommendations", cancellationToken)
             .ConfigureAwait(false);
@@ -73,7 +86,13 @@ public sealed class ListPatientRecommendationsForNutritionistQueryHandler
                 recommendation.ValidUntil,
                 recommendation.IsActive,
                 recommendation.ArchivedAt,
-                recommendation.ArchiveReason))
+                recommendation.ArchiveReason,
+                recommendation.Items
+                    .Select(item => new RecommendationFoodPreviewDto(
+                        foodNames.GetValueOrDefault(item.FoodId)?.Name ?? string.Empty,
+                        item.ActionType,
+                        item.SubstituteFoodId is { } substitute ? foodNames.GetValueOrDefault(substitute)?.Name : null))
+                    .ToList()))
             .ToList();
 
         return new PagedResult<PatientRecommendationForNutritionistDto>(items, page.Page, page.PageSize, page.TotalCount);

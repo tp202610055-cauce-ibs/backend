@@ -6,6 +6,9 @@ using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Recommendations;
+using Cauce.Domain.Recommendations.Enums;
+using Cauce.Domain.Recommendations.ValueObjects;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 
@@ -116,6 +119,53 @@ public sealed class NutritionistPatientRecordsApiTests
 
         var audit = (await AuditLogsAsync(nameof(User), patient.Id, AuditActionType.ViewPatientRecord)).Should().ContainSingle().Subject;
         ContextValue(audit, "view").Should().Be("recommendations");
+    }
+
+    [SkippableFact]
+    public async Task Recommendations_EachRowListsItsFoodsWithTheirAction()
+    {
+        SkipIfUnavailable();
+        var (patient, nutritionist) = await SeedAssignedPairAsync();
+        var client = NutritionistClient(nutritionist.KeycloakId);
+        var manual = await CreateManualAsync(client, patient.Id, "Hidratación entre comidas");
+        Guid generatedId;
+        List<string> foodNames;
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            var modelVersionId = await db.ModelVersions.AsNoTracking().Select(v => v.Id).FirstAsync();
+            var foods = await db.FoodItems.AsNoTracking().OrderBy(f => f.Name).Take(3).ToListAsync();
+            foodNames = foods.Select(f => f.Name).ToList();
+            var now = DateTime.UtcNow.AddHours(-1);
+            var generated = Recommendation.Generate(
+                patient.Id, modelVersionId, ConfidenceScore.Create(0.80m), ExplanationSource.LlmGenerated, "Explicación.",
+                [
+                    RecommendationItem.Create(foods[0].Id, ActionType.Reduce, null, null),
+                    RecommendationItem.Create(foods[1].Id, ActionType.Substitute, null, foods[2].Id)
+                ],
+                now, TimeSpan.FromHours(72));
+            generated.MarkPendingReview(now);
+            generated.Approve(nutritionist.Id, "Nota clínica de prueba.", now);
+            db.Recommendations.Add(generated);
+            await db.SaveChangesAsync();
+            generatedId = generated.Id;
+        }
+
+        var body = await (await client.GetAsync($"/api/v1/nutritionists/me/patients/{patient.Id}/recommendations"))
+            .Content.ReadFromJsonAsync<JsonElement>();
+
+        var items = body.GetProperty("items").EnumerateArray().ToList();
+        var row = items.Single(i => i.GetProperty("recommendationId").GetGuid() == generatedId);
+        var foodsInRow = row.GetProperty("foods").EnumerateArray().ToList();
+        foodsInRow.Should().HaveCount(2);
+        var reduced = foodsInRow.Single(f => f.GetProperty("actionType").GetString() == "Reduce");
+        reduced.GetProperty("foodName").GetString().Should().Be(foodNames[0]);
+        reduced.GetProperty("substituteFoodName").ValueKind.Should().Be(JsonValueKind.Null);
+        var substituted = foodsInRow.Single(f => f.GetProperty("actionType").GetString() == "Substitute");
+        substituted.GetProperty("foodName").GetString().Should().Be(foodNames[1]);
+        substituted.GetProperty("substituteFoodName").GetString().Should().Be(foodNames[2]);
+        var manualRow = items.Single(i => i.GetProperty("recommendationId").GetGuid() == manual);
+        manualRow.GetProperty("foods").GetArrayLength().Should().Be(0);
     }
 
     [SkippableFact]

@@ -18,6 +18,7 @@ namespace Cauce.Application.Recommendations.Dtos;
 /// <param name="IsActive">Indica si sigue vigente; <see langword="false"/> si fue archivada.</param>
 /// <param name="ArchivedAt">Momento del archivado, en UTC, o <see langword="null"/> si sigue activa.</param>
 /// <param name="ArchiveReason">Motivo del archivado, o <see langword="null"/> si sigue activa.</param>
+/// <param name="Foods">Alimentos con su acción, para distinguir las filas sin abrir el detalle; vacía en una manual sin alimentos.</param>
 public sealed record PatientRecommendationForNutritionistDto(
     Guid RecommendationId,
     RecommendationStatus Status,
@@ -30,4 +31,5 @@ public sealed record PatientRecommendationForNutritionistDto(
     DateTime? ValidUntil,
     bool IsActive,
     DateTime? ArchivedAt,
-    ArchiveReason? ArchiveReason);
+    ArchiveReason? ArchiveReason,
+    IReadOnlyList<RecommendationFoodPreviewDto> Foods);
