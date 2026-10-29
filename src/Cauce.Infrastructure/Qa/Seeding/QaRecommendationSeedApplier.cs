@@ -12,7 +12,7 @@ namespace Cauce.Infrastructure.Qa.Seeding;
 
 /// <summary>
 /// Recomendaciones en el estado del manifiesto, recorriendo las transiciones del agregado con fechas del ancla. Las
-/// del motor llevan ítems del catálogo; las manuales, título propio. No escribe outbox ni avisos.
+/// del motor llevan ítems del catálogo; las manuales, título propio; las dos, los pasos del caso. Sin outbox ni avisos.
 /// </summary>
 public sealed class QaRecommendationSeedApplier : IQaSeedApplier
 {
@@ -112,7 +112,7 @@ public sealed class QaRecommendationSeedApplier : IQaSeedApplier
             reviewerId,
             seed.Title,
             seed.Description ?? DefaultManualDescription,
-            seed.Steps.Count > 0 ? seed.Steps : null,
+            seed.SeededSteps,
             seed.ClinicalNote ?? DefaultManualNote,
             validUntil,
             createdAt);
@@ -150,7 +150,7 @@ public sealed class QaRecommendationSeedApplier : IQaSeedApplier
         };
 
         var engine = Recommendation.Generate(
-            context.Owner.Id, modelVersionId, confidence, source, explanation, items, generatedAt, expiresAt - generatedAt);
+            context.Owner.Id, modelVersionId, confidence, source, explanation, items, generatedAt, expiresAt - generatedAt, seed.SeededSteps);
         engine.MarkPendingReview(generatedAt);
 
         switch (seed.Status)

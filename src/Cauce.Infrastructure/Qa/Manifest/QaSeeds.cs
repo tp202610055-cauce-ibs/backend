@@ -149,6 +149,21 @@ public sealed record QaRecommendationSeed(
     /// </summary>
     public bool IsManual => Status == QaRecommendationStatus.CreatedByNutritionist;
 
+    /// <summary>
+    /// Pasos fijos de una recomendación que solo indica cuántos lleva (<c>stepsCount</c>), en este orden.
+    /// </summary>
+    public static IReadOnlyList<string> DefaultSteps { get; } =
+    [
+        "Revisa las preparaciones de la semana y marca las que llevan los alimentos que esta recomendación pide reducir.",
+        "Sirve una porción más pequeña de esos alimentos o cámbialos por una opción baja en FODMAP.",
+        "Registra en la app tus comidas y tus síntomas durante las próximas dos semanas."
+    ];
+
+    /// <summary>
+    /// Pasos que se siembran: los del caso o, si solo trae <c>stepsCount</c>, esa cantidad de pasos fijos.
+    /// </summary>
+    public IReadOnlyList<string> SeededSteps => Steps.Count > 0 ? Steps : DefaultSteps.Take(StepsCount ?? 0).ToList();
+
     /// <inheritdoc />
     public override IEnumerable<string> ReferencedEmails() => [Patient];
 }

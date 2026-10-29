@@ -26,7 +26,7 @@ public sealed record QaCaseVerdict(string Cp, IReadOnlyList<string> Problems)
 /// <summary>
 /// Verificación de solo lectura (<c>verify-qa</c>): cuentas, su estado y el consentimiento, cuentas que no deben existir,
 /// vínculos y su antigüedad, perfil y alergias, comidas, síntomas, historial de respaldo, sustitutos, recomendaciones por
-/// estado y archivado, glosario, códigos, agendas y la edad del ancla con reloj.
+/// estado, archivado y pasos, glosario, códigos, agendas y la edad del ancla con reloj.
 /// Nunca escribe: consultas sin seguimiento y solo lecturas en Keycloak.
 /// </summary>
 public sealed class QaVerifier
@@ -407,6 +407,18 @@ public sealed class QaVerifier
         if (pendingArchive != expectedPendingArchive)
         {
             problems.Add($"{patient} tiene {pendingArchive} recomendación(es) vencida(s) pendiente(s) de archivo y debe tener {expectedPendingArchive}");
+        }
+
+        // Cada recomendación con pasos en el caso debe existir con esos pasos, en el mismo orden.
+        var stepLists = actual.Where(recommendation => recommendation.Steps is { Count: > 0 })
+            .Select(recommendation => string.Join('\n', recommendation.Steps!))
+            .ToList();
+        foreach (var seed in seeds.Where(seed => seed.SeededSteps.Count > 0))
+        {
+            if (!stepLists.Remove(string.Join('\n', seed.SeededSteps)))
+            {
+                problems.Add($"{patient} no tiene la recomendación «{seed.Title}» con sus {seed.SeededSteps.Count} paso(s)");
+            }
         }
     }
 

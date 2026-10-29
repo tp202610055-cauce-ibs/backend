@@ -221,8 +221,10 @@ public sealed class Recommendation : Entity, IAggregateRoot
     /// <param name="items">Ítems de la recomendación (al menos uno).</param>
     /// <param name="now">Marca de tiempo UTC de generación.</param>
     /// <param name="expirationWindow">Ventana de vigencia desde la generación.</param>
+    /// <param name="steps">Pasos de aplicación, opcional; sin pasos si se omite o llega vacío.</param>
     /// <returns>La nueva recomendación.</returns>
     /// <exception cref="EmptyRecommendationException">Si no se proporciona ningún ítem.</exception>
+    /// <exception cref="ArgumentException">Si un paso es vacío o supera 500 caracteres.</exception>
     public static Recommendation Generate(
         Guid patientId,
         Guid modelVersionId,
@@ -231,7 +233,8 @@ public sealed class Recommendation : Entity, IAggregateRoot
         string? aiExplanation,
         IReadOnlyList<RecommendationItem> items,
         DateTime now,
-        TimeSpan expirationWindow)
+        TimeSpan expirationWindow,
+        IReadOnlyList<string>? steps = null)
     {
         ArgumentNullException.ThrowIfNull(confidence);
 
@@ -240,8 +243,12 @@ public sealed class Recommendation : Entity, IAggregateRoot
             throw new EmptyRecommendationException();
         }
 
+        var validSteps = RecommendationSteps.Normalize(steps);
         var recommendation = new Recommendation(
-            Guid.NewGuid(), patientId, modelVersionId, confidence, explanationSource, aiExplanation, now, expirationWindow);
+            Guid.NewGuid(), patientId, modelVersionId, confidence, explanationSource, aiExplanation, now, expirationWindow)
+        {
+            Steps = validSteps
+        };
 
         foreach (var item in items)
         {

@@ -1,6 +1,7 @@
 using System.Globalization;
 using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.Patients.Enums;
+using Cauce.Domain.Recommendations;
 
 namespace Cauce.Infrastructure.Qa.Manifest;
 
@@ -196,6 +197,28 @@ public static class QaManifestValidator
         if (recommendation.ApprovedInMonth is not null && !TryParseMonth(recommendation.ApprovedInMonth, out _))
         {
             errors.Add($"{cp}: «approvedInMonth» debe tener el formato aaaa-mm.");
+        }
+
+        ValidateSteps(cp, recommendation, errors);
+    }
+
+    // Los mismos límites que el dominio, para que una siembra no falle a mitad de camino.
+    private static void ValidateSteps(string cp, QaRecommendationSeed recommendation, List<string> errors)
+    {
+        if (recommendation.StepsCount is { } count && recommendation.Steps.Count == 0
+            && (count < 1 || count > QaRecommendationSeed.DefaultSteps.Count))
+        {
+            errors.Add($"{cp}: «stepsCount» debe estar entre 1 y {QaRecommendationSeed.DefaultSteps.Count}.");
+        }
+
+        if (recommendation.StepsCount is { } declared && recommendation.Steps.Count > 0 && declared != recommendation.Steps.Count)
+        {
+            errors.Add($"{cp}: «stepsCount» no coincide con la cantidad de «steps».");
+        }
+
+        if (recommendation.Steps.Any(step => string.IsNullOrWhiteSpace(step) || step.Length > RecommendationSteps.MaxLength))
+        {
+            errors.Add($"{cp}: cada paso debe tener texto y {RecommendationSteps.MaxLength} caracteres como máximo.");
         }
     }
 
