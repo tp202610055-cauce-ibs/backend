@@ -74,6 +74,7 @@ public sealed class DeleteMyAccountCommandHandler : IRequestHandler<DeleteMyAcco
         var originalEmail = user.Email;
         var originalFullName = user.FullName;
         var originalKeycloakId = user.KeycloakId;
+        var emailWasVerified = user.EmailVerified;
 
         user.Anonymize(patientRoleId);
 
@@ -97,7 +98,16 @@ public sealed class DeleteMyAccountCommandHandler : IRequestHandler<DeleteMyAcco
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await TrySendConfirmationAsync(originalEmail, originalFullName, user.Id, cancellationToken).ConfigureAwait(false);
+        // La baja nunca se bloquea; solo se omite la confirmación a un correo que el paciente no verificó.
+        if (emailWasVerified)
+        {
+            await TrySendConfirmationAsync(originalEmail, originalFullName, user.Id, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Account deletion confirmation email skipped for user {UserId}: email not verified.", user.Id);
+        }
 
         _logger.LogInformation("Patient account {UserId} anonymized on user request.", user.Id);
 

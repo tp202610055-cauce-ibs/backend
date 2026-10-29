@@ -295,6 +295,8 @@ public sealed class ExceptionHandlingMiddleware
                 StatusCodes.Status403Forbidden, "Acceso al reporte no autorizado", "report_access_denied", exception.Message),
             PatientHasNoDataInPeriodException => (
                 StatusCodes.Status422UnprocessableEntity, "Sin datos en el período", "patient_has_no_data_in_period", exception.Message),
+            EmailNotVerifiedException => (
+                StatusCodes.Status422UnprocessableEntity, "Correo sin verificar", "email_not_verified", exception.Message),
             ReportPeriodInvalidException => (
                 StatusCodes.Status422UnprocessableEntity, "Período de reporte inválido", "report_period_invalid", exception.Message),
             GlossaryTermAlreadyExistsException => (

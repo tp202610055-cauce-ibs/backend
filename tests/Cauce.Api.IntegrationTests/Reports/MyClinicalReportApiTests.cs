@@ -60,7 +60,7 @@ public sealed class MyClinicalReportApiTests
     public async Task GenerateMyReport_NoData_Returns422()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
 
         var response = await PatientClient(patient.KeycloakId, patient.Email)
@@ -70,10 +70,29 @@ public sealed class MyClinicalReportApiTests
     }
 
     [SkippableFact]
+    public async Task GenerateMyReport_UnverifiedEmail_Returns422WithoutReportNorEmails()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync(emailVerified: false);
+        await SeedPatientProfileAsync(patient.Id);
+        await SeedMealAsync(patient.Id);
+
+        var response = await PatientClient(patient.KeycloakId, patient.Email)
+            .PostAsync("/api/v1/patients/me/report", content: null);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("errorCode").GetString().Should().Be("email_not_verified");
+        Factory.EmailSender.SentEmails.Should().NotContain(e => e.Recipient == patient.Email);
+        (await AuditLogsAsync("clinical_report", action: AuditActionType.ExportPdf))
+            .Should().NotContain(log => log.ActorUserId == patient.Id);
+    }
+
+    [SkippableFact]
     public async Task GenerateMyReport_HappyPath_ReturnsEncryptedPdfWithTwoEmailsAndAudit()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 
@@ -104,7 +123,7 @@ public sealed class MyClinicalReportApiTests
     public async Task GenerateMyReport_WithAnExplicitPeriod_Succeeds()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 
@@ -122,7 +141,7 @@ public sealed class MyClinicalReportApiTests
     public async Task GenerateMyReport_PeriodThatExcludesTheData_Returns422()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 
@@ -142,7 +161,7 @@ public sealed class MyClinicalReportApiTests
     public async Task GenerateMyReport_OnlyOneEndOfThePeriod_Returns400()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 
@@ -159,7 +178,7 @@ public sealed class MyClinicalReportApiTests
     public async Task GenerateMyReport_FuturePeriodEnd_Returns400()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 
@@ -175,7 +194,7 @@ public sealed class MyClinicalReportApiTests
     public async Task GenerateMyReport_PeriodLongerThanTheCap_Returns400()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 
@@ -191,7 +210,7 @@ public sealed class MyClinicalReportApiTests
     public async Task GenerateMyReport_InvertedPeriod_Returns400()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 
@@ -207,7 +226,7 @@ public sealed class MyClinicalReportApiTests
     public async Task GenerateMyReport_WithoutABody_StillUsesTheDefaultWindow()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 
