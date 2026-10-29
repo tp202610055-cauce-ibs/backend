@@ -27,7 +27,7 @@ public sealed class GlossaryTermsSeeder
         ("Hábito intestinal", "La forma y frecuencia con que vas al baño a hacer popó.", "Patrón habitual de la defecación en frecuencia y consistencia; su cambio es criterio diagnóstico del SII.", GlossaryCategory.ClinicalIbs),
         ("Brote", "Momento en que los síntomas del SII empeoran de golpe por un tiempo.", "Exacerbación transitoria de los síntomas del SII, con frecuencia asociada a desencadenantes dietéticos o de estrés.", GlossaryCategory.ClinicalIbs),
         ("Ventana de 4 horas", "El tiempo después de comer en el que se relaciona un alimento con un síntoma.", "Ventana temporal canónica (4 h) para correlacionar comidas con síntomas, sustentada en la evidencia de Monash (2019) y Ford et al. (2024); se descarta la ventana de 24 h por inválida.", GlossaryCategory.ClinicalIbs),
-        ("Línea base", "Es la primera medición de tus síntomas, con la que se compara tu avance.", "Evaluación IBS-SSS inicial (ciclo 0) que sirve de referencia para medir la respuesta clínica a lo largo del piloto.", GlossaryCategory.ClinicalIbs),
+        ("Línea base", "Es la primera medición de tus síntomas, con la que se compara tu avance.", "Evaluación IBS-SSS inicial (ciclo 0) que sirve de referencia para medir la respuesta clínica a lo largo del piloto.", GlossaryCategory.System),
 
         // --- Nutricionales ---
         ("FODMAP", "Son ciertos azúcares y fibras de algunos alimentos que el intestino fermenta y pueden causar gases, hinchazón y molestias en personas con SII.", "Oligosacáridos, disacáridos, monosacáridos y polioles fermentables: carbohidratos de cadena corta mal absorbidos que aumentan la carga osmótica y la fermentación colónica, desencadenando síntomas en el SII.", GlossaryCategory.Nutritional),
