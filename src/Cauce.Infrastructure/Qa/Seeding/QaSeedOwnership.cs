@@ -8,11 +8,12 @@ namespace Cauce.Infrastructure.Qa.Seeding;
 public static class QaSeedOwnership
 {
     /// <summary>
-    /// Correo de la cuenta dueña del elemento, o <see langword="null"/> si no siembra datos (notas y estados de cuenta).
+    /// Correo de la cuenta dueña del elemento, o <see langword="null"/> si no pertenece a una cuenta (notas, estados de
+    /// cuenta y glosario).
     /// </summary>
     public static string? OwnerOf(QaSeed seed) => seed switch
     {
-        QaNoteSeed or QaAccountSeed => null,
+        QaNoteSeed or QaAccountSeed or QaGlossarySeed => null,
         QaInviteCodeSeed invite => invite.Nutritionist,
         QaLinkSeed link => link.Patient,
         _ => seed.ReferencedEmails().FirstOrDefault()

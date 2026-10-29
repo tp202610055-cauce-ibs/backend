@@ -27,6 +27,7 @@ public sealed class VerifyQaTests
         if (Available)
         {
             await SeedConsentDocumentAsync();
+            await SeedGlossaryAsync();
             (await RunAsync("seed-qa")).Should().Be(CommandRunner.Success);
         }
     }

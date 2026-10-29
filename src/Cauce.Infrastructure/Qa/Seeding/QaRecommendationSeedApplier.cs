@@ -25,6 +25,11 @@ public sealed class QaRecommendationSeedApplier : IQaSeedApplier
         "alimentos y en tu historial de las últimas semanas.";
 
     /// <summary>
+    /// Justificación de cada sustituto sembrado, por su contenido de FODMAP.
+    /// </summary>
+    public const string SubstituteReasoning = "Contenido bajo de FODMAP: reemplaza a un alimento con contenido alto.";
+
+    /// <summary>
     /// Nota clínica de aprobación cuando el caso no trae una.
     /// </summary>
     public const string DefaultApprovalNote = "Recomendación revisada y aprobada por el nutricionista.";
@@ -122,6 +127,8 @@ public sealed class QaRecommendationSeedApplier : IQaSeedApplier
         var foods = QaCatalog.EngineFoods(seed);
         var items = foods
             .Select(food => RecommendationItem.Create(context.Catalog.Foods[food.Food], ToActionType(food.Action), Reasoning(food.Action), substituteFoodId: null))
+            .Concat(seed.Substitutes.Select(substitute => RecommendationItem.Create(
+                context.Catalog.Foods[substitute.Food], ActionType.Substitute, SubstituteReasoning, context.Catalog.Foods[substitute.By])))
             .ToList();
         var (source, explanation) = Explanation(seed, foods);
         var confidence = ConfidenceScore.Create(seed.Confidence is not null ? ConfidenceLevels[seed.Confidence] : DefaultConfidence);
@@ -212,21 +219,28 @@ public sealed class QaRecommendationSeedApplier : IQaSeedApplier
         }
     }
 
-    // Historial que respalda la recomendación: comidas del primer alimento a reducir, cada una seguida de dolor.
-    private static void AddSupportingHistory(QaRecommendationSeed seed, QaSeedContext context)
+    /// <summary>
+    /// Momentos de las comidas del historial de respaldo: una por día desde ayer hacia atrás, para que todas sigan
+    /// dentro de la ventana de análisis el mayor tiempo posible.
+    /// </summary>
+    public static IReadOnlyList<DateTime> SupportingHistoryMoments(QaRecommendationSeed seed, QaClock clock)
     {
+        ArgumentNullException.ThrowIfNull(seed);
+        ArgumentNullException.ThrowIfNull(clock);
         var (count, windowDays) = seed.SupportingData is { } data
             ? (data.PainRecords, data.WindowDays)
             : seed.WithRecentHistory ? (3, 7) : (0, 0);
-        if (count == 0)
-        {
-            return;
-        }
+        return Enumerable.Range(1, Math.Min(count, Math.Max(windowDays - 1, 0)))
+            .Select(daysAgo => clock.Anchor.AddDays(-daysAgo))
+            .ToList();
+    }
 
+    // Historial que respalda la recomendación: comidas del primer alimento a reducir, cada una seguida de dolor.
+    private static void AddSupportingHistory(QaRecommendationSeed seed, QaSeedContext context)
+    {
         var food = seed.Reduce.FirstOrDefault() ?? seed.Avoid.FirstOrDefault() ?? QaCatalog.DefaultReduceFood;
-        for (var index = 0; index < count; index++)
+        foreach (var mealAt in SupportingHistoryMoments(seed, context.Clock))
         {
-            var mealAt = context.Clock.Anchor.AddDays(-(1 + (index * (windowDays - 1) / count)));
             QaClinicalRecordSeedApplier.AddMeal(context, food, mealAt, QaClinicalRecordSeedApplier.DefaultGrams, MealTime.Lunch);
             QaClinicalRecordSeedApplier.AddSymptom(context, "Dolor abdominal", 60, mealAt.AddHours(2));
         }

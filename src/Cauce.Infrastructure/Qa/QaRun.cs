@@ -161,6 +161,26 @@ public sealed class QaRun
     }
 
     /// <summary>
+    /// Alinea los elementos que no pertenecen a ninguna cuenta (glosario) de los casos indicados y guarda.
+    /// </summary>
+    /// <param name="onlyCases">Casos cuyos elementos se alinean; <see langword="null"/> para todos.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    public async Task ApplySharedSeedsAsync(IEnumerable<string>? onlyCases, CancellationToken ct)
+    {
+        var cases = onlyCases?.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var glossary = Manifest.Cases
+            .Where(testCase => cases is null || cases.Contains(testCase.Cp))
+            .SelectMany(testCase => testCase.Seeds.OfType<QaGlossarySeed>())
+            .Distinct();
+        foreach (var seed in glossary)
+        {
+            await QaGlossarySeedApplier.AlignAsync(_db, seed, ct).ConfigureAwait(false);
+        }
+
+        await _db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Contraseña que corresponde a la cuenta según su rol y si es de humo.
     /// </summary>
     public string PasswordFor(QaAccount account)

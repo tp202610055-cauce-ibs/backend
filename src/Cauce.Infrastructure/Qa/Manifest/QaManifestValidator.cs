@@ -35,6 +35,14 @@ public static class QaManifestValidator
             ["Otro"] = SymptomType.Other
         };
 
+    private static readonly IReadOnlyDictionary<string, GlossaryCategory> GlossaryCategories =
+        new Dictionary<string, GlossaryCategory>(StringComparer.Ordinal)
+        {
+            ["nutritional"] = GlossaryCategory.Nutritional,
+            ["clinical_ibs"] = GlossaryCategory.ClinicalIbs,
+            ["system"] = GlossaryCategory.System
+        };
+
     private static readonly string[] ExplanationSources = ["LlmGenerated", "Fallback"];
     private static readonly string[] ConfidenceLevels = ["high", "medium", "low"];
 
@@ -42,6 +50,12 @@ public static class QaManifestValidator
     /// Traduce el subtipo del manifiesto (<c>SII-D</c>) al del dominio.
     /// </summary>
     public static bool TryParseSubtype(string value, out IbsSubtype subtype) => Subtypes.TryGetValue(value, out subtype);
+
+    /// <summary>
+    /// Traduce la categoría de glosario del manifiesto (<c>clinical_ibs</c>) a la del dominio.
+    /// </summary>
+    public static bool TryParseGlossaryCategory(string value, out GlossaryCategory category) =>
+        GlossaryCategories.TryGetValue(value, out category);
 
     /// <summary>
     /// Traduce la etiqueta en español de un síntoma al tipo del dominio.
@@ -155,7 +169,7 @@ public static class QaManifestValidator
                 }
 
                 break;
-            case QaNoteSeed:
+            case QaNoteSeed or QaGlossarySeed:
                 break;
             default:
                 foreach (var email in seed.ReferencedEmails())

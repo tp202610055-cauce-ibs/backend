@@ -141,7 +141,8 @@ public sealed record QaRecommendationSeed(
     string? ApprovedInMonth,
     int? ValidDaysLeft,
     QaSupportingData? SupportingData,
-    bool WithRecentHistory) : QaSeed
+    bool WithRecentHistory,
+    IReadOnlyList<QaSubstitute> Substitutes) : QaSeed
 {
     /// <summary>
     /// Indica si la recomendación es manual (creada por el nutricionista) y no del motor.
@@ -156,6 +157,16 @@ public sealed record QaRecommendationSeed(
 /// Historial que respalda una recomendación: registros de dolor en una ventana de días.
 /// </summary>
 public sealed record QaSupportingData(int PainRecords, int WindowDays);
+
+/// <summary>
+/// Sustituto que propone una recomendación del motor: un alimento del catálogo en lugar de otro.
+/// </summary>
+public sealed record QaSubstitute(string Food, string By);
+
+/// <summary>
+/// Término del glosario que el caso necesita presente, con su categoría, o ausente.
+/// </summary>
+public sealed record QaGlossarySeed(string Term, bool Present, string? Category) : QaSeed;
 
 /// <summary>
 /// Estado de un código de invitación sembrado.

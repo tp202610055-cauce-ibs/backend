@@ -108,6 +108,8 @@ public static class QaResetter
             await RealignSharedAsync(run, account, [testCase.Cp], ct).ConfigureAwait(false);
         }
 
+        await run.ApplySharedSeedsAsync([testCase.Cp], ct).ConfigureAwait(false);
+
         return new QaResetSummary(recreated, shared.Count + notRearmable, retired, notRearmable);
     }
 

@@ -1,4 +1,6 @@
+using System.Globalization;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Enums;
 using Cauce.Domain.Patients.Enums;
@@ -23,7 +25,8 @@ public sealed record QaCaseVerdict(string Cp, IReadOnlyList<string> Problems)
 
 /// <summary>
 /// Verificación de solo lectura (<c>verify-qa</c>): cuentas, su estado y el consentimiento, cuentas que no deben existir,
-/// vínculos, perfil y alergias, recomendaciones por estado y archivado, códigos, agendas y la edad del ancla con reloj.
+/// vínculos y su antigüedad, perfil y alergias, comidas, síntomas, historial de respaldo, sustitutos, recomendaciones por
+/// estado y archivado, glosario, códigos, agendas y la edad del ancla con reloj.
 /// Nunca escribe: consultas sin seguimiento y solo lecturas en Keycloak.
 /// </summary>
 public sealed class QaVerifier
@@ -161,15 +164,10 @@ public sealed class QaVerifier
             switch (seed)
             {
                 case QaLinkSeed link:
-                    var patientId = await UserIdAsync(link.Patient, ct).ConfigureAwait(false);
-                    var nutritionistId = await UserIdAsync(link.Nutritionist, ct).ConfigureAwait(false);
-                    if (!await _db.NutritionistPatients.AsNoTracking().AnyAsync(
-                            candidate => candidate.PatientId == patientId && candidate.NutritionistId == nutritionistId && candidate.Status == AssignmentStatus.Active,
-                            ct).ConfigureAwait(false))
-                    {
-                        problems.Add($"falta el vínculo de {link.Patient} con {link.Nutritionist}");
-                    }
-
+                    await CheckLinkAsync(link, now, problems, ct).ConfigureAwait(false);
+                    break;
+                case QaGlossarySeed glossary:
+                    await CheckGlossaryAsync(glossary, problems, ct).ConfigureAwait(false);
                     break;
                 case QaProfileSeed profile:
                     await CheckProfileAsync(profile, problems, ct).ConfigureAwait(false);
@@ -186,14 +184,156 @@ public sealed class QaVerifier
             }
         }
 
+        await CheckClinicalRecordsAsync(testCase, problems, ct).ConfigureAwait(false);
+
         foreach (var patient in testCase.Seeds.OfType<QaRecommendationSeed>().Select(seed => seed.Patient).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             await CheckRecommendationsAsync(manifest, patient, now, problems, ct).ConfigureAwait(false);
         }
 
+        foreach (var recommendation in testCase.Seeds.OfType<QaRecommendationSeed>())
+        {
+            await CheckSupportingHistoryAsync(recommendation, now, problems, ct).ConfigureAwait(false);
+        }
+
+        foreach (var patient in testCase.Seeds.OfType<QaRecommendationSeed>()
+                     .Where(seed => seed.Substitutes.Count > 0)
+                     .GroupBy(seed => seed.Patient, StringComparer.OrdinalIgnoreCase))
+        {
+            await CheckSubstitutesAsync(patient.Key, patient.Sum(seed => seed.Substitutes.Count), problems, ct).ConfigureAwait(false);
+        }
+
         foreach (var nutritionist in testCase.Seeds.OfType<QaInviteCodeSeed>().Select(seed => seed.Nutritionist).Distinct(StringComparer.OrdinalIgnoreCase))
         {
             await CheckInviteCodesAsync(manifest, nutritionist, now, problems, ct).ConfigureAwait(false);
+        }
+    }
+
+    // Un vínculo con antigüedad debe tenerla todavía; uno con fecha fija descarta registros anteriores a esa fecha.
+    private async Task CheckLinkAsync(QaLinkSeed link, DateTime now, List<string> problems, CancellationToken ct)
+    {
+        var patientId = await UserIdAsync(link.Patient, ct).ConfigureAwait(false);
+        var nutritionistId = await UserIdAsync(link.Nutritionist, ct).ConfigureAwait(false);
+        var assignedAt = await _db.NutritionistPatients.AsNoTracking()
+            .Where(candidate => candidate.PatientId == patientId && candidate.NutritionistId == nutritionistId && candidate.Status == AssignmentStatus.Active)
+            .Select(candidate => (DateTime?)candidate.AssignedAt)
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (assignedAt is null)
+        {
+            problems.Add($"falta el vínculo de {link.Patient} con {link.Nutritionist}");
+            return;
+        }
+
+        if (link.Since is null)
+        {
+            return;
+        }
+
+        if (assignedAt > new QaClock(now).Resolve(link.Since).AddHours(1))
+        {
+            problems.Add($"el vínculo de {link.Patient} es más reciente de lo que pide el caso");
+        }
+
+        if (link.Since.Date is { } since)
+        {
+            var start = QaClock.AtLimaTime(since, TimeOnly.MinValue);
+            var earlier = await _db.Meals.AsNoTracking().AnyAsync(meal => meal.PatientId == patientId && meal.ConsumedAt < start, ct).ConfigureAwait(false)
+                || await _db.Symptoms.AsNoTracking().AnyAsync(symptom => symptom.PatientId == patientId && symptom.OccurredAt < start, ct).ConfigureAwait(false);
+            if (earlier)
+            {
+                problems.Add($"{link.Patient} tiene registros anteriores al {since.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture)}");
+            }
+        }
+    }
+
+    // Cuenta, por paciente, las comidas de cada alimento y los síntomas de cada tipo que el caso siembra.
+    private async Task CheckClinicalRecordsAsync(QaCase testCase, List<string> problems, CancellationToken ct)
+    {
+        foreach (var group in testCase.Seeds.OfType<QaMealSeed>().GroupBy(meal => (meal.Patient, meal.Food)))
+        {
+            var patientId = await UserIdAsync(group.Key.Patient, ct).ConfigureAwait(false);
+            var count = await _db.Meals.AsNoTracking()
+                .Where(meal => meal.PatientId == patientId)
+                .SelectMany(meal => meal.Items)
+                .Join(_db.FoodItems, item => item.FoodId, food => food.Id, (_, food) => food.Name)
+                .CountAsync(name => name == group.Key.Food, ct).ConfigureAwait(false);
+            if (count < group.Count())
+            {
+                problems.Add($"{group.Key.Patient} tiene {count} comida(s) de «{group.Key.Food}» y debe tener {group.Count()}");
+            }
+        }
+
+        foreach (var group in testCase.Seeds.OfType<QaSymptomSeed>().GroupBy(symptom => (symptom.Patient, symptom.Name)))
+        {
+            if (!QaManifestValidator.TryParseSymptom(group.Key.Name, out var type))
+            {
+                continue;
+            }
+
+            var patientId = await UserIdAsync(group.Key.Patient, ct).ConfigureAwait(false);
+            var count = await _db.Symptoms.AsNoTracking().CountAsync(symptom => symptom.PatientId == patientId && symptom.SymptomType == type, ct).ConfigureAwait(false);
+            if (count < group.Count())
+            {
+                problems.Add($"{group.Key.Patient} tiene {count} síntoma(s) «{group.Key.Name}» y debe tener {group.Count()}");
+            }
+        }
+    }
+
+    // El historial de respaldo se cuenta dentro de su ventana desde ahora, como lo calcula el detalle de la recomendación.
+    private async Task CheckSupportingHistoryAsync(QaRecommendationSeed seed, DateTime now, List<string> problems, CancellationToken ct)
+    {
+        var expected = QaRecommendationSeedApplier.SupportingHistoryMoments(seed, new QaClock(now)).Count;
+        if (expected == 0)
+        {
+            return;
+        }
+
+        var windowStart = now.AddDays(-(seed.SupportingData?.WindowDays ?? 7));
+        var patientId = await UserIdAsync(seed.Patient, ct).ConfigureAwait(false);
+        var count = await _db.Symptoms.AsNoTracking()
+            .CountAsync(symptom => symptom.PatientId == patientId && symptom.SymptomType == SymptomType.AbdominalPain && symptom.OccurredAt >= windowStart, ct)
+            .ConfigureAwait(false);
+        if (count < expected)
+        {
+            problems.Add($"{seed.Patient} tiene {count} registro(s) de dolor abdominal en la ventana y debe tener {expected}");
+        }
+    }
+
+    private async Task CheckSubstitutesAsync(string patient, int expected, List<string> problems, CancellationToken ct)
+    {
+        var patientId = await UserIdAsync(patient, ct).ConfigureAwait(false);
+        var count = await _db.Recommendations.AsNoTracking()
+            .Where(recommendation => recommendation.PatientId == patientId)
+            .SelectMany(recommendation => recommendation.Items)
+            .CountAsync(item => item.ActionType == ActionType.Substitute && item.SubstituteFoodId != null && item.Reasoning != null, ct)
+            .ConfigureAwait(false);
+        if (count < expected)
+        {
+            problems.Add($"{patient} tiene {count} sustituto(s) con justificación y debe tener {expected}");
+        }
+    }
+
+    private async Task CheckGlossaryAsync(QaGlossarySeed seed, List<string> problems, CancellationToken ct)
+    {
+        var terms = await _db.GlossaryTerms.AsNoTracking().Select(term => new { term.Term, term.Category }).ToListAsync(ct).ConfigureAwait(false);
+        var match = terms.FirstOrDefault(term => string.Equals(term.Term, seed.Term, StringComparison.OrdinalIgnoreCase));
+        if (!seed.Present)
+        {
+            if (match is not null)
+            {
+                problems.Add($"el glosario tiene «{seed.Term}» y no debe tenerlo");
+            }
+
+            return;
+        }
+
+        if (match is null)
+        {
+            problems.Add($"el glosario no tiene «{seed.Term}»");
+        }
+        else if (seed.Category is not null && QaManifestValidator.TryParseGlossaryCategory(seed.Category, out var category) && match.Category != category)
+        {
+            problems.Add($"«{seed.Term}» es {match.Category} en el glosario y debe ser {category}");
         }
     }
 
