@@ -87,8 +87,12 @@ Qué comprueba:
 - **Cuentas:** que existan, con su estado en Keycloak y en el backend, sin bloqueo y sin acciones pendientes. Cada paciente, con el consentimiento vigente.
 - **Cuentas `mustNotExist`:** que no existan.
 - **Datos del caso:**
-  - vínculos activos;
+  - vínculos activos y, si el caso fija su antigüedad, que la conserven; con fecha fija, sin registros anteriores;
   - perfil y alergias;
+  - comidas por alimento y síntomas por tipo;
+  - historial de respaldo: los registros de dolor abdominal siguen dentro de su ventana;
+  - sustitutos con justificación;
+  - glosario: términos presentes con su categoría y términos ausentes;
   - recomendaciones contadas por estado, con la expiración que se evalúa al leer;
   - ninguna recomendación archivada, y las manuales con la vigencia vencida (CP075) pendientes de archivo;
   - códigos de invitación;
