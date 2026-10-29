@@ -1,11 +1,13 @@
 using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Identity.Services;
 using Cauce.Application.Identity.UseCases.Login;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Exceptions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Cauce.Application.Tests.Identity;
@@ -39,7 +41,9 @@ public sealed class LoginCommandHandlerTests
     }
 
     private LoginCommandHandler CreateHandler() =>
-        new(_tokenClient, _adminClient, _userRepository, _activationService, _attemptContext, _unitOfWork, _logger);
+        new(
+            _tokenClient, _adminClient, _userRepository, _activationService,
+            new EmailVerificationSync(_adminClient, NullLogger<EmailVerificationSync>.Instance), _attemptContext, _unitOfWork, _logger);
 
     private void GivenKeycloakAuthenticates()
     {

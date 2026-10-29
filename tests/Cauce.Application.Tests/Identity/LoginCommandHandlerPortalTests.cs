@@ -2,11 +2,13 @@ using Cauce.Application.Common.Exceptions;
 using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Identity.Services;
 using Cauce.Application.Identity.UseCases.Login;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Exceptions;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 
@@ -45,7 +47,9 @@ public sealed class LoginCommandHandlerPortalTests
     }
 
     private LoginCommandHandler CreateHandler() =>
-        new(_tokenClient, _adminClient, _userRepository, _activationService, _attemptContext, _unitOfWork, _logger);
+        new(
+            _tokenClient, _adminClient, _userRepository, _activationService,
+            new EmailVerificationSync(_adminClient, NullLogger<EmailVerificationSync>.Instance), _attemptContext, _unitOfWork, _logger);
 
     private static LoginCommand PortalCommand(string password = Password) =>
         new(Email, password, OidcClients.WebPortal, LoginChannel.Portal);

@@ -14,7 +14,7 @@ namespace Cauce.Application.Identity.UseCases.RefreshToken;
 
 /// <summary>
 /// Handler de la renovación de sesión. Delega el intercambio del token a Keycloak, resuelve la cuenta
-/// local por el <c>sub</c> del token recién emitido y audita el acceso.
+/// local por el <c>sub</c> del token recién emitido, sincroniza el correo si aún no está verificado y audita el acceso.
 /// </summary>
 /// <remarks>
 /// La auditoría se escribe aquí y no en el <c>AuditingMiddleware</c>: el middleware resuelve el actor
@@ -27,6 +27,7 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
 {
     private readonly IKeycloakTokenClient _tokenClient;
     private readonly IUserRepository _userRepository;
+    private readonly IEmailVerificationSync _emailVerificationSync;
     private readonly IAuditLogger _auditLogger;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<RefreshTokenCommandHandler> _logger;
@@ -37,12 +38,14 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
     public RefreshTokenCommandHandler(
         IKeycloakTokenClient tokenClient,
         IUserRepository userRepository,
+        IEmailVerificationSync emailVerificationSync,
         IAuditLogger auditLogger,
         IUnitOfWork unitOfWork,
         ILogger<RefreshTokenCommandHandler> logger)
     {
         _tokenClient = tokenClient;
         _userRepository = userRepository;
+        _emailVerificationSync = emailVerificationSync;
         _auditLogger = auditLogger;
         _unitOfWork = unitOfWork;
         _logger = logger;
@@ -109,6 +112,12 @@ public sealed class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCom
         if (request.Channel == LoginChannel.Portal)
         {
             await EnsurePortalAccessAsync(request, user, token, cancellationToken).ConfigureAwait(false);
+        }
+
+        // Solo un correo aún sin verificar consulta a Keycloak; lo confirma el SaveChanges de la auditoría.
+        if (!user.EmailVerified)
+        {
+            await _emailVerificationSync.TrySyncAsync(user, cancellationToken).ConfigureAwait(false);
         }
 
         var roleName = await _userRepository

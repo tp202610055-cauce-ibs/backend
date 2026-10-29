@@ -61,6 +61,9 @@ public static class DependencyInjection
         // Regla única de activación de nutricionistas, compartida por el login y el behavior (acta A51).
         services.AddScoped<INutritionistActivationService, NutritionistActivationService>();
 
+        // Sincronización del correo verificado desde Keycloak, compartida por el login y la renovación de sesión.
+        services.AddScoped<IEmailVerificationSync, EmailVerificationSync>();
+
         // Causa interna de un rechazo de sesión: la escriben los handlers y la lee el middleware de
         // auditoría en la misma petición (acta A68).
         services.AddScoped<IAuthenticationAttemptContext, AuthenticationAttemptContext>();
