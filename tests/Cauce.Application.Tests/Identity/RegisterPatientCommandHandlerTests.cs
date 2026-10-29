@@ -69,7 +69,7 @@ public sealed class RegisterPatientCommandHandlerTests
         _userRepository.ExistsByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(1);
         _keycloakAdminClient
-            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, true, Arg.Any<CancellationToken>())
+            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, NewUserEmailState.Unverified, Arg.Any<CancellationToken>())
             .Returns("kc-id");
 
         var result = await CreateHandler().Handle(ValidCommand(), CancellationToken.None);
@@ -87,6 +87,25 @@ public sealed class RegisterPatientCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_ValidRequest_CreatesTheKeycloakUserUnverifiedAndThePatientPending()
+    {
+        _consentService.VerifyHash(Arg.Any<string>(), Arg.Any<string>()).Returns(true);
+        _userRepository.ExistsByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+        _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(1);
+        _keycloakAdminClient
+            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<NewUserEmailState>(), Arg.Any<CancellationToken>())
+            .Returns("kc-id");
+
+        await CreateHandler().Handle(ValidCommand(), CancellationToken.None);
+
+        await _keycloakAdminClient.Received(1).CreateUserAsync(
+            Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, NewUserEmailState.Unverified, Arg.Any<CancellationToken>());
+        await _userRepository.Received(1).AddAsync(
+            Arg.Is<User>(user => !user.EmailVerified && user.Status == Cauce.Domain.Identity.Enums.UserStatus.PendingActivation),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_ConsentHashMismatch_ThrowsAndDoesNotCallKeycloak()
     {
         _consentService.VerifyHash(Arg.Any<string>(), Arg.Any<string>()).Returns(false);
@@ -95,7 +114,7 @@ public sealed class RegisterPatientCommandHandlerTests
 
         await act.Should().ThrowAsync<ConsentTextMismatchException>();
         await _keycloakAdminClient.DidNotReceive().CreateUserAsync(
-            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<bool>(), Arg.Any<CancellationToken>());
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<NewUserEmailState>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -116,7 +135,7 @@ public sealed class RegisterPatientCommandHandlerTests
         _userRepository.ExistsByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(1);
         _keycloakAdminClient
-            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, true, Arg.Any<CancellationToken>())
+            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, NewUserEmailState.Unverified, Arg.Any<CancellationToken>())
             .Returns("kc-id");
         _userRepository.AddAsync(Arg.Any<User>(), Arg.Any<CancellationToken>())
             .ThrowsAsync(new InvalidOperationException("db down"));
@@ -134,7 +153,7 @@ public sealed class RegisterPatientCommandHandlerTests
         _userRepository.ExistsByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(1);
         _keycloakAdminClient
-            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, true, Arg.Any<CancellationToken>())
+            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, NewUserEmailState.Unverified, Arg.Any<CancellationToken>())
             .Returns("kc-id");
         using var request = new CancellationTokenSource();
         _unitOfWork.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(_ =>
@@ -179,7 +198,7 @@ public sealed class RegisterPatientCommandHandlerTests
         _userRepository.ExistsByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         _userRepository.GetRoleIdAsync(UserRoles.Patient, Arg.Any<CancellationToken>()).Returns(1);
         _keycloakAdminClient
-            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, true, Arg.Any<CancellationToken>())
+            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Patient, NewUserEmailState.Unverified, Arg.Any<CancellationToken>())
             .Returns("kc-id");
     }
 

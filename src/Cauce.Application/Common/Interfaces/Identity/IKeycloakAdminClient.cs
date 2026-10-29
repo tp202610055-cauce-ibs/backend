@@ -8,23 +8,19 @@ namespace Cauce.Application.Common.Interfaces.Identity;
 public interface IKeycloakAdminClient
 {
     /// <summary>
-    /// Crea un usuario en Keycloak con el rol del realm indicado.
+    /// Crea un usuario en Keycloak con el rol del realm indicado y sin acciones pendientes.
     /// </summary>
     /// <param name="email">Correo electrónico del usuario.</param>
     /// <param name="fullName">Nombre completo del usuario.</param>
     /// <param name="roleName">Nombre del rol del realm a asignar.</param>
-    /// <param name="requireEmailVerification">
-    /// Si es <see langword="true"/>, el usuario se crea con el correo sin verificar
-    /// y con la required action <c>VERIFY_EMAIL</c>; si es <see langword="false"/>,
-    /// se crea con el correo verificado.
-    /// </param>
+    /// <param name="emailState">Si el correo nace verificado o sin verificar.</param>
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>El identificador del usuario creado en Keycloak.</returns>
     Task<string> CreateUserAsync(
         string email,
         string fullName,
         string roleName,
-        bool requireEmailVerification,
+        NewUserEmailState emailState,
         CancellationToken ct = default);
 
     /// <summary>

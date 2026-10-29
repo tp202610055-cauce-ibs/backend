@@ -1,6 +1,7 @@
 using Cauce.Api.Commands;
 using Cauce.Api.IntegrationTests.Identity.Support;
 using Cauce.Api.IntegrationTests.Qa.Support;
+using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Recommendations.Enums;
 using FluentAssertions;
@@ -104,7 +105,7 @@ public sealed class VerifyQaTests
     public async Task VerifyQa_ForbiddenAccountPresent_Fails()
     {
         SkipIfUnavailable();
-        await Factory.KeycloakClient.CreateUserAsync("registro.cp001@ejemplo.com", "Registro", UserRoles.Patient, true);
+        await Factory.KeycloakClient.CreateUserAsync("registro.cp001@ejemplo.com", "Registro", UserRoles.Patient, NewUserEmailState.Unverified);
 
         var code = await RunCapturingAsync("verify-qa", "CP001");
 

@@ -3,9 +3,12 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Cauce.Api.IntegrationTests.Identity.Support;
+using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Identity.Enums;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Seeders;
 using FluentAssertions;
@@ -81,6 +84,29 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         _factory.KeycloakClient.VerifyEmailsSent.Should().NotBeEmpty();
         var hasAudit = await db.AuditLogs.AsNoTracking().AnyAsync(a => a.ActionType == AuditActionType.Register);
         hasAudit.Should().BeTrue();
+    }
+
+    [SkippableFact]
+    public async Task Register_ThenLoginWithTheSameCredentials_EntersUnverifiedAndPending()
+    {
+        SkipIfNoDocker();
+        var client = _factory.CreateClient();
+        var email = UniqueEmail();
+        _factory.TokenClient.ValidPassword = "Password1";
+
+        (await client.PostAsJsonAsync("/api/v1/auth/register", RegisterBody(email))).StatusCode.Should().Be(HttpStatusCode.Created);
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "Password1", clientId = "cauce-mobile" });
+
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var document = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("user").GetProperty("emailVerified").GetBoolean().Should().BeFalse();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        var user = await db.Users.AsNoTracking().SingleAsync(u => u.Email == email);
+        user.Status.Should().Be(UserStatus.PendingActivation);
+        _factory.KeycloakClient.CreatedEmailStates[user.KeycloakId].Should().Be(NewUserEmailState.Unverified);
+        _factory.KeycloakClient.VerifyEmailsSent.Should().Contain(user.KeycloakId);
     }
 
     [SkippableFact]

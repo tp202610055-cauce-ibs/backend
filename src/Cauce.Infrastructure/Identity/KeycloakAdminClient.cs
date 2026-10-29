@@ -51,7 +51,7 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
         string email,
         string fullName,
         string roleName,
-        bool requireEmailVerification,
+        NewUserEmailState emailState,
         CancellationToken ct = default)
     {
         var (firstName, lastName) = SplitFullName(fullName);
@@ -62,8 +62,8 @@ public sealed class KeycloakAdminClient : IKeycloakAdminClient
             firstName,
             lastName,
             enabled = true,
-            emailVerified = !requireEmailVerification,
-            requiredActions = requireEmailVerification ? new[] { "VERIFY_EMAIL" } : Array.Empty<string>()
+            emailVerified = emailState == NewUserEmailState.Verified,
+            requiredActions = Array.Empty<string>()
         };
 
         using var response = await _transport.SendAsync(
