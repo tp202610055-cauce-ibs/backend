@@ -31,7 +31,8 @@ public sealed class ResetQaGlobalTests
         var (scope, db) = CreateDbScope();
         using (scope)
         {
-            (await db.Users.CountAsync()).Should().Be(105 + 4);
+            // Rearmar casos siembra solo sus cuentas; las de humo las crea seed-qa.
+            (await db.Users.CountAsync()).Should().Be(105);
         }
 
         (await RunCapturingAsync("verify-qa", "--all")).Should().Be(CommandRunner.Success, CauceLog);
