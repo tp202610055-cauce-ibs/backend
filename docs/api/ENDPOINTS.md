@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.11.0 · **Actualizado:** 2026-10-27 · **Contrato:** [`openapi-v1.10.0.json`](openapi-v1.10.0.json) (399 KB, 78 operaciones, 70 paths)
+**Versión:** 1.12.0 · **Actualizado:** 2026-10-29 · **Contrato:** [`openapi-v1.10.0.json`](openapi-v1.10.0.json) (399 KB, 78 operaciones, 70 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -11,6 +11,18 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los endpoints de identidad, la fuente autoritativa versionada es
 > [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.5.1.
+
+**Novedades de la v1.12.0 (contrato v1.10.0, sin cambio de esquema).** Cambios de comportamiento; ninguna
+ruta, campo ni esquema cambia.
+- **`POST /auth/register`**: el paciente nace sin verificar y sin la acción `VERIFY_EMAIL`, así que puede
+  iniciar sesión enseguida. `POST /auth/login` responde 200 con `user.emailVerified: false`; el correo de
+  verificación sigue saliendo como recordatorio. Requiere `verifyEmail: false` en el realm.
+- **`POST /auth/refresh`**: si `emailVerified` local es `false`, consulta Keycloak y lo actualiza.
+- **`POST /patients/me/report`**: nuevo 422 `email_not_verified` si el correo del paciente no está
+  verificado. No genera el PDF ni envía correos.
+- **`DELETE /patients/me`**: con el correo sin verificar, la baja sigue igual y solo omite el correo de
+  confirmación.
+- Un `errorCode` nuevo: `email_not_verified` (422).
 
 **Novedades de la v1.11.0 (contrato v1.10.0).** Cambio aditivo: 5 operaciones y 5 paths nuevos (78 y 70),
 8 esquemas nuevos (137) y un campo nuevo. Ninguna respuesta, código de error ni parámetro existente cambia.
@@ -232,6 +244,7 @@ Cada endpoint lista abajo solo los códigos que su flujo produce.
 | `all_candidates_filtered_by_allergies` | 422 | Todos los candidatos fueron filtrados por alergias. |
 | `no_active_model_version` | 422 | No hay `ModelVersion` activa. |
 | `patient_has_no_data_in_period` | 422 | El paciente no tiene datos en el período del reporte. |
+| `email_not_verified` | 422 | El paciente pidió su reporte con el correo sin verificar: no se genera ni se envía. |
 | `report_period_invalid` | 422 | Período de reporte inválido. |
 | `account_locked` | 423 | Cuenta bloqueada por el brute-force lockout de Keycloak (`failureFactor: 5`). Extensión `lockedUntil`. |
 | *(sin `errorCode`)* | 429 | Rate limit superado. Extensión `retryAfterSeconds`. |
@@ -367,7 +380,7 @@ consultar este endpoint y devolver los dos valores sin tocarlos.
 ### `POST /api/v1/auth/register`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Registra un paciente. Devuelve `user_id`, sin token (debe verificar email antes de loguearse). |
+| Resumen | Registra un paciente. Devuelve `user_id`, sin token. Puede iniciar sesión enseguida, con el correo sin verificar (v1.12.0). |
 | US/TS | US01, US20 |
 | Autorización | Anónimo |
 | Request body | `RegisterPatientRequest` (email, fullName, password, consentDocumentVersion, consentTextHash, invitationCode?) |
@@ -943,7 +956,7 @@ lista y su detalle sigue respondiendo 404 al paciente.
 ### `DELETE /api/v1/patients/me`
 | Campo | Valor |
 | --- | --- |
-| Resumen | Baja de cuenta = **anonimización** (no borrado físico) + disable en Keycloak. Derecho al olvido (US26). |
+| Resumen | Baja de cuenta = **anonimización** (no borrado físico) + disable en Keycloak. Derecho al olvido (US26). Con el correo sin verificar no envía la confirmación. |
 | US/TS | US26 |
 | Query | `confirmedActivePilotAcknowledged` (bool) — si la cuenta está en piloto activo y es `false` → 409 |
 | Idempotencia | — |
@@ -958,7 +971,7 @@ lista y su detalle sigue respondiendo 404 al paciente.
 | Request body | — |
 | Idempotencia | — |
 | Rate limit | — |
-| Respuestas | **200** `GenerateMyClinicalReportResult` · 422 `patient_has_no_data_in_period` · 401 · 403 · 500 |
+| Respuestas | **200** `GenerateMyClinicalReportResult` · 422 (`patient_has_no_data_in_period`, `email_not_verified`) · 401 · 403 · 500 |
 
 ---
 
