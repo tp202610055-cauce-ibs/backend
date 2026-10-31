@@ -1,0 +1,472 @@
+{
+  "version_name": "xgboost-sii-v1.2.0",
+  "descripcion": "10 variables: solo las que el backend captura de verdad",
+  "fecha_generacion": "2026-10-31",
+  "onnx_sha256": "eb9da0167ed7dc4f9db2d0f5e0da2b3e9eed0e250f993077c05fc378013f7481",
+  "onnx_archivo": "xgboost-sii-v1.2.0.onnx",
+  "entrada": {
+    "nombre": "input",
+    "tipo": "float32",
+    "forma": [
+      null,
+      10
+    ],
+    "orden_columnas": [
+      "edad",
+      "imc",
+      "tipo_sii",
+      "años_diagnostico",
+      "nivel_fodmap",
+      "oligos",
+      "fructosa",
+      "polioles",
+      "lactosa",
+      "cantidad_g"
+    ]
+  },
+  "salidas": {
+    "label": "int64 [N]",
+    "probabilities": "float32 [N,2] (columna 1 = probabilidad de síntomas)"
+  },
+  "codificacion_categoricas": {
+    "tipo_sii": {
+      "SII-C": 0,
+      "SII-D": 1,
+      "SII-M": 2,
+      "SII-U": 3
+    },
+    "nivel_fodmap": {
+      "high": 0,
+      "low": 1
+    }
+  },
+  "hiperparametros": {
+    "objective": "binary:logistic",
+    "n_estimators": 300,
+    "learning_rate": 0.05,
+    "max_depth": 6,
+    "min_child_weight": 5,
+    "subsample": 0.8,
+    "colsample_bytree": 0.8,
+    "gamma": 0.2,
+    "reg_alpha": 0.5,
+    "reg_lambda": 1,
+    "random_state": 42,
+    "eval_metric": "logloss"
+  },
+  "particion": "70/20/10 estratificada, semilla 42",
+  "tamanos": {
+    "entrenamiento": 175000,
+    "validacion": 50000,
+    "prueba": 25000
+  },
+  "metricas_prueba": {
+    "exactitud": 0.7215,
+    "precision": 0.8112,
+    "recall": 0.5902,
+    "f1": 0.6833,
+    "auc": 0.7674
+  },
+  "matriz_confusion": [
+    [
+      10525,
+      1748
+    ],
+    [
+      5215,
+      7512
+    ]
+  ],
+  "metricas_referencia_v100": {
+    "exactitud": 0.7212,
+    "precision": 0.8112,
+    "recall": 0.5895,
+    "f1": 0.6828,
+    "auc": 0.7671
+  },
+  "acciones_con_umbrales_del_backend": {
+    "umbral_evitar": 0.7,
+    "umbral_reducir": 0.45,
+    "evitar": 0.3304,
+    "reducir": 0.0829,
+    "sugerir": 0.5867
+  },
+  "equivalencia_onnx": {
+    "diferencia_maxima": 2.980232238769531e-07,
+    "etiquetas_iguales": 1.0
+  },
+  "sondeo_probabilidades": [
+    {
+      "nivel_fodmap": "high",
+      "grupos": "sin grupos",
+      "gramos": 50,
+      "probabilidad": 0.7219
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "sin grupos",
+      "gramos": 150,
+      "probabilidad": 0.7602
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "sin grupos",
+      "gramos": 300,
+      "probabilidad": 0.8457
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo oligos",
+      "gramos": 50,
+      "probabilidad": 0.8193
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo oligos",
+      "gramos": 150,
+      "probabilidad": 0.8348
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo oligos",
+      "gramos": 300,
+      "probabilidad": 0.8762
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo fructosa",
+      "gramos": 50,
+      "probabilidad": 0.8182
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo fructosa",
+      "gramos": 150,
+      "probabilidad": 0.8302
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo fructosa",
+      "gramos": 300,
+      "probabilidad": 0.8893
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo polioles",
+      "gramos": 50,
+      "probabilidad": 0.8103
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo polioles",
+      "gramos": 150,
+      "probabilidad": 0.8396
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo polioles",
+      "gramos": 300,
+      "probabilidad": 0.9017
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo lactosa",
+      "gramos": 50,
+      "probabilidad": 0.7669
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo lactosa",
+      "gramos": 150,
+      "probabilidad": 0.8025
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "solo lactosa",
+      "gramos": 300,
+      "probabilidad": 0.8753
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "oligos+polioles",
+      "gramos": 50,
+      "probabilidad": 0.8532
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "oligos+polioles",
+      "gramos": 150,
+      "probabilidad": 0.8704
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "oligos+polioles",
+      "gramos": 300,
+      "probabilidad": 0.9139
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "los cuatro",
+      "gramos": 50,
+      "probabilidad": 0.8752
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "los cuatro",
+      "gramos": 150,
+      "probabilidad": 0.8836
+    },
+    {
+      "nivel_fodmap": "high",
+      "grupos": "los cuatro",
+      "gramos": 300,
+      "probabilidad": 0.9224
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "sin grupos",
+      "gramos": 50,
+      "probabilidad": 0.3345
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "sin grupos",
+      "gramos": 150,
+      "probabilidad": 0.3882
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "sin grupos",
+      "gramos": 300,
+      "probabilidad": 0.4867
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo oligos",
+      "gramos": 50,
+      "probabilidad": 0.4409
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo oligos",
+      "gramos": 150,
+      "probabilidad": 0.5008
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo oligos",
+      "gramos": 300,
+      "probabilidad": 0.5662
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo fructosa",
+      "gramos": 50,
+      "probabilidad": 0.4268
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo fructosa",
+      "gramos": 150,
+      "probabilidad": 0.4722
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo fructosa",
+      "gramos": 300,
+      "probabilidad": 0.5754
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo polioles",
+      "gramos": 50,
+      "probabilidad": 0.4412
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo polioles",
+      "gramos": 150,
+      "probabilidad": 0.4975
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo polioles",
+      "gramos": 300,
+      "probabilidad": 0.5991
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo lactosa",
+      "gramos": 50,
+      "probabilidad": 0.414
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo lactosa",
+      "gramos": 150,
+      "probabilidad": 0.4678
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "solo lactosa",
+      "gramos": 300,
+      "probabilidad": 0.5699
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "oligos+polioles",
+      "gramos": 50,
+      "probabilidad": 0.4659
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "oligos+polioles",
+      "gramos": 150,
+      "probabilidad": 0.5376
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "oligos+polioles",
+      "gramos": 300,
+      "probabilidad": 0.6359
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "los cuatro",
+      "gramos": 50,
+      "probabilidad": 0.5204
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "los cuatro",
+      "gramos": 150,
+      "probabilidad": 0.5732
+    },
+    {
+      "nivel_fodmap": "low",
+      "grupos": "los cuatro",
+      "gramos": 300,
+      "probabilidad": 0.6725
+    }
+  ],
+  "hechos_del_dataset": {
+    "valores_de_los_grupos": {
+      "oligos": [
+        0,
+        1,
+        2
+      ],
+      "fructosa": [
+        0,
+        1,
+        2
+      ],
+      "polioles": [
+        0,
+        1,
+        2
+      ],
+      "lactosa": [
+        0,
+        1,
+        2
+      ]
+    },
+    "rangos": {
+      "edad": {
+        "minimo": 19.0,
+        "mediana": 43.0,
+        "maximo": 77.0
+      },
+      "imc": {
+        "minimo": 18.0,
+        "mediana": 25.4,
+        "maximo": 40.0
+      },
+      "años_diagnostico": {
+        "minimo": 1.0,
+        "mediana": 3.0,
+        "maximo": 33.0
+      },
+      "cantidad_g": {
+        "minimo": 1.0,
+        "mediana": 137.0,
+        "maximo": 500.0
+      }
+    },
+    "valores_de_las_categoricas": {
+      "sexo": [
+        "Femenino",
+        "Masculino"
+      ],
+      "tipo_sii": [
+        "SII-C",
+        "SII-D",
+        "SII-M",
+        "SII-U"
+      ],
+      "actividad_fisica": [
+        "Alta",
+        "Baja",
+        "Media"
+      ],
+      "fumador": [
+        "No",
+        "Si"
+      ],
+      "consumo_alcohol": [
+        "No",
+        "Si"
+      ],
+      "nivel_fodmap": [
+        "high",
+        "low"
+      ],
+      "hora_consumo": [
+        "Almuerzo",
+        "Cena",
+        "Desayuno",
+        "Media mañana",
+        "Merienda"
+      ]
+    },
+    "nivel_fodmap_vs_grupos": {
+      "high": {
+        "con_algun_grupo_en_positivo": 83840,
+        "con_todos_los_grupos_en_cero": 1544
+      },
+      "low": {
+        "con_algun_grupo_en_positivo": 496,
+        "con_todos_los_grupos_en_cero": 164120
+      }
+    },
+    "valores_distintos_por_alimento": {
+      "categoria": 1,
+      "nivel_fodmap": 1,
+      "oligos": 1,
+      "fructosa": 1,
+      "polioles": 1,
+      "lactosa": 1
+    },
+    "tasa_de_sintomas_global": 0.5091
+  },
+  "dataset": {
+    "archivo": "288f76dc-fodmap_synthetic_dataset_1.xlsx",
+    "sha256": "e3a48b5c233423a084509afaf8545a61a878898d084b0b372fba6e1a20ca8e06",
+    "filas": 250000,
+    "pacientes": 5000,
+    "tipo": "sintético"
+  },
+  "entorno": {
+    "python": "3.13.18",
+    "xgboost": "3.4.1",
+    "sklearn": "1.9.1",
+    "onnx": "1.23.2",
+    "onnxruntime": "1.29.0"
+  },
+  "advertencias": [
+    "Entrenado con datos sintéticos: prueba de concepto, sin validez clínica.",
+    "La clase positiva es 'hubo síntomas'; probabilities[:,1] es esa probabilidad.",
+    "Las variables del paciente aportan poco (el modelo contextualiza, no personaliza)."
+  ]
+}

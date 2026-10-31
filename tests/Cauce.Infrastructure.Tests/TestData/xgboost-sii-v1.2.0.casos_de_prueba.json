@@ -1,0 +1,418 @@
+{
+ "version_name": "xgboost-sii-v1.2.0",
+ "tolerancia": 0.0001,
+ "columnas": [
+  "edad",
+  "imc",
+  "tipo_sii",
+  "a\u00f1os_diagnostico",
+  "nivel_fodmap",
+  "oligos",
+  "fructosa",
+  "polioles",
+  "lactosa",
+  "cantidad_g"
+ ],
+ "casos": [
+  {
+   "vector": [
+    38.0,
+    30.399999618530273,
+    1.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    230.0
+   ],
+   "probabilidad_esperada": 0.460573,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    35.0,
+    24.100000381469727,
+    1.0,
+    3.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    1.0,
+    10.0
+   ],
+   "probabilidad_esperada": 0.820838,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    31.0,
+    28.200000762939453,
+    1.0,
+    1.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    220.0
+   ],
+   "probabilidad_esperada": 0.901048,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    51.0,
+    24.5,
+    2.0,
+    1.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0,
+    0.0,
+    107.0
+   ],
+   "probabilidad_esperada": 0.862351,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    37.0,
+    26.899999618530273,
+    0.0,
+    12.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    36.0
+   ],
+   "probabilidad_esperada": 0.256696,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    38.0,
+    23.700000762939453,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    134.0
+   ],
+   "probabilidad_esperada": 0.2526,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    50.0,
+    22.399999618530273,
+    0.0,
+    6.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    5.0
+   ],
+   "probabilidad_esperada": 0.239608,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    46.0,
+    28.100000381469727,
+    1.0,
+    9.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    49.0
+   ],
+   "probabilidad_esperada": 0.342732,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    52.0,
+    25.200000762939453,
+    1.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    50.0
+   ],
+   "probabilidad_esperada": 0.333697,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    50.0,
+    26.700000762939453,
+    1.0,
+    3.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    41.0
+   ],
+   "probabilidad_esperada": 0.35135,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    34.0,
+    23.100000381469727,
+    3.0,
+    6.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    236.0
+   ],
+   "probabilidad_esperada": 0.853189,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    42.0,
+    29.200000762939453,
+    0.0,
+    1.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    16.0
+   ],
+   "probabilidad_esperada": 0.754226,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    54.0,
+    20.0,
+    2.0,
+    6.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    279.0
+   ],
+   "probabilidad_esperada": 0.420969,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    29.0,
+    18.0,
+    1.0,
+    4.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    18.0
+   ],
+   "probabilidad_esperada": 0.323317,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    61.0,
+    19.0,
+    0.0,
+    2.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    1.0,
+    9.0
+   ],
+   "probabilidad_esperada": 0.733447,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    32.0,
+    19.100000381469727,
+    0.0,
+    3.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    21.0
+   ],
+   "probabilidad_esperada": 0.209367,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    70.0,
+    30.700000762939453,
+    1.0,
+    5.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    22.0
+   ],
+   "probabilidad_esperada": 0.834701,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    47.0,
+    27.399999618530273,
+    2.0,
+    10.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    150.0
+   ],
+   "probabilidad_esperada": 0.389672,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    36.0,
+    33.900001525878906,
+    0.0,
+    5.0,
+    0.0,
+    0.0,
+    0.0,
+    2.0,
+    0.0,
+    150.0
+   ],
+   "probabilidad_esperada": 0.816825,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    40.0,
+    21.399999618530273,
+    0.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    436.0
+   ],
+   "probabilidad_esperada": 0.37737,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    50.0,
+    32.900001525878906,
+    2.0,
+    1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    24.0
+   ],
+   "probabilidad_esperada": 0.319419,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    72.0,
+    30.600000381469727,
+    1.0,
+    1.0,
+    0.0,
+    2.0,
+    2.0,
+    0.0,
+    0.0,
+    188.0
+   ],
+   "probabilidad_esperada": 0.96792,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    41.0,
+    34.900001525878906,
+    2.0,
+    6.0,
+    0.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    16.0
+   ],
+   "probabilidad_esperada": 0.848806,
+   "etiqueta_esperada": 1
+  },
+  {
+   "vector": [
+    44.0,
+    21.200000762939453,
+    1.0,
+    7.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    54.0
+   ],
+   "probabilidad_esperada": 0.320073,
+   "etiqueta_esperada": 0
+  },
+  {
+   "vector": [
+    37.0,
+    29.600000381469727,
+    1.0,
+    2.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    10.0
+   ],
+   "probabilidad_esperada": 0.36202,
+   "etiqueta_esperada": 0
+  }
+ ]
+}
