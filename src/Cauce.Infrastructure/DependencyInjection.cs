@@ -159,10 +159,15 @@ public static class DependencyInjection
             {
                 "Rule" => serviceProvider.GetRequiredService<FodmapRuleRecommendationEngine>(),
                 "Onnx" => ActivatorUtilities.CreateInstance<OnnxRecommendationEngine>(serviceProvider),
+                RecommendationsOptions.XgboostEngineKind =>
+                    ActivatorUtilities.CreateInstance<XgboostRecommendationEngine>(serviceProvider),
                 _ => throw new InvalidOperationException(
-                    $"EngineKind inválido '{recommendationsOptions.EngineKind}'. Se esperaba 'Rule' u 'Onnx'.")
+                    $"EngineKind inválido '{recommendationsOptions.EngineKind}'. Se esperaba 'Rule', 'Onnx' o 'Xgboost'.")
             };
         });
+
+        // Con Xgboost, un modelo inválido o una versión activa distinta impiden el arranque.
+        services.AddHostedService<RecommendationEngineStartupVerifier>();
 
         // Orquestador LLM y respaldo.
         services.AddSingleton<RecommendationGuardrailsValidator>();
