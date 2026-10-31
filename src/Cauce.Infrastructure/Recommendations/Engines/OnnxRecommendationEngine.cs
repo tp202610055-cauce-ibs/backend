@@ -17,8 +17,9 @@ namespace Cauce.Infrastructure.Recommendations.Engines;
 /// configurada (<c>Recommendations:OnnxModelPath</c>) y, por cada alimento candidato, combina la
 /// tendencia de riesgo del paciente (inferida del modelo con 5 features de contexto) con el nivel FODMAP
 /// del alimento para producir un puntaje en [0, 1]. Si el archivo del modelo no existe, cae de forma
-/// silenciosa al motor de regla (<see cref="FodmapRuleRecommendationEngine"/>) sin bloquear nada. El
-/// modelo dummy es un placeholder swap-ready por el modelo real de Mirian Contreras (acta A23).
+/// silenciosa al motor de regla (<see cref="FodmapRuleRecommendationEngine"/>) sin bloquear nada. Usa un
+/// modelo ficticio de 5 variables, solo para demostración técnica; el modelo real corre en
+/// <see cref="XgboostRecommendationEngine"/>.
 /// </summary>
 public sealed class OnnxRecommendationEngine : IRecommendationEngine, IDisposable
 {
@@ -130,7 +131,7 @@ public sealed class OnnxRecommendationEngine : IRecommendationEngine, IDisposabl
 
     /// <summary>
     /// Combina la tendencia de riesgo del paciente con el nivel FODMAP del alimento para obtener el
-    /// puntaje del alimento. Semántica dummy pendiente de definición por Mirian (acta A23).
+    /// puntaje del alimento. Es una fórmula de demostración, sin validez clínica.
     /// </summary>
     /// <param name="patientRisk">Tendencia de riesgo del paciente en [0, 1].</param>
     /// <param name="fodmapLevel">Nivel FODMAP global del alimento.</param>

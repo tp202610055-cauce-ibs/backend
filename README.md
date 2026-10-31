@@ -10,7 +10,7 @@ Tres cosas principales, ordenadas por peso:
 
 **Gestiona los datos clínicos del paciente.** Perfil clínico, alergias, registro diario de comidas, registro de síntomas, evaluaciones IBS-SSS cada dos semanas. Todo persiste en PostgreSQL con auditoría completa por requerimiento de la Ley N° 29733 de Protección de Datos Personales.
 
-**Genera recomendaciones dietéticas con IA, supervisadas por humano.** Un modelo XGBoost entrenado sobre datos sintéticos clínicamente validados produce recomendaciones nutricionales. Antes de que el paciente las vea, un nutricionista las revisa y las aprueba, rechaza o ajusta. Es el flujo HITL (Human-In-The-Loop), no automatización ciega. El modelo corre como ONNX en el servidor, sin salir nunca al exterior. La narrativa final que lee el paciente se genera con un LLM local (Llama 3.1 8B) por las mismas razones de soberanía de datos.
+**Genera recomendaciones dietéticas, supervisadas por humano.** El motor por defecto es una regla determinística FODMAP (`Rule`). `Recommendations:EngineKind` permite elegir otros dos: `Onnx`, un modelo ficticio de 5 variables solo para demostración técnica, y `Xgboost`, el modelo real `xgboost-sii-v1.2.0` de 10 variables, entrenado con datos sintéticos como prueba de concepto y sin validez clínica. Antes de que el paciente vea una recomendación, un nutricionista la revisa y la aprueba, rechaza o ajusta. Es el flujo HITL (Human-In-The-Loop), no automatización ciega. Los modelos corren como ONNX en el servidor, sin salir nunca al exterior. La narrativa final que lee el paciente se genera con un LLM local (Llama 3.1 8B) por las mismas razones de soberanía de datos.
 
 **Sincroniza el trabajo offline del móvil.** La app del paciente debe funcionar sin red, porque la realidad de Lima Sur no garantiza conexión constante. Los registros se guardan localmente y se sincronizan cuando hay conexión, de forma idempotente. El backend valida y persiste sin duplicar.
 
@@ -22,9 +22,9 @@ Tres cosas principales, ordenadas por peso:
 - **PostgreSQL 16** como base de datos principal
 - **Keycloak 25** como servidor de identidad (OIDC + JWT)
 - **KeyDB** para caché y colas asíncronas (Streams)
-- **MinIO** para almacenamiento de objetos (PDFs de reportes, artefactos ONNX)
+- **MinIO** para almacenamiento de objetos (PDFs de reportes y exportaciones de datos)
 - **Ollama** corriendo Llama 3.1 8B Q4 para el orquestador LLM
-- **ONNX Runtime** para inferencia del modelo de recomendaciones
+- **ONNX Runtime** para los motores opcionales `Onnx` y `Xgboost`; el motor por defecto, `Rule`, no lo usa
 
 Todo lo de infraestructura corre en Docker. El backend en sí corre nativo en Windows durante development por simplicidad; se dockeriza en producción.
 
@@ -162,7 +162,7 @@ Mientras tanto, el sistema vive en local. Para la sustentación de la tesis se h
 
 ## Quién más toca este repo
 
-**Mirian Contreras Paquita** se encarga del entrenamiento del modelo XGBoost que alimenta el motor de recomendaciones. Su trabajo es en Python y vive en otro lugar; el resultado (el archivo `.onnx`) se sube a este sistema vía el CLI command de provisioning de modelos.
+**Mirian Contreras Paquita** se encarga del entrenamiento del modelo XGBoost. Su trabajo es en Python y vive en otro lugar; el resultado es un archivo `.onnx` que el motor `Xgboost` carga de la ruta en `Recommendations:XgboostModelPath`, tras verificar el SHA-256 de `Recommendations:XgboostModelSha256`. Adoptar otra versión del modelo exige cambiar código: el nombre de la versión y el mapeo de variables viven en C#.
 
 Cualquier cambio sobre `Cauce.Application/Recommendations/Inference/` o `Cauce.Infrastructure/Recommendations/Inference/` requiere coordinación con ella para mantener la tolerancia.
 

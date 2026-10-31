@@ -9,9 +9,8 @@ namespace Cauce.Infrastructure.Recommendations.Readers;
 
 /// <summary>
 /// Implementación de <see cref="IPatientProfileReader"/> que proyecta el perfil del paciente a
-/// la instantánea de contexto. Los campos de actividad física, tabaquismo y consumo de alcohol
-/// no tienen origen en el modelo actual y se completan con valores neutros por defecto (ver
-/// "Deuda técnica conocida" en CLAUDE.md); solo alimentan el vector del futuro modelo ONNX.
+/// la instantánea de contexto. Actividad física, tabaquismo y consumo de alcohol no tienen origen en
+/// <c>PatientProfile</c> y llevan valores neutros por defecto; el modelo real no los usa.
 /// </summary>
 public sealed class PatientProfileReader : IPatientProfileReader
 {
