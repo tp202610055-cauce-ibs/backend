@@ -69,7 +69,8 @@ public sealed class PatientClinicalHistoryReader : IPatientClinicalHistoryReader
                 food.FructoseLevel,
                 food.PolyolsLevel,
                 food.LactoseLevel,
-                (int)Math.Round(averageByFood[food.Id], MidpointRounding.AwayFromZero)))
+                (int)Math.Round(averageByFood[food.Id], MidpointRounding.AwayFromZero),
+                food.FodmapTags))
             .ToList();
     }
 }
