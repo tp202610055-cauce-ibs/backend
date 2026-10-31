@@ -34,4 +34,10 @@
     <ProjectReference Include="..\..\src\Cauce.Api\Cauce.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\Cauce.Infrastructure.Tests\TestData\xgboost-sii-v1.2.0.onnx"
+          Link="TestData\xgboost-sii-v1.2.0.onnx"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
