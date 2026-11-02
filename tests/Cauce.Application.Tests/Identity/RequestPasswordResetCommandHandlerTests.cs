@@ -48,6 +48,21 @@ public sealed class RequestPasswordResetCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_PatientWithUnverifiedEmail_StillSendsTheResetLink()
+    {
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
+        user.EmailVerified.Should().BeFalse();
+        _userRepository.FindByEmailAsync("p@cauce.local", Arg.Any<CancellationToken>()).Returns(user);
+        _tokenGenerator.GeneratePair().Returns(("plain", "hash"));
+        _clientUrlProvider.BuildPasswordResetLink("plain", OidcClients.Mobile).Returns("cauce://auth/password-reset?token=plain");
+
+        await CreateHandler().Handle(new RequestPasswordResetCommand("p@cauce.local", null), CancellationToken.None);
+
+        await _emailSender.Received(1).SendPasswordResetLinkAsync(
+            "p@cauce.local", "Paciente", "cauce://auth/password-reset?token=plain", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task Handle_NonExistentEmail_DoesNothing()
     {
         _userRepository.FindByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns((User?)null);
@@ -57,6 +72,49 @@ public sealed class RequestPasswordResetCommandHandlerTests
         await _tokenRepository.DidNotReceive().AddAsync(Arg.Any<PasswordResetToken>(), Arg.Any<CancellationToken>());
         await _emailSender.DidNotReceive().SendPasswordResetLinkAsync(
             Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_ActiveAccount_CreatesTokenAndSendsEmail()
+    {
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
+        user.VerifyEmail();
+        _userRepository.FindByEmailAsync("p@cauce.local", Arg.Any<CancellationToken>()).Returns(user);
+        _tokenGenerator.GeneratePair().Returns(("plain", "hash"));
+
+        await CreateHandler().Handle(new RequestPasswordResetCommand("p@cauce.local", null), CancellationToken.None);
+
+        await _tokenRepository.Received(1).AddAsync(Arg.Any<PasswordResetToken>(), Arg.Any<CancellationToken>());
+        await _emailSender.Received(1).SendPasswordResetLinkAsync(
+            "p@cauce.local", "Paciente", Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_SuspendedAccount_DoesNothing()
+    {
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
+        user.VerifyEmail();
+        user.Suspend();
+        _userRepository.FindByEmailAsync("p@cauce.local", Arg.Any<CancellationToken>()).Returns(user);
+        _tokenGenerator.GeneratePair().Returns(("plain", "hash"));
+
+        await CreateHandler().Handle(new RequestPasswordResetCommand("p@cauce.local", null), CancellationToken.None);
+
+        await AssertNothingIssuedAsync();
+    }
+
+    [Fact]
+    public async Task Handle_InactiveAccount_DoesNothing()
+    {
+        var user = User.CreatePatient(Guid.NewGuid(), "kc-1", "p@cauce.local", "Paciente", 1, PatientCode.FromCorrelative(1));
+        user.VerifyEmail();
+        user.Anonymize(1);
+        _userRepository.FindByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(user);
+        _tokenGenerator.GeneratePair().Returns(("plain", "hash"));
+
+        await CreateHandler().Handle(new RequestPasswordResetCommand("p@cauce.local", null), CancellationToken.None);
+
+        await AssertNothingIssuedAsync();
     }
 
     [Fact]
@@ -85,5 +143,13 @@ public sealed class RequestPasswordResetCommandHandlerTests
 
         _clientUrlProvider.Received(1).BuildPasswordResetLink("plain", OidcClients.WebPortal);
         _clientUrlProvider.DidNotReceive().BuildPasswordResetLink("plain", OidcClients.Mobile);
+    }
+
+    private async Task AssertNothingIssuedAsync()
+    {
+        await _tokenRepository.DidNotReceive().AddAsync(Arg.Any<PasswordResetToken>(), Arg.Any<CancellationToken>());
+        await _unitOfWork.DidNotReceive().SaveChangesAsync(Arg.Any<CancellationToken>());
+        await _emailSender.DidNotReceive().SendPasswordResetLinkAsync(
+            Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

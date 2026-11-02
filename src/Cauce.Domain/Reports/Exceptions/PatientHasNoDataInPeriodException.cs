@@ -13,7 +13,7 @@ public sealed class PatientHasNoDataInPeriodException : DomainException
     /// </summary>
     /// <param name="patientId">Identificador del paciente.</param>
     public PatientHasNoDataInPeriodException(Guid patientId)
-        : base($"El paciente '{patientId}' no tiene datos clínicos en el período solicitado.")
+        : base("No hay datos suficientes en el período solicitado. Prueba con un rango de fechas más amplio.")
     {
         PatientId = patientId;
     }

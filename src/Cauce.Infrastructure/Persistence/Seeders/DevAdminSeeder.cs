@@ -65,7 +65,7 @@ public sealed class DevAdminSeeder
             .ConfigureAwait(false);
 
         var keycloakId = await _keycloakAdminClient
-            .CreateUserAsync(email, options.FullName, UserRoles.Nutritionist, requireEmailVerification: false, ct)
+            .CreateUserAsync(email, options.FullName, UserRoles.Nutritionist, NewUserEmailState.Verified, ct)
             .ConfigureAwait(false);
 
         await _keycloakAdminClient

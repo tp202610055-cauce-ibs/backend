@@ -74,6 +74,15 @@ public abstract class QaCommandTestBase : IntegrationTestBase, IAsyncLifetime
     }
 
     /// <summary>
+    /// Siembra el glosario del catálogo, que los casos de glosario comprueban.
+    /// </summary>
+    protected async Task SeedGlossaryAsync()
+    {
+        using var scope = Factory.Services.CreateScope();
+        await scope.ServiceProvider.GetRequiredService<GlossaryTermsSeeder>().SeedAsync();
+    }
+
+    /// <summary>
     /// Ejecuta un comando con la fábrica de la prueba.
     /// </summary>
     protected Task<int> RunAsync(params string[] args) => CommandRunner.RunAsync(Factory.Services, args);

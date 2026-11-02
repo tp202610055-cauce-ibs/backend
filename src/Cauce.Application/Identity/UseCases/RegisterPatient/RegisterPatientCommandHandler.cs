@@ -81,8 +81,9 @@ public sealed class RegisterPatientCommandHandler : IRequestHandler<RegisterPati
 
         var patientRoleId = await _userRepository.GetRoleIdAsync(UserRoles.Patient, cancellationToken).ConfigureAwait(false);
 
+        // Sin acción pendiente: el paciente inicia sesión enseguida y el correo de verificación queda como recordatorio.
         var keycloakId = await _keycloakAdminClient
-            .CreateUserAsync(email, request.FullName, UserRoles.Patient, requireEmailVerification: true, cancellationToken)
+            .CreateUserAsync(email, request.FullName, UserRoles.Patient, NewUserEmailState.Unverified, cancellationToken)
             .ConfigureAwait(false);
 
         User user;

@@ -23,7 +23,11 @@ public sealed record ModifyRecommendationCommand(
     string? Title,
     string? Description,
     IReadOnlyList<string>? Steps,
-    Guid ClientGuid) : IRequest<Unit>, IIdempotentCommand;
+    Guid ClientGuid) : IRequest<Unit>, IIdempotentCommand, IRecommendationDecisionCommand
+{
+    /// <inheritdoc />
+    public string AttemptedAction => "modify";
+}
 
 /// <summary>
 /// Ítem propuesto en una modificación de recomendación.

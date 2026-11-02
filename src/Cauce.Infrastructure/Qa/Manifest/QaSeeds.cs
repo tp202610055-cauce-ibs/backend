@@ -141,12 +141,28 @@ public sealed record QaRecommendationSeed(
     string? ApprovedInMonth,
     int? ValidDaysLeft,
     QaSupportingData? SupportingData,
-    bool WithRecentHistory) : QaSeed
+    bool WithRecentHistory,
+    IReadOnlyList<QaSubstitute> Substitutes) : QaSeed
 {
     /// <summary>
     /// Indica si la recomendación es manual (creada por el nutricionista) y no del motor.
     /// </summary>
     public bool IsManual => Status == QaRecommendationStatus.CreatedByNutritionist;
+
+    /// <summary>
+    /// Pasos fijos de una recomendación que solo indica cuántos lleva (<c>stepsCount</c>), en este orden.
+    /// </summary>
+    public static IReadOnlyList<string> DefaultSteps { get; } =
+    [
+        "Revisa las preparaciones de la semana y marca las que llevan los alimentos que esta recomendación pide reducir.",
+        "Sirve una porción más pequeña de esos alimentos o cámbialos por una opción baja en FODMAP.",
+        "Registra en la app tus comidas y tus síntomas durante las próximas dos semanas."
+    ];
+
+    /// <summary>
+    /// Pasos que se siembran: los del caso o, si solo trae <c>stepsCount</c>, esa cantidad de pasos fijos.
+    /// </summary>
+    public IReadOnlyList<string> SeededSteps => Steps.Count > 0 ? Steps : DefaultSteps.Take(StepsCount ?? 0).ToList();
 
     /// <inheritdoc />
     public override IEnumerable<string> ReferencedEmails() => [Patient];
@@ -156,6 +172,16 @@ public sealed record QaRecommendationSeed(
 /// Historial que respalda una recomendación: registros de dolor en una ventana de días.
 /// </summary>
 public sealed record QaSupportingData(int PainRecords, int WindowDays);
+
+/// <summary>
+/// Sustituto que propone una recomendación del motor: un alimento del catálogo en lugar de otro.
+/// </summary>
+public sealed record QaSubstitute(string Food, string By);
+
+/// <summary>
+/// Término del glosario que el caso necesita presente, con su categoría, o ausente.
+/// </summary>
+public sealed record QaGlossarySeed(string Term, bool Present, string? Category) : QaSeed;
 
 /// <summary>
 /// Estado de un código de invitación sembrado.

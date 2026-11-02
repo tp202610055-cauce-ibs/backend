@@ -118,7 +118,7 @@ public sealed class MinioPresignHostApiTests
     public async Task GenerateMyReport_AlsoSignsAgainstThePublicEndpoint()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedPatientProfileAsync(patient.Id);
         await SeedMealAsync(patient.Id);
 

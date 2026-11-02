@@ -419,6 +419,45 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                     b.ToTable("glossary_terms", (string)null);
                 });
 
+            modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.GlossaryTermRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("glossary_term_request_id");
+
+                    b.Property<Guid>("NutritionistId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("nutritionist_id");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Term")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("term");
+
+                    b.HasKey("Id")
+                        .HasName("pk_glossary_term_requests");
+
+                    b.HasIndex("NutritionistId")
+                        .HasDatabaseName("ix_glossary_term_requests_nutritionist");
+
+                    b.HasIndex("Status", "RequestedAt")
+                        .HasDatabaseName("ix_glossary_term_requests_status_requested");
+
+                    b.ToTable("glossary_term_requests", (string)null);
+                });
+
             modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.IbsSssAssessment", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1120,6 +1159,51 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                     b.ToTable("notifications", (string)null);
                 });
 
+            modelBuilder.Entity("Cauce.Domain.Notifications.NutritionistAlert", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("nutritionist_alert_id");
+
+                    b.Property<Guid>("NutritionistId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("nutritionist_id");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("occurred_at");
+
+                    b.Property<Guid>("PatientId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("patient_id");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("alert_type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_nutritionist_alerts");
+
+                    b.HasIndex("PatientId")
+                        .HasDatabaseName("ix_nutritionist_alerts_patient");
+
+                    b.HasIndex("NutritionistId", "OccurredAt")
+                        .HasDatabaseName("ix_nutritionist_alerts_nutritionist_occurred");
+
+                    b.HasIndex("NutritionistId", "PatientId", "Type", "OccurredAt")
+                        .IsUnique()
+                        .HasDatabaseName("ux_nutritionist_alerts_event");
+
+                    b.ToTable("nutritionist_alerts", (string)null);
+                });
+
             modelBuilder.Entity("Cauce.Domain.Outbox.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1801,6 +1885,16 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .HasConstraintName("fk_custom_food_ingredients_food_items_food_id");
                 });
 
+            modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.GlossaryTermRequest", b =>
+                {
+                    b.HasOne("Cauce.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("NutritionistId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_glossary_term_requests_users_nutritionist_id");
+                });
+
             modelBuilder.Entity("Cauce.Domain.ClinicalRegistry.IbsSssAssessment", b =>
                 {
                     b.HasOne("Cauce.Domain.Identity.User", null)
@@ -1923,6 +2017,23 @@ namespace Cauce.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_notifications_users_user_id");
+                });
+
+            modelBuilder.Entity("Cauce.Domain.Notifications.NutritionistAlert", b =>
+                {
+                    b.HasOne("Cauce.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("NutritionistId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_nutritionist_alerts_users_nutritionist_id");
+
+                    b.HasOne("Cauce.Domain.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("PatientId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_nutritionist_alerts_users_patient_id");
                 });
 
             modelBuilder.Entity("Cauce.Domain.Patients.NutritionistPatient", b =>

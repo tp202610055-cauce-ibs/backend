@@ -3,9 +3,12 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Cauce.Api.IntegrationTests.Identity.Support;
+using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Identity.Enums;
 using Cauce.Infrastructure.Persistence;
 using Cauce.Infrastructure.Persistence.Seeders;
 using FluentAssertions;
@@ -81,6 +84,29 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
         _factory.KeycloakClient.VerifyEmailsSent.Should().NotBeEmpty();
         var hasAudit = await db.AuditLogs.AsNoTracking().AnyAsync(a => a.ActionType == AuditActionType.Register);
         hasAudit.Should().BeTrue();
+    }
+
+    [SkippableFact]
+    public async Task Register_ThenLoginWithTheSameCredentials_EntersUnverifiedAndPending()
+    {
+        SkipIfNoDocker();
+        var client = _factory.CreateClient();
+        var email = UniqueEmail();
+        _factory.TokenClient.ValidPassword = "Password1";
+
+        (await client.PostAsJsonAsync("/api/v1/auth/register", RegisterBody(email))).StatusCode.Should().Be(HttpStatusCode.Created);
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new { email, password = "Password1", clientId = "cauce-mobile" });
+
+        login.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var document = JsonDocument.Parse(await login.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("user").GetProperty("emailVerified").GetBoolean().Should().BeFalse();
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        var user = await db.Users.AsNoTracking().SingleAsync(u => u.Email == email);
+        user.Status.Should().Be(UserStatus.PendingActivation);
+        _factory.KeycloakClient.CreatedEmailStates[user.KeycloakId].Should().Be(NewUserEmailState.Unverified);
+        _factory.KeycloakClient.VerifyEmailsSent.Should().Contain(user.KeycloakId);
     }
 
     [SkippableFact]
@@ -235,6 +261,48 @@ public sealed class IdentityApiTests : IClassFixture<PostgresFixture>, IAsyncLif
             "/api/v1/auth/password-reset/confirm", new { token = plain, newPassword = "NewPass1" });
 
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [SkippableFact]
+    public async Task ValidatePasswordReset_WithValidToken_Returns204AndKeepsTokenUsable()
+    {
+        SkipIfNoDocker();
+        var (userId, _) = await SeedPatientAsync(UniqueEmail());
+        const string plain = "valid-plain-token";
+        await SeedResetTokenAsync(userId, plain, expired: false, used: false);
+        var client = _factory.CreateClient();
+
+        var first = await client.PostAsJsonAsync("/api/v1/auth/password-reset/validate", new { token = plain });
+        var second = await client.PostAsJsonAsync("/api/v1/auth/password-reset/validate", new { token = plain });
+
+        first.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        second.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<CauceDbContext>();
+        (await db.PasswordResetTokens.AsNoTracking().AnyAsync(t => t.UserId == userId && t.IsUsed)).Should().BeFalse();
+    }
+
+    [SkippableTheory]
+    [InlineData("unknown")]
+    [InlineData("expired")]
+    [InlineData("used")]
+    public async Task ValidatePasswordReset_WithUnusableToken_Returns400WithSingleErrorCode(string kind)
+    {
+        SkipIfNoDocker();
+        var (userId, _) = await SeedPatientAsync(UniqueEmail());
+        var plain = $"{kind}-validate-token-{Guid.NewGuid():N}";
+        if (kind != "unknown")
+        {
+            await SeedResetTokenAsync(userId, plain, expired: kind == "expired", used: kind == "used");
+        }
+
+        var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/password-reset/validate", new { token = plain });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        using var document = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("errorCode").GetString().Should().Be("invalid_password_reset_token");
     }
 
     // Los antiguos endpoints /auth/sessions (RegisterLoginEvent/RegisterLogoutEvent) se eliminaron en

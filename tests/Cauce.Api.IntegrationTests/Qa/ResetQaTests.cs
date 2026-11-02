@@ -1,6 +1,7 @@
 using Cauce.Api.Commands;
 using Cauce.Api.IntegrationTests.Identity.Support;
 using Cauce.Api.IntegrationTests.Qa.Support;
+using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Enums;
 using FluentAssertions;
@@ -91,6 +92,28 @@ public sealed class ResetQaTests
         patients.Should().Contain(after.Id.ToString()).And.NotContain(before.Id.ToString());
         pending.Should().Contain(after.Id.ToString()).And.NotContain(before.Id.ToString());
         (await UserAsync("nutricionista.demo@ejemplo.com")).Id.Should().Be(nutritionist.Id);
+    }
+
+    [SkippableFact]
+    public async Task ResetQa_PatientWithAlerts_RemovesThemAndCreatesNoNewOnes()
+    {
+        SkipIfUnavailable();
+        var before = await UserAsync("paciente.entrega@ejemplo.com");
+        var nutritionist = await UserAsync("nutricionista.demo@ejemplo.com");
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            (await db.NutritionistAlerts.CountAsync()).Should().Be(0, "seed-qa no genera avisos");
+            db.NutritionistAlerts.Add(Domain.Notifications.NutritionistAlert.Record(
+                nutritionist.Id, before.Id, Domain.Notifications.Enums.NutritionistAlertType.PatientLinked, DateTime.UtcNow));
+            await db.SaveChangesAsync();
+        }
+
+        (await RunAsync("reset-qa", "CP036")).Should().Be(CommandRunner.Success);
+
+        var (checkScope, checkDb) = CreateDbScope();
+        using var _ = checkScope;
+        (await checkDb.NutritionistAlerts.CountAsync()).Should().Be(0);
     }
 
     [SkippableFact]
@@ -192,7 +215,7 @@ public sealed class ResetQaTests
         var (scope, db) = CreateDbScope();
         using var _ = scope;
         var roleId = await db.UserRoles.Where(role => role.RoleName == UserRoles.Patient).Select(role => role.RoleId).FirstAsync();
-        var keycloakId = await Factory.KeycloakClient.CreateUserAsync(email, "Registro de prueba", UserRoles.Patient, true);
+        var keycloakId = await Factory.KeycloakClient.CreateUserAsync(email, "Registro de prueba", UserRoles.Patient, NewUserEmailState.Unverified);
         var user = User.CreatePatient(Guid.NewGuid(), keycloakId, email, "Registro de prueba", roleId, PatientCode.FromCorrelative(900_101));
         db.Users.Add(user);
         await db.SaveChangesAsync();

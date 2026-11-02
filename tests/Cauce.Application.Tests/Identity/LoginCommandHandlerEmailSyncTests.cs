@@ -1,10 +1,12 @@
 using Cauce.Application.Common.Identity;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Identity.Services;
 using Cauce.Application.Identity.UseCases.Login;
 using Cauce.Domain.Identity;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Cauce.Application.Tests.Identity;
@@ -32,7 +34,9 @@ public sealed class LoginCommandHandlerEmailSyncTests
     private readonly ILogger<LoginCommandHandler> _logger = Substitute.For<ILogger<LoginCommandHandler>>();
 
     private LoginCommandHandler CreateHandler() =>
-        new(_tokenClient, _adminClient, _userRepository, _activationService, _attemptContext, _unitOfWork, _logger);
+        new(
+            _tokenClient, _adminClient, _userRepository, _activationService,
+            new EmailVerificationSync(_adminClient, NullLogger<EmailVerificationSync>.Instance), _attemptContext, _unitOfWork, _logger);
 
     private static LoginCommand Command() => new(Email, Password, ClientId);
 
@@ -107,6 +111,21 @@ public sealed class LoginCommandHandlerEmailSyncTests
 
         user.EmailVerified.Should().BeFalse();
         result.User.EmailVerified.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Handle_UnverifiedPatient_ReturnsTokensAndStaysPendingActivation()
+    {
+        GivenKeycloakAuthenticates();
+        var user = GivenLocalUser(emailVerified: false);
+        _adminClient.GetUserEmailVerifiedAsync(KeycloakId, Arg.Any<CancellationToken>()).Returns(false);
+
+        var result = await CreateHandler().Handle(Command(), CancellationToken.None);
+
+        result.AccessToken.Should().Be("access");
+        result.User.EmailVerified.Should().BeFalse();
+        user.Status.Should().Be(Cauce.Domain.Identity.Enums.UserStatus.PendingActivation);
+        _attemptContext.FailureCause.Should().BeNull();
     }
 
     [Fact]

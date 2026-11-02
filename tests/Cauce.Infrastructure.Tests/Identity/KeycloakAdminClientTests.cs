@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Cauce.Application.Common.Exceptions;
 using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Infrastructure.Identity;
@@ -245,10 +246,35 @@ public sealed class KeycloakAdminClientTests
             : new HttpResponseMessage(HttpStatusCode.NoContent)));
         var client = CreateClient(handler);
 
-        var keycloakId = await client.CreateUserAsync("paciente@cauce.local", "Ana Pérez", "patient", requireEmailVerification: true);
+        var keycloakId = await client.CreateUserAsync("paciente@cauce.local", "Ana Pérez", "patient", NewUserEmailState.Unverified);
 
         keycloakId.Should().Be(NewUserId);
         handler.Requests.Should().NotContain(request => request.Method == HttpMethod.Delete);
+    }
+
+    [Theory]
+    [InlineData(NewUserEmailState.Verified, true)]
+    [InlineData(NewUserEmailState.Unverified, false)]
+    public async Task CreateUserAsync_EitherEmailState_SendsThatStateWithoutRequiredActions(NewUserEmailState state, bool expectedVerified)
+    {
+        string? body = null;
+        var handler = new ScriptedHandler(async (request, _) =>
+        {
+            if (IsCreateUser(request))
+            {
+                body = await request.Content!.ReadAsStringAsync();
+                return Created(NewUserId);
+            }
+
+            return IsRoleLookup(request) ? RoleResponse() : new HttpResponseMessage(HttpStatusCode.NoContent);
+        });
+        var client = CreateClient(handler);
+
+        await client.CreateUserAsync("paciente@cauce.local", "Ana Pérez", "patient", state);
+
+        using var payload = JsonDocument.Parse(body!);
+        payload.RootElement.GetProperty("emailVerified").GetBoolean().Should().Be(expectedVerified);
+        payload.RootElement.GetProperty("requiredActions").GetArrayLength().Should().Be(0);
     }
 
     [Fact]
@@ -262,7 +288,7 @@ public sealed class KeycloakAdminClientTests
             : new HttpResponseMessage(HttpStatusCode.NoContent)));
         var client = CreateClient(handler);
 
-        var act = async () => await client.CreateUserAsync("paciente@cauce.local", "Ana Pérez", "patient", requireEmailVerification: true);
+        var act = async () => await client.CreateUserAsync("paciente@cauce.local", "Ana Pérez", "patient", NewUserEmailState.Unverified);
 
         await act.Should().ThrowAsync<KeycloakIntegrationException>();
         handler.Requests.Should().ContainSingle(request => request.Method == HttpMethod.Delete)
@@ -292,7 +318,7 @@ public sealed class KeycloakAdminClientTests
         var client = CreateClient(handler);
 
         var act = async () => await client.CreateUserAsync(
-            "paciente@cauce.local", "Ana Pérez", "patient", requireEmailVerification: true, caller.Token);
+            "paciente@cauce.local", "Ana Pérez", "patient", NewUserEmailState.Unverified, caller.Token);
 
         await act.Should().ThrowAsync<OperationCanceledException>("la cancelación del cliente no se disfraza de 502");
         var delete = handler.Requests.Should().ContainSingle(request => request.Method == HttpMethod.Delete).Subject;

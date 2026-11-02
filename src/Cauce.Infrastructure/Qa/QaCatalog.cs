@@ -93,6 +93,7 @@ public sealed class QaCatalog
                     break;
                 case QaRecommendationSeed { IsManual: false } recommendation:
                     names.AddRange(EngineFoods(recommendation).Select(item => item.Food));
+                    names.AddRange(recommendation.Substitutes.SelectMany(substitute => new[] { substitute.Food, substitute.By }));
                     break;
                 case QaActivitySeed:
                     names.Add(DefaultActivityFood);

@@ -41,7 +41,7 @@ public sealed class CreateNutritionistCommandHandlerTests
         _userRepository.ExistsByEmailAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         _userRepository.GetRoleIdAsync(UserRoles.Nutritionist, Arg.Any<CancellationToken>()).Returns(NutritionistRoleId);
         _keycloakAdminClient
-            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Nutritionist, false, Arg.Any<CancellationToken>())
+            .CreateUserAsync(Arg.Any<string>(), Arg.Any<string>(), UserRoles.Nutritionist, NewUserEmailState.Verified, Arg.Any<CancellationToken>())
             .Returns(KeycloakId);
     }
 

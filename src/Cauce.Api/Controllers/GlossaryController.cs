@@ -1,6 +1,8 @@
 using Cauce.Api.Configuration;
+using Cauce.Api.Contracts.ClinicalRegistry;
 using Cauce.Application.ClinicalRegistry.Dtos;
 using Cauce.Application.ClinicalRegistry.UseCases.GetGlossary;
+using Cauce.Application.ClinicalRegistry.UseCases.RequestGlossaryTerm;
 using Cauce.Application.ClinicalRegistry.UseCases.SearchGlossary;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -59,5 +61,26 @@ public sealed class GlossaryController : BaseApiController
     {
         var result = await _mediator.Send(new SearchGlossaryQuery(q), ct);
         return Ok(result);
+    }
+
+    /// <summary>
+    /// Pide que se agregue un término al glosario. Si el mismo nutricionista ya lo pidió y sigue pendiente, devuelve esa solicitud con 200 sin duplicarla.
+    /// </summary>
+    /// <param name="request">Término pedido.</param>
+    /// <param name="ct">Token de cancelación.</param>
+    /// <returns>La solicitud pendiente: 201 si es nueva y 200 si ya existía.</returns>
+    [HttpPost("term-requests")]
+    [Authorize(Policy = "Nutritionist")]
+    [ProducesResponseType(typeof(GlossaryTermRequestResult), StatusCodes.Status201Created)]
+    [ProducesResponseType(typeof(GlossaryTermRequestResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RequestTerm([FromBody] RequestGlossaryTermRequest request, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RequestGlossaryTermCommand(request.Term), ct);
+        return result.Created
+            ? StatusCode(StatusCodes.Status201Created, result.Request)
+            : Ok(result.Request);
     }
 }

@@ -1,6 +1,7 @@
 using Cauce.Application.Common.Interfaces.Reports;
 using Cauce.Application.Reports.Contracts;
 using Cauce.Domain.Patients.Exceptions;
+using Cauce.Domain.Recommendations;
 using Cauce.Domain.Recommendations.Enums;
 using Cauce.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,12 +16,7 @@ namespace Cauce.Infrastructure.Reports;
 /// </summary>
 public sealed class ClinicalReportDataReader : IClinicalReportDataReader
 {
-    private static readonly RecommendationStatus[] ApprovedStatuses =
-    [
-        RecommendationStatus.Approved,
-        RecommendationStatus.Delivered,
-        RecommendationStatus.FeedbackReceived
-    ];
+    private static readonly RecommendationStatus[] ApprovedStatuses = [.. Recommendation.PatientVisibleStatuses];
 
     private readonly CauceDbContext _context;
     private readonly ReportOptions _options;
@@ -147,6 +143,18 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
 
         var meals = await ResolveMealHistoryAsync(patientId, start, end, ct).ConfigureAwait(false);
 
+        var mealMoments = await _context.Meals
+            .AsNoTracking()
+            .Where(meal => meal.PatientId == patientId && meal.ConsumedAt >= start && meal.ConsumedAt <= end)
+            .Select(meal => meal.ConsumedAt)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        var daysWithRecords = mealMoments
+            .Concat(symptomRows.Select(row => row.OccurredAt))
+            .Select(ReportClock.LimaDate)
+            .Distinct()
+            .Count();
+
         var assessmentRows = await _context.IbsSssAssessments
             .AsNoTracking()
             .Where(assessment => assessment.PatientId == patientId && assessment.CompletedAt >= start && assessment.CompletedAt <= end)
@@ -155,7 +163,7 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
             .ToListAsync(ct)
             .ConfigureAwait(false);
         var assessments = assessmentRows
-            .Select(row => new ReportAssessment(DateOnly.FromDateTime(row.CompletedAt), row.TotalScore, row.SeverityCategory.ToString()))
+            .Select(row => new ReportAssessment(ReportClock.LimaDate(row.CompletedAt), row.TotalScore, row.SeverityCategory.ToString()))
             .ToList();
 
         var recommendationRows = await _context.Recommendations
@@ -169,12 +177,7 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
             .OrderBy(recommendation => recommendation.ReviewedAt)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        var recommendations = recommendationRows
-            .Select(recommendation => new ReportRecommendation(
-                recommendation.ReviewedAt!.Value,
-                recommendation.Items.Count,
-                recommendation.AiExplanation))
-            .ToList();
+        var recommendations = await ToReportRecommendationsAsync(recommendationRows, ct).ConfigureAwait(false);
 
         var feedbackRows = await (from fb in _context.RecommendationFeedback.AsNoTracking()
                                   join recommendation in _context.Recommendations.AsNoTracking()
@@ -210,7 +213,45 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
             symptomEntries,
             assessments,
             recommendations,
-            feedback);
+            feedback,
+            daysWithRecords,
+            periodEnd.DayNumber - periodStart.DayNumber + 1);
+    }
+
+    /// <summary>
+    /// Arma las recomendaciones del reporte con el nombre de cada alimento y de su sustituto.
+    /// </summary>
+    private async Task<IReadOnlyList<ReportRecommendation>> ToReportRecommendationsAsync(
+        IReadOnlyList<Recommendation> recommendations,
+        CancellationToken ct)
+    {
+        var foodIds = recommendations
+            .SelectMany(recommendation => recommendation.Items)
+            .SelectMany(item => item.SubstituteFoodId is { } substitute ? new[] { item.FoodId, substitute } : [item.FoodId])
+            .Distinct()
+            .ToList();
+        var names = await _context.FoodItems
+            .AsNoTracking()
+            .Where(food => foodIds.Contains(food.Id))
+            .Select(food => new { food.Id, food.Name })
+            .ToDictionaryAsync(food => food.Id, food => food.Name, ct)
+            .ConfigureAwait(false);
+
+        return recommendations
+            .Select(recommendation => new ReportRecommendation(
+                recommendation.ReviewedAt!.Value,
+                recommendation.Source == RecommendationSource.Manual,
+                recommendation.Title,
+                recommendation.Description,
+                recommendation.Steps ?? [],
+                recommendation.Items
+                    .Select(item => new ReportRecommendationFood(
+                        item.ActionType.ToString(),
+                        names.GetValueOrDefault(item.FoodId, "Alimento no disponible"),
+                        item.SubstituteFoodId is { } substitute ? names.GetValueOrDefault(substitute, "Alimento no disponible") : null))
+                    .ToList(),
+                recommendation.NutritionistNote))
+            .ToList();
     }
 
     /// <summary>
@@ -303,10 +344,13 @@ public sealed class ClinicalReportDataReader : IClinicalReportDataReader
             .ToList();
     }
 
+    /// <summary>
+    /// Rango UTC que cubre los días de Lima del período, con ambos extremos incluidos.
+    /// </summary>
     private static (DateTime Start, DateTime End) ToUtcRange(DateOnly periodStart, DateOnly periodEnd)
     {
-        var start = DateTime.SpecifyKind(periodStart.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc);
-        var end = DateTime.SpecifyKind(periodEnd.ToDateTime(TimeOnly.MaxValue), DateTimeKind.Utc);
+        var start = ReportClock.StartOfLimaDayUtc(periodStart);
+        var end = ReportClock.StartOfLimaDayUtc(periodEnd.AddDays(1)).AddTicks(-10);
         return (start, end);
     }
 

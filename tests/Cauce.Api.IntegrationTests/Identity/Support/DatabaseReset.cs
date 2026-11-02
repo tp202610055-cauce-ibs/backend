@@ -22,6 +22,8 @@ public static class DatabaseReset
     [
         "audit_logs",
         "notifications",
+        "nutritionist_alerts",
+        "glossary_term_requests",
         "outbox_messages",
         "clinical_reports_metadata",
         "recommendation_feedback",

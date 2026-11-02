@@ -4,6 +4,7 @@ using System.Text.Json;
 using Cauce.Api.IntegrationTests.Identity.Support;
 using Cauce.Domain.Auditing.Enums;
 using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
 
 namespace Cauce.Api.IntegrationTests.Identity;
 
@@ -51,6 +52,32 @@ public sealed class RefreshEndpointTests
         // El realm rota los refresh tokens: el emitido debe ser distinto del presentado.
         root.GetProperty("refreshToken").GetString().Should().NotBe(Factory.TokenClient.ValidRefreshToken);
         root.GetProperty("user").GetProperty("userId").GetGuid().Should().Be(patient.Id);
+    }
+
+    [SkippableFact]
+    public async Task Refresh_EmailVerifiedInKeycloakSinceLogin_ReturnsVerifiedAndActivates()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        Factory.TokenClient.Subject = patient.KeycloakId;
+        Factory.KeycloakClient.MarkEmailVerifiedInKeycloak(patient.KeycloakId);
+
+        var response = await Factory.CreateClient().PostAsJsonAsync(RefreshUrl, new
+        {
+            refreshToken = Factory.TokenClient.ValidRefreshToken,
+            clientId = "cauce-mobile"
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("user").GetProperty("emailVerified").GetBoolean().Should().BeTrue();
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            var user = await db.Users.AsNoTracking().SingleAsync(candidate => candidate.Id == patient.Id);
+            user.EmailVerified.Should().BeTrue();
+            user.Status.Should().Be(Cauce.Domain.Identity.Enums.UserStatus.Active);
+        }
     }
 
     [SkippableFact]

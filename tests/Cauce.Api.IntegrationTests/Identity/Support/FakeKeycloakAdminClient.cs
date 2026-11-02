@@ -98,11 +98,17 @@ public sealed class FakeKeycloakAdminClient : IKeycloakAdminClient
             EmailVerifiedByKeycloakId.TryGetValue(keycloakUserId, out var verified) && verified);
     }
 
+    /// <summary>
+    /// Estado del correo con el que se creó cada usuario, por identificador de Keycloak.
+    /// </summary>
+    public ConcurrentDictionary<string, NewUserEmailState> CreatedEmailStates { get; } = new();
+
     /// <inheritdoc />
-    public Task<string> CreateUserAsync(string email, string fullName, string roleName, bool requireEmailVerification, CancellationToken ct = default)
+    public Task<string> CreateUserAsync(string email, string fullName, string roleName, NewUserEmailState emailState, CancellationToken ct = default)
     {
         var id = Guid.NewGuid().ToString();
         _usersByEmail[email] = id;
+        CreatedEmailStates[id] = emailState;
         return Task.FromResult(id);
     }
 

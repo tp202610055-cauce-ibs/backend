@@ -117,7 +117,8 @@ public abstract class IntegrationTestBase : IAsyncLifetime
     /// <summary>
     /// Siembra un paciente y devuelve su identificador local y de Keycloak.
     /// </summary>
-    protected async Task<(Guid Id, string KeycloakId, string Email)> SeedPatientAsync()
+    /// <param name="emailVerified">Si el correo queda verificado, lo que también activa la cuenta.</param>
+    protected async Task<(Guid Id, string KeycloakId, string Email)> SeedPatientAsync(bool emailVerified = false)
     {
         var (scope, db) = CreateDbScope();
         using var _ = scope;
@@ -125,6 +126,11 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         var keycloakId = Guid.NewGuid().ToString();
         var email = $"patient-{Guid.NewGuid():N}@cauce.local";
         var user = User.CreatePatient(Guid.NewGuid(), keycloakId, email, "Paciente", roleId, TestPatientCodes.Next());
+        if (emailVerified)
+        {
+            user.VerifyEmail();
+        }
+
         db.Users.Add(user);
         await db.SaveChangesAsync();
         return (user.Id, keycloakId, email);

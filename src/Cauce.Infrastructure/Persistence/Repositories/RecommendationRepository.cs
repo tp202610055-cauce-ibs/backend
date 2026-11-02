@@ -105,6 +105,42 @@ public sealed class RecommendationRepository : IRecommendationRepository
     }
 
     /// <inheritdoc />
+    public async Task<PagedResult<Recommendation>> ListAllByPatientAsync(
+        Guid patientId,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        var query = _context.Set<Recommendation>()
+            .AsNoTracking()
+            .Include(x => x.Items)
+            .Where(x => x.PatientId == patientId);
+
+        var total = await query.CountAsync(ct).ConfigureAwait(false);
+        var items = await query
+            .OrderByDescending(x => x.GeneratedAt)
+            .ThenBy(x => x.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
+        return new PagedResult<Recommendation>(items, page, pageSize, total);
+    }
+
+    /// <inheritdoc />
+    public Task<bool> ExistsInReviewForPatientAsync(Guid patientId, DateTime now, CancellationToken ct = default)
+    {
+        // Mismo criterio de vencimiento que Recommendation.IsExpired: sin fecha nunca vence.
+        return _context.Set<Recommendation>()
+            .AsNoTracking()
+            .AnyAsync(x => x.PatientId == patientId
+                && x.IsActive
+                && x.Status == RecommendationStatus.PendingReview
+                && (x.ExpiresAt == null || x.ExpiresAt >= now), ct);
+    }
+
+    /// <inheritdoc />
     public async Task AddAsync(Recommendation recommendation, CancellationToken ct = default)
     {
         await _context.Set<Recommendation>().AddAsync(recommendation, ct).ConfigureAwait(false);

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
@@ -5,6 +6,7 @@ using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Common.Interfaces.Reports;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
+using Cauce.Domain.Identity.Exceptions;
 using Cauce.Domain.Reports.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -16,7 +18,7 @@ namespace Cauce.Application.Reports.UseCases.GenerateMyClinicalReport;
 /// Reutiliza la infraestructura de reportes
 /// (PDF cifrado + almacenamiento + URL prefirmada) del flujo del nutricionista, resuelve el
 /// nutricionista asignado (o ninguno) y envía la URL y la contraseña al propio paciente en dos
-/// correos separados. La contraseña nunca se persiste (DEC-B5-11, acta A10).
+/// correos separados. La contraseña nunca se persiste (DEC-B5-11, acta A10). Exige el correo verificado.
 /// </summary>
 public sealed class GenerateMyClinicalReportCommandHandler
     : IRequestHandler<GenerateMyClinicalReportCommand, GenerateMyClinicalReportResult>
@@ -69,6 +71,13 @@ public sealed class GenerateMyClinicalReportCommandHandler
         var now = DateTime.UtcNow;
         var patient = await ResolvePatientAsync(cancellationToken).ConfigureAwait(false);
 
+        // El enlace y la contraseña del PDF solo viajan a un correo verificado; sin los dos el reporte no sirve.
+        if (!patient.EmailVerified)
+        {
+            _logger.LogInformation("Self-service report refused for user {UserId}: email not verified.", patient.Id);
+            throw new EmailNotVerifiedException();
+        }
+
         // El período es elegible; si el paciente no manda ninguno se cae a la ventana por defecto.
         // El validador ya garantizó que vengan los dos extremos o ninguno.
         var periodEnd = request.PeriodEnd ?? DateOnly.FromDateTime(now);
@@ -95,6 +104,8 @@ public sealed class GenerateMyClinicalReportCommandHandler
         {
             report_id = report.ReportId,
             self_service = true,
+            period_start = periodStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            period_end = periodEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             range_days = periodEnd.DayNumber - periodStart.DayNumber
         });
         await _auditLogger.LogAsync(

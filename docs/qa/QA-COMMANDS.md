@@ -87,10 +87,15 @@ Qué comprueba:
 - **Cuentas:** que existan, con su estado en Keycloak y en el backend, sin bloqueo y sin acciones pendientes. Cada paciente, con el consentimiento vigente.
 - **Cuentas `mustNotExist`:** que no existan.
 - **Datos del caso:**
-  - vínculos activos;
+  - vínculos activos y, si el caso fija su antigüedad, que la conserven; con fecha fija, sin registros anteriores;
   - perfil y alergias;
+  - comidas por alimento y síntomas por tipo;
+  - historial de respaldo: los registros de dolor abdominal siguen dentro de su ventana;
+  - sustitutos con justificación;
+  - glosario: términos presentes con su categoría y términos ausentes;
   - recomendaciones contadas por estado, con la expiración que se evalúa al leer;
   - ninguna recomendación archivada, y las manuales con la vigencia vencida (CP075) pendientes de archivo;
+  - pasos de aplicación: cada recomendación del caso que los lleva tiene esos pasos, en el mismo orden (CP042, CP077 y CP086);
   - códigos de invitación;
   - cuestionarios pendientes.
 - **Edad del ancla de los casos con reloj:**
@@ -200,6 +205,7 @@ Lo que el manifiesto no trae toma valores fijos, así que dos siembras dan el mi
 | Revisor | El nutricionista vinculado al paciente o, sin vínculo, el primer nutricionista activo del manifiesto |
 | Vencimiento | Pendiente: ancla + 10 días. Aprobada y no entregada: ancla + 30 días, porque la expiración también se evalúa al leer |
 | Paciente abrió o respondió | `patientOpened` la deja entregada; `patientResponded` le agrega una respuesta |
+| Pasos de aplicación | Del motor y manuales. `steps` da los textos del caso; si solo trae `stepsCount`, se usan esa cantidad de pasos fijos (máximo 3). Cada paso tiene texto y 500 caracteres como máximo |
 | Notas sin texto en el caso | Valores fijos para la nota de aprobación, el motivo de rechazo y la descripción y nota de una manual |
 | `supportingData` y `withRecentHistory` | Comidas del primer alimento a reducir, cada una seguida de un dolor abdominal a las 2 horas |
 
@@ -215,5 +221,4 @@ Lo que el manifiesto no trae toma valores fijos, así que dos siembras dan el mi
 
 - El alta de la cuenta en el backend (`users.created_at`) siempre es la del día de la siembra. El dominio no permite fijarla.
 - `validDaysLeft` en una recomendación del motor es informativo: solo las manuales llevan fecha de vigencia.
-- Los pasos (`steps`, `stepsCount`) solo se guardan en las manuales.
 - Cada rearme deja en la base la cuenta retirada y sus datos, inactivos y sin vínculos.

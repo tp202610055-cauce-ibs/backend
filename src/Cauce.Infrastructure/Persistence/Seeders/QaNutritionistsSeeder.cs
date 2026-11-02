@@ -119,7 +119,7 @@ public sealed class QaNutritionistsSeeder
         var existing = await _keycloakAdminClient.FindByEmailAsync(normalizedEmail, ct).ConfigureAwait(false);
         return existing?.Id
             ?? await _keycloakAdminClient
-                .CreateUserAsync(normalizedEmail, fullName, UserRoles.Nutritionist, requireEmailVerification: false, ct)
+                .CreateUserAsync(normalizedEmail, fullName, UserRoles.Nutritionist, NewUserEmailState.Verified, ct)
                 .ConfigureAwait(false);
     }
 }

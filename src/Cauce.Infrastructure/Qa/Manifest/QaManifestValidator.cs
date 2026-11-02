@@ -1,6 +1,7 @@
 using System.Globalization;
 using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.Patients.Enums;
+using Cauce.Domain.Recommendations;
 
 namespace Cauce.Infrastructure.Qa.Manifest;
 
@@ -35,6 +36,14 @@ public static class QaManifestValidator
             ["Otro"] = SymptomType.Other
         };
 
+    private static readonly IReadOnlyDictionary<string, GlossaryCategory> GlossaryCategories =
+        new Dictionary<string, GlossaryCategory>(StringComparer.Ordinal)
+        {
+            ["nutritional"] = GlossaryCategory.Nutritional,
+            ["clinical_ibs"] = GlossaryCategory.ClinicalIbs,
+            ["system"] = GlossaryCategory.System
+        };
+
     private static readonly string[] ExplanationSources = ["LlmGenerated", "Fallback"];
     private static readonly string[] ConfidenceLevels = ["high", "medium", "low"];
 
@@ -42,6 +51,12 @@ public static class QaManifestValidator
     /// Traduce el subtipo del manifiesto (<c>SII-D</c>) al del dominio.
     /// </summary>
     public static bool TryParseSubtype(string value, out IbsSubtype subtype) => Subtypes.TryGetValue(value, out subtype);
+
+    /// <summary>
+    /// Traduce la categoría de glosario del manifiesto (<c>clinical_ibs</c>) a la del dominio.
+    /// </summary>
+    public static bool TryParseGlossaryCategory(string value, out GlossaryCategory category) =>
+        GlossaryCategories.TryGetValue(value, out category);
 
     /// <summary>
     /// Traduce la etiqueta en español de un síntoma al tipo del dominio.
@@ -155,7 +170,7 @@ public static class QaManifestValidator
                 }
 
                 break;
-            case QaNoteSeed:
+            case QaNoteSeed or QaGlossarySeed:
                 break;
             default:
                 foreach (var email in seed.ReferencedEmails())
@@ -182,6 +197,28 @@ public static class QaManifestValidator
         if (recommendation.ApprovedInMonth is not null && !TryParseMonth(recommendation.ApprovedInMonth, out _))
         {
             errors.Add($"{cp}: «approvedInMonth» debe tener el formato aaaa-mm.");
+        }
+
+        ValidateSteps(cp, recommendation, errors);
+    }
+
+    // Los mismos límites que el dominio, para que una siembra no falle a mitad de camino.
+    private static void ValidateSteps(string cp, QaRecommendationSeed recommendation, List<string> errors)
+    {
+        if (recommendation.StepsCount is { } count && recommendation.Steps.Count == 0
+            && (count < 1 || count > QaRecommendationSeed.DefaultSteps.Count))
+        {
+            errors.Add($"{cp}: «stepsCount» debe estar entre 1 y {QaRecommendationSeed.DefaultSteps.Count}.");
+        }
+
+        if (recommendation.StepsCount is { } declared && recommendation.Steps.Count > 0 && declared != recommendation.Steps.Count)
+        {
+            errors.Add($"{cp}: «stepsCount» no coincide con la cantidad de «steps».");
+        }
+
+        if (recommendation.Steps.Any(step => string.IsNullOrWhiteSpace(step) || step.Length > RecommendationSteps.MaxLength))
+        {
+            errors.Add($"{cp}: cada paso debe tener texto y {RecommendationSteps.MaxLength} caracteres como máximo.");
         }
     }
 

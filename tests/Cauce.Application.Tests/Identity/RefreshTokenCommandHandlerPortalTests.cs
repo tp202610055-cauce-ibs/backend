@@ -26,6 +26,7 @@ public sealed class RefreshTokenCommandHandlerPortalTests
 
     private readonly IKeycloakTokenClient _tokenClient = Substitute.For<IKeycloakTokenClient>();
     private readonly IUserRepository _userRepository = Substitute.For<IUserRepository>();
+    private readonly IEmailVerificationSync _emailVerificationSync = Substitute.For<IEmailVerificationSync>();
     private readonly IAuditLogger _auditLogger = Substitute.For<IAuditLogger>();
     private readonly IUnitOfWork _unitOfWork = Substitute.For<IUnitOfWork>();
     private readonly ILogger<RefreshTokenCommandHandler> _logger =
@@ -41,7 +42,7 @@ public sealed class RefreshTokenCommandHandlerPortalTests
     }
 
     private RefreshTokenCommandHandler CreateHandler() =>
-        new(_tokenClient, _userRepository, _auditLogger, _unitOfWork, _logger);
+        new(_tokenClient, _userRepository, _emailVerificationSync, _auditLogger, _unitOfWork, _logger);
 
     private static RefreshTokenCommand PortalCommand(string refreshToken = RefreshToken) =>
         new(refreshToken, OidcClients.WebPortal, LoginChannel.Portal);

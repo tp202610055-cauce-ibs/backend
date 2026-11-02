@@ -1,6 +1,6 @@
-# Manifiesto de cuentas y datos para QA (D-2) — BORRADOR 1.1
+# Manifiesto de cuentas y datos para QA (D-2) — versión 1.2
 
-Versión 1.1-draft2. Fuente: Casos_de_Prueba-PY20261049_v3.xlsx + reemplazos de catálogo propuestos (pendientes de Mirian). Archivo gemelo: `qa-manifest.json` (es el que lee el código; este documento es la versión legible).
+Versión 1.2. Fuente: Casos_de_Prueba-PY20261049_v4.xlsx + reemplazos de catálogo propuestos (pendientes de Mirian). Archivo gemelo: `qa-manifest.json` (es el que lee el código; este documento es la versión legible).
 
 **Este archivo no contiene contraseñas.** Cada rol toma la suya de una variable de entorno de la VM.
 
@@ -31,7 +31,10 @@ Versión 1.1-draft2. Fuente: Casos_de_Prueba-PY20261049_v3.xlsx + reemplazos de 
 12. Ítems de las recomendaciones del motor (status pendingReview, approvedAsGenerated, approvedModified, rejected, expired): suggests produce ítems Suggest, reduce produce Reduce y avoid produce Avoid, cada uno sobre un alimento del catálogo. El título del motor no se guarda: las apps muestran un título compuesto («Reducir 2 alimentos») y la descripción lista los alimentos. Solo las recomendaciones createdByNutritionist (manuales) llevan título propio; para ellas, si faltan description o clinicalNote, usa valores por omisión deterministas.
 13. CP075: sus dos recomendaciones son manuales (createdByNutritionist) con ValidUntil = ancla - 2 días y ancla + 30 días; el archivado temporal solo aplica a recomendaciones con ValidUntil.
 14. La siembra no debe generar notificaciones, correos ni filas de outbox como efecto secundario (salvo el correo de activación de las cuentas pendingActivation): CP037, CP046 y CP073 verifican que NO llegue un aviso.
-15. Este manifiesto es el BORRADOR 1.1: aplica los reemplazos de catálogo propuestos a Mirian. Si ella acepta otros, solo cambian los textos de este archivo, no el código.
+15. Este manifiesto es la versión 1.2: aplica los reemplazos de catálogo propuestos a Mirian. Si ella acepta otros, solo cambian los textos de este archivo, no el código.
+16. Glosario (tipo glossary): no pertenece a ninguna cuenta. seed-qa y reset-qa del caso dejan cada término presente en la categoría del caso (nutritional, clinical_ibs o system, que las apps muestran como «propio de la aplicación»). Un término que falta o que sobra no se crea ni se borra: lo informa verify-qa.
+17. Sustitutos (substitutes de una recomendación del motor): cada par food → by produce un ítem Substitute con la justificación «Contenido bajo de FODMAP: reemplaza a un alimento con contenido alto.».
+18. Historial de respaldo (supportingData o withRecentHistory): una comida del primer alimento a reducir por día desde ayer hacia atrás, cada una seguida de dolor abdominal a las 2 h, para que siga dentro de la ventana de 14 días el mayor tiempo posible.
 
 ## 3. Catálogos: lo que los CP piden y el backend no tiene
 
@@ -416,7 +419,7 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 - Cuentas: nutricionista.demo, paciente.entrega
 - perfil completo paciente.entrega: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
 - vínculo paciente.entrega → nutricionista.demo
-- recomendación paciente.entrega: «Reducir cebolla y pan de trigo», estado **pendingReview**; explicación: personalized; vence en (d): 10; sugiere: Zanahoria cocida; sustitutos: con justificación por contenido de FODMAP
+- recomendación paciente.entrega: «Reducir cebolla y pan de trigo», estado **pendingReview**; explicación: personalized; vence en (d): 10; sugiere: Zanahoria cocida; reduce: Cebolla cocida, Pan de trigo blanco; sustitutos: Cebolla cocida → Zanahoria cocida, Pan de trigo blanco → Arroz blanco cocido (justificación por contenido de FODMAP)
 
 ### CP037 — AVISO EN LA APLICACIÓN CUANDO LA RECOMENDACIÓN ESTÁ EN REVISIÓN
 *Plataforma:* unknown. *Banderas:* push B.
@@ -459,10 +462,10 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 - Cuentas: nutricionista.demo, paciente.explic
 - perfil completo paciente.explic: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
 - vínculo paciente.explic → nutricionista.demo
-- recomendación paciente.explic: «Reducir cebolla y pan de trigo», estado **approvedAsGenerated**; explicación: personalized; origen: LlmGenerated; confianza: high
+- recomendación paciente.explic: «Reducir cebolla y pan de trigo», estado **approvedAsGenerated**; explicación: personalized; origen: LlmGenerated; confianza: high; con historial reciente
 - recomendación paciente.explic: «Aumentar la fibra soluble», estado **approvedAsGenerated**; explicación: personalized; origen: LlmGenerated; confianza: medium; sugiere: Avena en hojuelas cocida, Zanahoria cocida
 - recomendación paciente.explic: «Reducir legumbres», estado **approvedAsGenerated**; explicación: personalized; origen: LlmGenerated; confianza: low
-- nota: Historial con dolor abdominal después de comidas con cebolla y pan de trigo. Las 3 explicaciones se siembran (no hay servicio de IA en la VM).
+- nota: Historial de 3 comidas con cebolla cocida, cada una seguida de dolor abdominal, sembrado con la primera recomendación. Las 3 explicaciones se siembran (no hay servicio de IA en la VM).
 
 ### CP041 — INDICACIÓN VISIBLE DE REVISIÓN POR EL NUTRICIONISTA
 *Plataforma:* mobile. *Banderas:* ninguna (estático).
@@ -547,7 +550,7 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 - perfil completo paciente.panel4: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
 - vínculo paciente.panel4 → nutricionista.panel
 - perfil completo paciente.panel5: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
-- vínculo paciente.panel5 → nutricionista.panel
+- vínculo paciente.panel5 → nutricionista.panel, desde hace 4 d
 - perfil completo paciente.panel6: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
 - vínculo paciente.panel6 → nutricionista.panel
 - IBS-SSS periodic paciente.panel1: 340 puntos, hace 1 d
@@ -558,6 +561,8 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 - recomendación paciente.panel4: «Recomendación pendiente», estado **pendingReview**; vence en (d): 10; pendiente desde: hace 20 h
 - IBS-SSS periodic paciente.panel5: 200 puntos, hace 1 d
 - IBS-SSS periodic paciente.panel6: 150 puntos, hace 1 d
+- comida paciente.panel1, panel2, panel3, panel4 y panel6: Arroz blanco cocido, hoy, almuerzo
+- nota: P1, P2, P3, P4 y P6 con una comida de hoy (registros al día). P5 vinculado desde hace 4 días y sin ninguna comida ni síntoma: es el único de prioridad media (72 h sin registros). El límite de 24 h separa a P2 (30 h) de P4 (20 h): reset-qa antes de cada prueba.
 - nota: P1,P2,P3,P4,P6 con registros al día (comidas y síntomas hoy). P5 sin ningún registro de comida ni síntoma desde hace 4 días. El límite de 24 h separa a P2 (30 h) de P4 (20 h): reset-qa antes de cada prueba.
 
 ### CP050 — PANEL INFORMATIVO SIN PACIENTES ASIGNADOS
@@ -634,8 +639,10 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 - Cuentas: nutricionista.reporte2, paciente.reporte2
 - cuenta nutricionista.reporte2: nutritionist, estado **active**
 - perfil completo paciente.reporte2: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
-- vínculo paciente.reporte2 → nutricionista.reporte2
-- nota: El paciente ingresó al sistema el 2026-09-15 y no tiene ningún registro anterior a esa fecha.
+- vínculo paciente.reporte2 → nutricionista.reporte2, desde el 2026-09-15
+- comida paciente.reporte2: Causa rellena, hace 3 d, almuerzo
+- síntoma paciente.reporte2: Dolor abdominal, intensidad 40, hace 2 d
+- nota: El paciente ingresó al sistema el 2026-09-15 (vínculo desde esa fecha) y no tiene ningún registro anterior: solo una comida de hace 3 días y un síntoma de hace 2 días, para que el reporte hasta hoy se genere.
 
 ### CP060 — GRÁFICO DE EVOLUCIÓN DISPONIBLE CON DATOS SUFICIENTES
 *Plataforma:* mobile. *Banderas:* reloj: días.
@@ -692,7 +699,7 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 ### CP065 — EXPORTACIÓN CUANDO SOLO EXISTE EL PERFIL CLÍNICO SIN REGISTROS ADICIONALES
 *Plataforma:* mobile. *Banderas:* ninguna (estático).
 - Cuentas: paciente.export2
-- perfil completo paciente.export2: 70 kg, 170 cm, SII-E, alergias: ninguna declarada
+- perfil completo paciente.export2: 70 kg, 170 cm, SII-C, alergias: ninguna declarada
 - nota: SOLO el perfil clínico: sin comidas, síntomas, cuestionarios ni recomendaciones.
 
 ### CP066 — ELIMINACIÓN EXITOSA CON RETENCIÓN NORMATIVA INFORMADA AL PACIENTE
@@ -717,11 +724,13 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 - perfil completo paciente.glosario: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
 - vínculo paciente.glosario → nutricionista.demo
 - recomendación paciente.glosario: «Reducir cebolla y pan de trigo», estado **approvedAsGenerated**; explicación: personalized; marca términos: FODMAP
+- glosario: «FODMAP» nutritional, «IBS-SSS» clinical_ibs, «Línea base» system
 
 ### CP069 — TÉRMINO NO ENCONTRADO EN EL GLOSARIO
 *Plataforma:* both. *Banderas:* ninguna (estático).
 - Cuentas: nutricionista.demo, paciente.glosario2
 - nota: El glosario NO debe tener «disacaridasas» ni «xyzqw» y SÍ «Disacáridos».
+- glosario: «Disacáridos» presente; «disacaridasas» y «xyzqw» ausentes
 
 ### CP070 — VISUALIZACIÓN EXITOSA DEL PERFIL COMPLETO
 *Plataforma:* mobile. *Banderas:* reloj: días.
@@ -878,6 +887,7 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 *Plataforma:* both. *Banderas:* operador.
 - Cuentas: nutricionista.glosario, paciente.glosario3
 - nota: El glosario NO tiene «disacaridasas».
+- glosario: «disacaridasas» ausente
 - **Operador, paso 6:** Pedir al equipo de desarrollo que muestre las solicitudes de términos pendientes de revisión.
 
 ### CP090 — CREACIÓN DE RECOMENDACIÓN MANUAL SIN PASOS DE APLICACIÓN

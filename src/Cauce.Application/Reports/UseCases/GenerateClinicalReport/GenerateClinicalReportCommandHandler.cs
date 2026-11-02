@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
@@ -96,6 +97,8 @@ public sealed class GenerateClinicalReportCommandHandler
         {
             report_id = report.ReportId,
             patient_id = request.PatientId,
+            period_start = request.PeriodStart.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            period_end = request.PeriodEnd.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             range_days = request.PeriodEnd.DayNumber - request.PeriodStart.DayNumber
         });
         await _auditLogger.LogAsync(

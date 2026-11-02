@@ -28,7 +28,7 @@ public sealed class AccountDeletionApiTests : IntegrationTestBase, IClassFixture
     public async Task DeleteMyAccount_NotInPilot_AnonymizesDisablesKeycloakAndAudits()
     {
         SkipIfUnavailable();
-        var patient = await SeedPatientAsync();
+        var patient = await SeedPatientAsync(emailVerified: true);
         await SeedConsentAsync(patient.Id);
 
         var client = PatientClient(patient.KeycloakId, patient.Email);
@@ -50,6 +50,23 @@ public sealed class AccountDeletionApiTests : IntegrationTestBase, IClassFixture
         (log.AdditionalContext ?? string.Empty).Should().Contain("anonymization").And.Contain("disable");
 
         Factory.EmailSender.SentEmails.Should().Contain(e => e.Kind == "account-deletion" && e.Recipient == patient.Email);
+    }
+
+    [SkippableFact]
+    public async Task DeleteMyAccount_UnverifiedEmail_AnonymizesWithoutConfirmationEmail()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync(emailVerified: false);
+        await SeedConsentAsync(patient.Id);
+
+        var response = await PatientClient(patient.KeycloakId, patient.Email)
+            .DeleteAsync("/api/v1/patients/me?confirmedActivePilotAcknowledged=false");
+
+        response.StatusCode.Should().Be(HttpStatusCode.NoContent);
+        (await GetUserAsync(patient.Id)).Email.Should().Be($"deleted-{patient.Id}@anonymized.local");
+        Factory.KeycloakClient.DisabledUsers.Should().Contain(patient.KeycloakId);
+        (await AuditLogsAsync("User", patient.Id, AuditActionType.Delete)).Should().ContainSingle();
+        Factory.EmailSender.SentEmails.Should().NotContain(e => e.Kind == "account-deletion");
     }
 
     [SkippableFact]

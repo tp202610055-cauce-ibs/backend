@@ -1,6 +1,6 @@
 {
- "manifestVersion": "1.1-draft2",
- "source": "Casos_de_Prueba-PY20261049_v3.xlsx + reemplazos de catálogo propuestos (pendientes de Mirian)",
+ "manifestVersion": "1.2",
+ "source": "Casos_de_Prueba-PY20261049_v4.xlsx + reemplazos de catálogo propuestos (pendientes de Mirian)",
  "counts": {
   "cases": 90,
   "emailsInCp": 116,
@@ -24,7 +24,10 @@
   "Ítems de las recomendaciones del motor (status pendingReview, approvedAsGenerated, approvedModified, rejected, expired): suggests produce ítems Suggest, reduce produce Reduce y avoid produce Avoid, cada uno sobre un alimento del catálogo. El título del motor no se guarda: las apps muestran un título compuesto («Reducir 2 alimentos») y la descripción lista los alimentos. Solo las recomendaciones createdByNutritionist (manuales) llevan título propio; para ellas, si faltan description o clinicalNote, usa valores por omisión deterministas.",
   "CP075: sus dos recomendaciones son manuales (createdByNutritionist) con ValidUntil = ancla - 2 días y ancla + 30 días; el archivado temporal solo aplica a recomendaciones con ValidUntil.",
   "La siembra no debe generar notificaciones, correos ni filas de outbox como efecto secundario (salvo el correo de activación de las cuentas pendingActivation): CP037, CP046 y CP073 verifican que NO llegue un aviso.",
-  "Este manifiesto es el BORRADOR 1.1: aplica los reemplazos de catálogo propuestos a Mirian. Si ella acepta otros, solo cambian los textos de este archivo, no el código."
+  "Este manifiesto es la versión 1.2: aplica los reemplazos de catálogo propuestos a Mirian. Si ella acepta otros, solo cambian los textos de este archivo, no el código.",
+  "Glosario (tipo glossary): no pertenece a ninguna cuenta. seed-qa y reset-qa del caso dejan cada término presente en la categoría del caso (nutritional, clinical_ibs o system, que las apps muestran como «propio de la aplicación»). Un término que falta o que sobra no se crea ni se borra: lo informa verify-qa.",
+  "Sustitutos (substitutes de una recomendación del motor): cada par food → by produce un ítem Substitute con la justificación «Contenido bajo de FODMAP: reemplaza a un alimento con contenido alto.».",
+  "Historial de respaldo (supportingData o withRecentHistory): una comida del primer alimento a reducir por día desde ayer hacia atrás, cada una seguida de dolor abdominal a las 2 h, para que siga dentro de la ventana de 14 días el mayor tiempo posible."
  ],
  "catalogRequirements": {
   "status": "ALINEADO con el catálogo actual del backend (26 alimentos, 10 alergias)",
@@ -2350,7 +2353,16 @@
      "suggests": [
       "Zanahoria cocida"
      ],
-     "substitutes": "con justificación por contenido de FODMAP",
+     "substitutes": [
+      {
+       "food": "Cebolla cocida",
+       "by": "Zanahoria cocida"
+      },
+      {
+       "food": "Pan de trigo blanco",
+       "by": "Arroz blanco cocido"
+      }
+     ],
      "expiresInDays": 10,
      "reduce": [
       "Cebolla cocida",
@@ -2663,7 +2675,8 @@
      "reduce": [
       "Cebolla cocida",
       "Pan de trigo blanco"
-     ]
+     ],
+     "withRecentHistory": true
     },
     {
      "t": "rec",
@@ -2693,7 +2706,7 @@
     },
     {
      "t": "note",
-     "text": "Historial con dolor abdominal después de comidas con cebolla y pan de trigo. Las 3 explicaciones se siembran (no hay servicio de IA en la VM)."
+     "text": "Historial de 3 comidas con cebolla cocida, cada una seguida de dolor abdominal, sembrado con la primera recomendación. Las 3 explicaciones se siembran (no hay servicio de IA en la VM)."
     }
    ]
   },
@@ -3245,7 +3258,10 @@
     {
      "t": "link",
      "patient": "paciente.panel5@ejemplo.com",
-     "nutritionist": "nutricionista.panel@ejemplo.com"
+     "nutritionist": "nutricionista.panel@ejemplo.com",
+     "since": {
+      "days": 4
+     }
     },
     {
      "t": "profile",
@@ -3342,8 +3358,53 @@
      }
     },
     {
+     "t": "meal",
+     "patient": "paciente.panel1@ejemplo.com",
+     "food": "Arroz blanco cocido",
+     "ago": {
+      "today": true
+     },
+     "slot": "almuerzo"
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.panel2@ejemplo.com",
+     "food": "Arroz blanco cocido",
+     "ago": {
+      "today": true
+     },
+     "slot": "almuerzo"
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.panel3@ejemplo.com",
+     "food": "Arroz blanco cocido",
+     "ago": {
+      "today": true
+     },
+     "slot": "almuerzo"
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.panel4@ejemplo.com",
+     "food": "Arroz blanco cocido",
+     "ago": {
+      "today": true
+     },
+     "slot": "almuerzo"
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.panel6@ejemplo.com",
+     "food": "Arroz blanco cocido",
+     "ago": {
+      "today": true
+     },
+     "slot": "almuerzo"
+    },
+    {
      "t": "note",
-     "text": "P1,P2,P3,P4,P6 con registros al día (comidas y síntomas hoy). P5 sin ningún registro de comida ni síntoma desde hace 4 días. El límite de 24 h separa a P2 (30 h) de P4 (20 h): reset-qa antes de cada prueba."
+     "text": "P1, P2, P3, P4 y P6 con una comida de hoy (registros al día). P5 vinculado desde hace 4 días y sin ninguna comida ni síntoma: es el único de prioridad media (72 h sin registros). El límite de 24 h separa a P2 (30 h) de P4 (20 h): reset-qa antes de cada prueba."
     }
    ]
   },
@@ -3740,11 +3801,32 @@
     {
      "t": "link",
      "patient": "paciente.reporte2@ejemplo.com",
-     "nutritionist": "nutricionista.reporte2@ejemplo.com"
+     "nutritionist": "nutricionista.reporte2@ejemplo.com",
+     "since": {
+      "date": "2026-09-15"
+     }
+    },
+    {
+     "t": "meal",
+     "patient": "paciente.reporte2@ejemplo.com",
+     "food": "Causa rellena",
+     "ago": {
+      "days": 3
+     },
+     "slot": "almuerzo"
+    },
+    {
+     "t": "symptom",
+     "patient": "paciente.reporte2@ejemplo.com",
+     "name": "Dolor abdominal",
+     "intensity": 40,
+     "ago": {
+      "days": 2
+     }
     },
     {
      "t": "note",
-     "text": "El paciente ingresó al sistema el 2026-09-15 y no tiene ningún registro anterior a esa fecha."
+     "text": "El paciente ingresó al sistema el 2026-09-15 (vínculo desde esa fecha) y no tiene ningún registro anterior: solo una comida de hace 3 días y un síntoma de hace 2 días, para que el reporte hasta hoy se genere."
     }
    ]
   },
@@ -4128,7 +4210,7 @@
      "complete": true,
      "weightKg": 70,
      "heightCm": 170,
-     "subtype": "SII-E",
+     "subtype": "SII-C",
      "allergies": []
     },
     {
@@ -4267,6 +4349,21 @@
       "Cebolla cocida",
       "Pan de trigo blanco"
      ]
+    },
+    {
+     "t": "glossary",
+     "term": "FODMAP",
+     "category": "nutritional"
+    },
+    {
+     "t": "glossary",
+     "term": "IBS-SSS",
+     "category": "clinical_ibs"
+    },
+    {
+     "t": "glossary",
+     "term": "Línea base",
+     "category": "system"
     }
    ]
   },
@@ -4288,6 +4385,20 @@
     {
      "t": "note",
      "text": "El glosario NO debe tener «disacaridasas» ni «xyzqw» y SÍ «Disacáridos»."
+    },
+    {
+     "t": "glossary",
+     "term": "Disacáridos"
+    },
+    {
+     "t": "glossary",
+     "term": "disacaridasas",
+     "present": false
+    },
+    {
+     "t": "glossary",
+     "term": "xyzqw",
+     "present": false
     }
    ]
   },
@@ -5160,6 +5271,11 @@
     {
      "t": "note",
      "text": "El glosario NO tiene «disacaridasas»."
+    },
+    {
+     "t": "glossary",
+     "term": "disacaridasas",
+     "present": false
     }
    ]
   },

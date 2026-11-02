@@ -11,7 +11,7 @@ public static class QaManifestLoader
     /// <summary>
     /// Versiones del esquema que este código sabe sembrar.
     /// </summary>
-    public static readonly IReadOnlyList<string> SupportedVersions = ["1.1-draft2", "1.1"];
+    public static readonly IReadOnlyList<string> SupportedVersions = ["1.1-draft2", "1.1", "1.2"];
 
     /// <summary>
     /// Lee y valida el manifiesto de un archivo.
@@ -204,6 +204,8 @@ public static class QaManifestLoader
                         OptionalInt(element, "daysWithRecordsInMonth"),
                         OptionalString(element, "month"))
                     : null;
+            case "glossary":
+                return ReadGlossary(element, where, errors);
             default:
                 errors.Add($"{where}: tipo de siembra desconocido «{type ?? "(vacío)"}».");
                 return null;
@@ -281,7 +283,52 @@ public static class QaManifestLoader
             OptionalString(element, "approvedInMonth"),
             OptionalInt(element, "validDaysLeft"),
             supportingData,
-            OptionalBool(element, "withRecentHistory") ?? false);
+            OptionalBool(element, "withRecentHistory") ?? false,
+            Substitutes(element, where, errors));
+    }
+
+    private static IReadOnlyList<QaSubstitute> Substitutes(JsonElement element, string where, List<string> errors)
+    {
+        if (!element.TryGetProperty("substitutes", out var value) || value.ValueKind == JsonValueKind.Null)
+        {
+            return [];
+        }
+
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            errors.Add($"{where}: «substitutes» debe ser una lista de objetos con «food» y «by».");
+            return [];
+        }
+
+        var substitutes = new List<QaSubstitute>();
+        foreach (var item in value.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.Object
+                && OptionalString(item, "food") is { } food
+                && OptionalString(item, "by") is { } by)
+            {
+                substitutes.Add(new QaSubstitute(food, by));
+            }
+            else
+            {
+                errors.Add($"{where}: cada sustituto lleva «food» y «by».");
+            }
+        }
+
+        return substitutes;
+    }
+
+    private static QaGlossarySeed? ReadGlossary(JsonElement element, string where, List<string> errors)
+    {
+        var term = RequiredString(element, "term", where, errors);
+        var category = OptionalString(element, "category");
+        if (category is not null && !QaManifestValidator.TryParseGlossaryCategory(category, out _))
+        {
+            errors.Add($"{where}: categoría de glosario desconocida «{category}».");
+            return null;
+        }
+
+        return term is null ? null : new QaGlossarySeed(term, OptionalBool(element, "present") ?? true, category);
     }
 
     private static QaInviteCodeSeed? ReadInviteCode(JsonElement element, string where, List<string> errors)

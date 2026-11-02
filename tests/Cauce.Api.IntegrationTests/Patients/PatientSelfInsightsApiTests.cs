@@ -67,6 +67,27 @@ public sealed class PatientSelfInsightsApiTests
     }
 
     [SkippableFact]
+    public async Task FoodSuggestions_CatalogListContainsOnlyPeruvianFoods()
+    {
+        SkipIfUnavailable();
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            (await db.FoodItems.AnyAsync(f => f.IsActive && !f.IsPeruvian)).Should().BeTrue();
+        }
+
+        var patient = await SeedPatientAsync();
+
+        var response = await PatientClient(patient.KeycloakId, patient.Email).GetAsync("/api/v1/foods/suggestions");
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var catalog = body.GetProperty("catalogSuggestions").EnumerateArray().ToList();
+        catalog.Should().NotBeEmpty();
+        catalog.Should().OnlyContain(f => f.GetProperty("isPeruvian").GetBoolean());
+    }
+
+    [SkippableFact]
     public async Task MyProfileSummary_ReturnsAggregatedMetricsAndMaskedEmail()
     {
         SkipIfUnavailable();

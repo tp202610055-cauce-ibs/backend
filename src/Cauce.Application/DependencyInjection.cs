@@ -45,6 +45,8 @@ public static class DependencyInjection
             // La auditoría corre tras la validación (no audita peticiones inválidas) y antes del
             // handler, para las tablas sin trigger marcadas con IAuditableCommand (DEC-B5-01, acta A8).
             configuration.AddOpenBehavior(typeof(AuditingBehavior<,>));
+            // Envuelve solo al handler: registra los intentos rechazados con 409 sobre recomendaciones cerradas.
+            configuration.AddOpenBehavior(typeof(BlockedRecommendationDecisionAuditBehavior<,>));
         });
 
         services.AddValidatorsFromAssembly(applicationAssembly);
@@ -58,6 +60,9 @@ public static class DependencyInjection
 
         // Regla única de activación de nutricionistas, compartida por el login y el behavior (acta A51).
         services.AddScoped<INutritionistActivationService, NutritionistActivationService>();
+
+        // Sincronización del correo verificado desde Keycloak, compartida por el login y la renovación de sesión.
+        services.AddScoped<IEmailVerificationSync, EmailVerificationSync>();
 
         // Causa interna de un rechazo de sesión: la escriben los handlers y la lee el middleware de
         // auditoría en la misma petición (acta A68).

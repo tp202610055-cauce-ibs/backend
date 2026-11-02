@@ -1,7 +1,6 @@
-using System.Security.Cryptography;
-using System.Text;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Identity.Services;
 using Cauce.Domain.Identity.Exceptions;
 using MediatR;
 using Microsoft.Extensions.Logging;
@@ -41,23 +40,19 @@ public sealed class ConfirmPasswordResetCommandHandler : IRequestHandler<Confirm
     public async Task Handle(ConfirmPasswordResetCommand request, CancellationToken cancellationToken)
     {
         var utcNow = DateTime.UtcNow;
-        var tokenHash = ComputeHash(request.Token);
+        var verification = await PasswordResetTokenVerifier
+            .VerifyAsync(request.Token, _tokenRepository, _userRepository, utcNow, cancellationToken)
+            .ConfigureAwait(false);
 
-        var token = await _tokenRepository.FindByTokenHashAsync(tokenHash, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidPasswordResetTokenException();
-
-        if (token.IsUsed)
-        {
-            throw new InvalidPasswordResetTokenException();
-        }
-
-        if (token.IsExpired(utcNow))
+        if (verification.State == PasswordResetTokenState.Expired)
         {
             throw new ExpiredPasswordResetTokenException();
         }
 
-        var user = await _userRepository.FindByIdAsync(token.UserId, cancellationToken).ConfigureAwait(false)
-            ?? throw new InvalidPasswordResetTokenException();
+        if (verification is not { State: PasswordResetTokenState.Valid, Token: { } token, User: { } user })
+        {
+            throw new InvalidPasswordResetTokenException();
+        }
 
         await _keycloakAdminClient
             .ResetPasswordAsync(user.KeycloakId, request.NewPassword, cancellationToken)
@@ -70,11 +65,5 @@ public sealed class ConfirmPasswordResetCommandHandler : IRequestHandler<Confirm
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
         _logger.LogInformation("Password reset confirmed for user {UserId}.", user.Id);
-    }
-
-    private static string ComputeHash(string plainToken)
-    {
-        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(plainToken));
-        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }

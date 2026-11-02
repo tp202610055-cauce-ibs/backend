@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Cauce.Application.Common.Interfaces;
 using Cauce.Application.Common.Interfaces.Identity;
+using Cauce.Application.Common.Interfaces.Notifications;
 using Cauce.Domain.Auditing.Enums;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Exceptions;
@@ -22,6 +23,7 @@ public sealed class DeleteMyAccountCommandHandler : IRequestHandler<DeleteMyAcco
     private readonly IKeycloakAdminClient _keycloakAdminClient;
     private readonly IEmailSender _emailSender;
     private readonly IAuditLogger _auditLogger;
+    private readonly INutritionistAlertRepository _alertRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<DeleteMyAccountCommandHandler> _logger;
 
@@ -34,6 +36,7 @@ public sealed class DeleteMyAccountCommandHandler : IRequestHandler<DeleteMyAcco
         IKeycloakAdminClient keycloakAdminClient,
         IEmailSender emailSender,
         IAuditLogger auditLogger,
+        INutritionistAlertRepository alertRepository,
         IUnitOfWork unitOfWork,
         ILogger<DeleteMyAccountCommandHandler> logger)
     {
@@ -42,6 +45,7 @@ public sealed class DeleteMyAccountCommandHandler : IRequestHandler<DeleteMyAcco
         _keycloakAdminClient = keycloakAdminClient;
         _emailSender = emailSender;
         _auditLogger = auditLogger;
+        _alertRepository = alertRepository;
         _unitOfWork = unitOfWork;
         _logger = logger;
     }
@@ -70,8 +74,12 @@ public sealed class DeleteMyAccountCommandHandler : IRequestHandler<DeleteMyAcco
         var originalEmail = user.Email;
         var originalFullName = user.FullName;
         var originalKeycloakId = user.KeycloakId;
+        var emailWasVerified = user.EmailVerified;
 
         user.Anonymize(patientRoleId);
+
+        // Los avisos de la bandeja que mencionan al paciente se borran en la misma transacción (Ley N.° 29733).
+        await _alertRepository.RemoveForPatientAsync(user.Id, cancellationToken).ConfigureAwait(false);
 
         // Se deshabilita en Keycloak ANTES de confirmar la transacción local: si la operación externa
         // falla, la anonimización no se persiste y la baja es reintentable (acta A17).
@@ -90,7 +98,16 @@ public sealed class DeleteMyAccountCommandHandler : IRequestHandler<DeleteMyAcco
 
         await _unitOfWork.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
 
-        await TrySendConfirmationAsync(originalEmail, originalFullName, user.Id, cancellationToken).ConfigureAwait(false);
+        // La baja nunca se bloquea; solo se omite la confirmación a un correo que el paciente no verificó.
+        if (emailWasVerified)
+        {
+            await TrySendConfirmationAsync(originalEmail, originalFullName, user.Id, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "Account deletion confirmation email skipped for user {UserId}: email not verified.", user.Id);
+        }
 
         _logger.LogInformation("Patient account {UserId} anonymized on user request.", user.Id);
 

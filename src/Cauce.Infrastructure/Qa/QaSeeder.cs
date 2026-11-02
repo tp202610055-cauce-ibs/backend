@@ -12,7 +12,8 @@ public sealed record QaSeedSummary(int Created, int Realigned, int Retired, int 
 
 /// <summary>
 /// Siembra completa e idempotente (<c>seed-qa</c>): borra las cuentas que no deben existir, crea las que faltan con sus
-/// datos y deja las existentes en el estado del manifiesto. Una segunda corrida no agrega datos.
+/// datos y deja las existentes en el estado del manifiesto. Al final alinea el glosario. Una segunda corrida no agrega
+/// datos.
 /// </summary>
 public static class QaSeeder
 {
@@ -42,6 +43,8 @@ public static class QaSeeder
             created += result.Created ? 1 : 0;
             realigned += result.Created ? 0 : 1;
         }
+
+        await run.ApplySharedSeedsAsync(onlyCases: null, ct).ConfigureAwait(false);
 
         var summary = new QaSeedSummary(created, realigned, retired, unsupported);
         logger.LogInformation(

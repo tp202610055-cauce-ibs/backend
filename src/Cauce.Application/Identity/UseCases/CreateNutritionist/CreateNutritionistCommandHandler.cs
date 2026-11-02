@@ -65,7 +65,7 @@ public sealed class CreateNutritionistCommandHandler : IRequestHandler<CreateNut
         // Sin contraseña: la define el propio nutricionista con el enlace de Keycloak. Hasta entonces no
         // puede autenticarse, y ninguna credencial viaja por correo.
         var keycloakId = await _keycloakAdminClient
-            .CreateUserAsync(email, request.FullName, UserRoles.Nutritionist, requireEmailVerification: false, cancellationToken)
+            .CreateUserAsync(email, request.FullName, UserRoles.Nutritionist, NewUserEmailState.Verified, cancellationToken)
             .ConfigureAwait(false);
 
         User user;

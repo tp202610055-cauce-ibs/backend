@@ -37,7 +37,8 @@ public static class QaAuditLogFormatter
         [AuditActionType.AccountActivation] = "Activación de cuenta",
         [AuditActionType.ActivationEmailResend] = "Reenvío del enlace de activación",
         [AuditActionType.MealAssociationCorrection] = "Corrección de comida asociada",
-        [AuditActionType.FailedLogout] = "Cierre de sesión rechazado"
+        [AuditActionType.FailedLogout] = "Cierre de sesión rechazado",
+        [AuditActionType.BlockedChangeAttempt] = "Intento de cambio bloqueado"
     };
 
     private static readonly Dictionary<string, string> EntityLabels = new(StringComparer.Ordinal)

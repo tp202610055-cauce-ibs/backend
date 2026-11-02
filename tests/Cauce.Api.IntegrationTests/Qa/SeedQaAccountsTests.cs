@@ -1,6 +1,7 @@
 using Cauce.Api.Commands;
 using Cauce.Api.IntegrationTests.Identity.Support;
 using Cauce.Api.IntegrationTests.Qa.Support;
+using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Identity.Enums;
 using FluentAssertions;
@@ -154,7 +155,7 @@ public sealed class SeedQaAccountsTests
         using var _ = scope;
         var roleId = await db.UserRoles.Where(role => role.RoleName == UserRoles.Patient).Select(role => role.RoleId).FirstAsync();
         var keycloakId = Guid.NewGuid().ToString();
-        await Factory.KeycloakClient.CreateUserAsync(email, "Registro previo", UserRoles.Patient, false);
+        await Factory.KeycloakClient.CreateUserAsync(email, "Registro previo", UserRoles.Patient, NewUserEmailState.Verified);
         var user = User.CreatePatient(Guid.NewGuid(), keycloakId, email, "Registro previo", roleId, PatientCode.FromCorrelative(900_001));
         db.Users.Add(user);
         await db.SaveChangesAsync();

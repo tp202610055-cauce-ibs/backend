@@ -125,7 +125,7 @@ public sealed class DevelopmentPatientAccount
         var existing = await _keycloakAdminClient.FindByEmailAsync(email, ct).ConfigureAwait(false);
         var keycloakId = existing?.Id
             ?? await _keycloakAdminClient
-                .CreateUserAsync(email, fullName, UserRoles.Patient, requireEmailVerification: false, ct)
+                .CreateUserAsync(email, fullName, UserRoles.Patient, NewUserEmailState.Verified, ct)
                 .ConfigureAwait(false);
         await _keycloakAdminClient.ResetPasswordAsync(keycloakId, password, ct).ConfigureAwait(false);
 

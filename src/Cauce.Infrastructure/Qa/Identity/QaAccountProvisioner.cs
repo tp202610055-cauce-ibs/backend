@@ -148,7 +148,7 @@ public sealed class QaAccountProvisioner
 
         var roleId = await _users.GetRoleIdAsync(UserRoles.Nutritionist, ct).ConfigureAwait(false);
         var keycloakId = await _keycloak
-            .CreateUserAsync(email, fullName, UserRoles.Nutritionist, requireEmailVerification: false, ct)
+            .CreateUserAsync(email, fullName, UserRoles.Nutritionist, NewUserEmailState.Verified, ct)
             .ConfigureAwait(false);
         await _keycloak.ResetPasswordAsync(keycloakId, password, ct).ConfigureAwait(false);
         await _qaKeycloak.SetUserReadyAsync(keycloakId, enabled: status == QaAccountStatus.Active, ct).ConfigureAwait(false);

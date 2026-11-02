@@ -192,6 +192,8 @@ public static class DependencyInjection
         services.AddScoped<OutboxBatchProcessor>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<INotificationScheduler, NotificationScheduler>();
+        services.AddScoped<INutritionistAlertRepository, NutritionistAlertRepository>();
+        services.AddScoped<IGlossaryTermRequestRepository, GlossaryTermRequestRepository>();
         services.AddScoped<NotificationBatchProcessor>();
         services.AddScoped<INotificationSender, SmtpEmailNotificationSender>();
         RegisterFcmSender(services, configuration);

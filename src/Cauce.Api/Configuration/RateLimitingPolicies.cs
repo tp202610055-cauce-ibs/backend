@@ -32,6 +32,12 @@ public static class RateLimitingPolicies
     public const string AuthPasswordReset = "auth-pwreset";
 
     /// <summary>
+    /// Política para validar un enlace de restablecimiento: 20 peticiones por minuto por IP. No
+    /// comparte la cuota de solicitar y confirmar.
+    /// </summary>
+    public const string AuthPasswordResetValidate = "auth-pwreset-validate";
+
+    /// <summary>
     /// Política por defecto para endpoints autenticados: 60 peticiones por minuto
     /// por usuario.
     /// </summary>
@@ -88,6 +94,7 @@ public static class RateLimitingPolicies
         AddIpFixedWindow(options, AuthRegister, permitLimit: 5, window: TimeSpan.FromHours(1));
         AddIpFixedWindow(options, AuthLogin, permitLimit: 10, window: TimeSpan.FromMinutes(1));
         AddIpFixedWindow(options, AuthPasswordReset, permitLimit: 3, window: TimeSpan.FromHours(1));
+        AddIpFixedWindow(options, AuthPasswordResetValidate, permitLimit: 20, window: TimeSpan.FromMinutes(1));
         AddIpFixedWindow(options, ConsentCurrent, permitLimit: 60, window: TimeSpan.FromMinutes(1));
         AddIpFixedWindow(options, AuthRefresh, permitLimit: 20, window: TimeSpan.FromMinutes(1));
         AddEmailFixedWindow(options, AuthVerifyResend, permitLimit: 3, window: TimeSpan.FromHours(1));

@@ -8,4 +8,8 @@ namespace Cauce.Application.Recommendations.UseCases.ArchiveRecommendation;
 /// </summary>
 /// <param name="RecommendationId">Identificador de la recomendación.</param>
 /// <param name="Reason">Motivo del archivado.</param>
-public sealed record ArchiveRecommendationCommand(Guid RecommendationId, ArchiveReason Reason) : IRequest<Unit>;
+public sealed record ArchiveRecommendationCommand(Guid RecommendationId, ArchiveReason Reason) : IRequest<Unit>, IRecommendationDecisionCommand
+{
+    /// <inheritdoc />
+    public string AttemptedAction => "archive";
+}

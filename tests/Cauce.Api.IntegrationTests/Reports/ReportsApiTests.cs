@@ -178,6 +178,48 @@ public sealed class ReportsApiTests
         response.StatusCode.Should().Be(HttpStatusCode.Accepted);
     }
 
+    [SkippableFact]
+    public async Task Generate_Audit_RecordsThePatientAndThePeriodDates()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedPatientProfileAsync(patient.Id);
+        await SeedMealAsync(patient.Id);
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+        var start = Today().AddDays(-30);
+
+        var response = await GenerateReport(nutritionist, patient.Id, start, Today());
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        var audit = (await AuditLogsAsync("clinical_report", action: AuditActionType.ExportPdf)).Should().ContainSingle().Subject;
+        audit.ActorUserId.Should().Be(nutritionist.Id);
+        ContextValue(audit, "patient_id").Should().Be(patient.Id.ToString());
+        ContextValue(audit, "period_start").Should().Be(start.ToString("yyyy-MM-dd"));
+        ContextValue(audit, "period_end").Should().Be(Today().ToString("yyyy-MM-dd"));
+    }
+
+    [SkippableFact]
+    public async Task Generate_NoDataInPeriod_SaysSoAndSendsNoEmailNorFile()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedPatientProfileAsync(patient.Id);
+        var nutritionist = await SeedNutritionistAsync();
+        await AssignAsync(nutritionist.Id, patient.Id);
+
+        var response = await GenerateReport(nutritionist, patient.Id);
+
+        response.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var detail = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("detail").GetString();
+        detail.Should().StartWith("No hay datos suficientes").And.NotContain(patient.Id.ToString());
+        Factory.EmailSender.SentEmails.Should().BeEmpty();
+        (await AuditLogsAsync("clinical_report", action: AuditActionType.ExportPdf)).Should().BeEmpty();
+        var (scope, db) = CreateDbScope();
+        using var _ = scope;
+        (await db.ClinicalReportsMetadata.AsNoTracking().CountAsync(m => m.PatientId == patient.Id)).Should().Be(0);
+    }
+
     private Task<HttpResponseMessage> GenerateReport((Guid Id, string KeycloakId, string Email) nutritionist, Guid patientId) =>
         GenerateReport(nutritionist, patientId, Today().AddDays(-7), Today());
 

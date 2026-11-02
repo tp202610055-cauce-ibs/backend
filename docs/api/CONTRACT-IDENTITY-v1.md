@@ -1,12 +1,34 @@
 # Contrato de Identidad — Cauce API v1
 
-**Versión:** 1.4.2 · **Fecha:** 19 de octubre de 2026 · **Backend:** rama `feature/backend-portal-b1`
+**Versión:** 1.6.0 · **Fecha:** 29 de octubre de 2026 · **Backend:** rama `feature/backend-qa-release2`
 **Alcance:** endpoints de identidad que consumen la app móvil Flutter (US01, US05, US07, US08, US19, US20) y,
 desde v1.4, el portal web de nutricionistas (§2.12).
 
 Fuente de verdad: el código de `src/Cauce.Api/Controllers/AuthController.cs` y los handlers de
 `src/Cauce.Application/Identity/`. Cada afirmación de este documento lleva su evidencia en `archivo:línea`.
 
+> **v1.6.0 (contrato v1.10.0, sin cambio de esquema).** Cambios de comportamiento en identidad:
+> - El paciente recién registrado **puede iniciar sesión sin verificar su correo** (§2.1, §7). El login responde
+>   200 con `emailVerified: false` y la cuenta sigue `PendingActivation` hasta que verifica. El correo de
+>   verificación se sigue enviando y queda como recordatorio.
+> - `POST /auth/refresh` sincroniza `emailVerified` desde Keycloak cuando el valor local aún es `false` (§2.9).
+> - `POST /patients/me/report` responde 422 `email_not_verified` a un paciente sin correo verificado, sin
+>   generar el PDF ni enviar correos (§2.1). La baja de cuenta no se bloquea: solo omite el correo de
+>   confirmación.
+> - Para verse en un ambiente real, el realm necesita `verifyEmail: false`; con `true` Keycloak vuelve a exigir
+>   la verificación en el login (§7).
+>
+> **v1.5.1 (contrato v1.10.0).** Sin cambios en los endpoints de identidad. Corrige §2.5: un token ya usado
+> responde 400 `invalid_password_reset_token`, no `expired_password_reset_token`; este último queda solo para
+> un token vencido sin usar. El contrato v1.10.0 suma rutas fuera de identidad (detalle en `ENDPOINTS.md`
+> v1.11.0).
+>
+> **v1.5.0 (contrato v1.9.0).** Cambio aditivo en identidad:
+> - Nueva ruta anónima `POST /auth/password-reset/validate` (§2.13): comprueba si un enlace de
+>   restablecimiento sirve, sin consumirlo. 204 si sirve; 400 `invalid_password_reset_token` si no.
+> - `POST /auth/password-reset/request` ya no emite token ni envía correo a una cuenta `Suspended` o
+>   `Inactive` (§2.4). La respuesta sigue siendo 200, igual que para un correo sin cuenta.
+>
 > **v1.4.2 (Backend-Portal-B1, actas A68 y A75).** Sin cambios en los endpoints de identidad. La sesión del
 > portal caduca a los **15 minutos sin uso** (antes, 30): el cliente `cauce-web-portal` pasa a
 > `client.session.idle.timeout: "900"` en `infrastructure/keycloak/import/realm.json` y en
@@ -63,6 +85,7 @@ directo, `audit_logs` quedaría sin registro de accesos.
 | POST | `/api/v1/auth/portal/logout` **(nuevo, v1.4)** | Bearer JWT · `Policy=Nutritionist` + `X-Cauce-Portal` | Sin política | 204, 401, 403, 500 |
 | POST | `/api/v1/auth/password-reset/request` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 500 |
 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | `auth-pwreset` 3/h por IP | 200, 400, 429, 502, 500 |
+| POST | `/api/v1/auth/password-reset/validate` **(nuevo, v1.5)** | Anónimo | `auth-pwreset-validate` 20/min por IP | 204, 400, 429, 500 |
 | POST | `/api/v1/auth/verification-email/resend` **(nuevo, v1.2)** | Anónimo | `auth-verify-resend` 3/h por **correo** | 200, 400, 429, 500 |
 | GET | `/api/v1/consent/current` **(nuevo, v1.1)** | Anónimo | `consent-current` 60/min por IP | 200, 429, 500 |
 | GET | `/api/v1/patients/me/consent/pdf` | Bearer JWT · `Policy=Patient` | Sin política | 200 (`application/pdf`), 401, 403, 404, 500 |
@@ -98,8 +121,9 @@ respuestas devuelven el correo normalizado. El esquema de ninguna respuesta camb
 
 ### 2.1 `POST /api/v1/auth/register`
 
-Registra un paciente. Devuelve el `userId` sin tokens. El paciente debe verificar su correo antes de poder
-iniciar sesión.
+Registra un paciente. Devuelve el `userId` sin tokens. Desde v1.6.0 el paciente puede iniciar sesión enseguida
+con las mismas credenciales, aunque no haya verificado su correo: el login responde `emailVerified: false` y la
+verificación queda como recordatorio (§7).
 
 | Campo | Valor |
 |---|---|
@@ -127,7 +151,7 @@ La IP de origen no viaja en el body: el controller la toma de la conexión (`Aut
 | `userId` | Guid | Id local del usuario |
 | `email` | string | Normalizado (ver §2) |
 | `status` | string (enum) | Siempre `"PendingActivation"` para un paciente nuevo (`src/Cauce.Domain/Identity/User.cs:124`) |
-| `emailVerificationRequired` | bool | Siempre `true` (`RegisterPatientCommandHandler.cs:142`) |
+| `emailVerificationRequired` | bool | Siempre `true`: se envía el correo de verificación. No impide iniciar sesión (v1.6.0) |
 
 **Errores**
 
@@ -152,8 +176,19 @@ Desde v1.3 la validación del código incluye el **estado de su nutricionista**,
 canje de §2.11. Ocurre antes de crear el usuario en Keycloak: un 409 `nutritionist_not_available` no deja
 ninguna cuenta a medias y el código queda disponible.
 
-**Efecto en Keycloak:** el usuario se crea con `emailVerified: false` y la acción requerida `VERIFY_EMAIL`
-(`src/Cauce.Infrastructure/Identity/KeycloakAdminClient.cs:74-76`). Ver sección 5.
+**Efecto en Keycloak:** desde v1.6.0 el usuario se crea con `emailVerified: false` y **sin acciones requeridas**
+(`NewUserEmailState.Unverified` en `KeycloakAdminClient.CreateUserAsync`). Hasta v1.5.1 llevaba la acción
+`VERIFY_EMAIL`, que impedía el login por Direct Grant. Ver sección 7.
+
+**Qué limita un correo sin verificar** *(v1.6.0)*. El estado sale de la copia local, que se sincroniza en el login
+y en la renovación (§2.2, §2.9).
+
+| Operación | Con el correo sin verificar |
+|---|---|
+| Iniciar sesión, renovar y usar la app | Permitido |
+| `POST /patients/me/report` | **422 `email_not_verified`**. No se genera el PDF ni se envían los dos correos (enlace y contraseña) |
+| `DELETE /patients/me` | Permitido. La cuenta se anonimiza igual; solo se omite el correo de confirmación |
+| Restablecer contraseña y correos de Keycloak | Sin cambios: se envían |
 
 ---
 
@@ -195,7 +230,7 @@ Passthrough a Keycloak con `grant_type=password` (Direct Access Grants).
 | `email` | string | Normalizado (ver §2) |
 | `role` | string | `patient` o `nutritionist`. Coincide con `realm_access.roles` del JWT |
 | `fullName` | string | |
-| `emailVerified` | bool | **Sincronizado desde Keycloak en cada login** desde v1.2. Ver abajo |
+| `emailVerified` | bool | **Sincronizado desde Keycloak en cada login** desde v1.2. Ver abajo. Desde v1.6.0 puede llegar `false` en un login exitoso de un paciente |
 | `isInActivePilot` | bool | **No viaja en ningún claim del token.** Este es el único punto del contrato donde el cliente puede conocerlo |
 
 El móvil ya no necesita una segunda llamada ni decodificar el JWT para arrancar la sesión.
@@ -311,6 +346,10 @@ Solicita el restablecimiento. Responde 200 exista o no la cuenta, para no filtra
 
 **Errores:** 400 `validation_error` · 429 *(sin `errorCode`)* · 500 `internal_server_error`.
 
+**Cuentas que no reciben enlace** *(desde v1.5)*: una cuenta `Suspended` o `Inactive` no recibe token ni
+correo (`RequestPasswordResetCommandHandler.cs:58`). La respuesta es la misma 200 que para un correo sin
+cuenta. Una cuenta `PendingActivation` (paciente sin verificar o nutricionista sin activar) sí lo recibe.
+
 **Token de restablecimiento**
 
 | Propiedad | Valor | Evidencia |
@@ -361,8 +400,8 @@ Confirma el restablecimiento con el token recibido por correo.
 | HTTP | `errorCode` | Cuándo |
 |---|---|---|
 | 400 | `validation_error` | Falla una regla de FluentValidation |
-| 400 | `invalid_password_reset_token` | El token no existe |
-| 400 | `expired_password_reset_token` | El token venció o ya se usó |
+| 400 | `invalid_password_reset_token` | El token no existe, ya se usó o su usuario no existe (`PasswordResetTokenVerifier.cs:60`) |
+| 400 | `expired_password_reset_token` | El token venció sin haberse usado (`ConfirmPasswordResetCommandHandler.cs:47-49`) |
 | 429 | *(sin `errorCode`)* | Se superó el límite |
 | 502 | `keycloak_integration_error` | Keycloak respondió con un error, no fue alcanzable o no respondió a tiempo (timeout del `HttpClient`) al fijar la contraseña nueva (acta A70) |
 | 500 | `internal_server_error` | Error inesperado |
@@ -450,6 +489,11 @@ Renueva la sesión a partir de un refresh token vigente.
 | `clientId` | string | Sí | No vacío, máx 100. **Tiene que ser `cauce-mobile`** desde v1.4 |
 
 **Response 200.** Idéntico al de `POST /auth/login`, incluido el objeto `user`.
+
+**SINCRONIZACIÓN DE `emailVerified` *(v1.6.0)*.** Si el valor local es `false`, la renovación consulta Keycloak con
+la misma regla del login (§2.2): unidireccional y tolerante a fallos. Si Keycloak lo reporta verificado, el
+valor local pasa a `true` y una cuenta `PendingActivation` queda `Active`. Si el valor local ya es `true`, no se
+consulta Keycloak. Si Keycloak falla, la renovación responde igual con el valor local.
 
 **ROTACIÓN. El realm tiene `revokeRefreshToken: true` y `refreshTokenMaxReuse: 0`.** Cada renovación
 emite un refresh token nuevo e invalida el anterior de inmediato. **El cliente debe persistir el token
@@ -662,6 +706,39 @@ Registra `LOGOUT` con `channel: "portal"`, o `FAILED_LOGOUT` con su causa.
 
 ---
 
+### 2.13 `POST /api/v1/auth/password-reset/validate` *(nuevo en v1.5)*
+
+Comprueba si el token de un enlace de restablecimiento todavía sirve, **sin consumirlo**. El cliente lo
+llama al abrir el enlace, para avisar de inmediato si ya no es válido.
+
+| Campo | Valor |
+|---|---|
+| Auth | Anónimo (`AuthController.cs:205`) |
+| Rate limit | `auth-pwreset-validate`, 20 peticiones por minuto por IP (`RateLimitingPolicies.cs:97`). No comparte la cuota de 3 por hora de `request` y `confirm` |
+
+**Request** (`ValidatePasswordResetRequest.cs`)
+
+| Campo | Tipo | Obligatorio | Validación |
+|---|---|---|---|
+| `token` | string | Sí | Un token vacío o ausente se trata como no válido (400 `invalid_password_reset_token`) |
+
+**Response 204.** Sin cuerpo: el token sirve.
+
+**Errores**
+
+| HTTP | `errorCode` | Cuándo |
+|---|---|---|
+| 400 | `invalid_password_reset_token` | El token no existe, ya se usó, venció o su usuario no existe. Siempre el mismo código y mensaje |
+| 429 | *(sin `errorCode`)* | Se superó el límite |
+| 500 | `internal_server_error` | Error inesperado |
+
+Aplica las mismas condiciones que `confirm`, con el mismo código compartido
+(`PasswordResetTokenVerifier.cs:44-73`), así que las dos rutas nunca se contradicen. A diferencia de
+`confirm`, no distingue el token vencido: nunca devuelve `expired_password_reset_token`. No escribe en la
+base ni en la bitácora.
+
+---
+
 ## 3. Envelope de error (RFC 7807)
 
 El middleware serializa un `ProblemDetails` con `Content-Type: application/problem+json`
@@ -860,14 +937,19 @@ antes: CP015 llega al bloqueo sin toparse con un 429.
 
 | Pieza | Estado | Evidencia |
 |---|---|---|
-| El realm exige verificación | Sí | `realm.json`: `verifyEmail: true` |
-| El usuario se crea sin verificar y con acción requerida | Sí | `KeycloakAdminClient.cs:74-76`: `emailVerified = !requireEmailVerification`, `requiredActions = ["VERIFY_EMAIL"]` |
-| El registro pide verificación | Sí | `RegisterPatientCommandHandler.cs:80` pasa `requireEmailVerification: true` |
+| El realm exige verificación en el login | Depende del realm: debe quedar en `verifyEmail: false` (cambio de Infraestructura) | `realm.json` |
+| El usuario se crea sin verificar y sin acción requerida | Sí, desde v1.6.0 | `KeycloakAdminClient.CreateUserAsync`: `emailVerified = emailState == Verified`, `requiredActions = []` |
+| El registro pide verificación | Sí, como recordatorio | `RegisterPatientCommandHandler` pasa `NewUserEmailState.Unverified` y envía el correo de verificación |
 | Correo de verificación | Se dispara best-effort | `RegisterPatientCommandHandler.cs:138, 202-215`. Si falla, el registro igual queda válido |
 | Endpoint de reenvío | **NO EXISTE** | |
 | `users.email_verified` se actualiza al verificar | **NO** | `User.VerifyEmail()` solo lo invoca `DemoPatientSeeder.cs:94`. No hay listener de eventos de Keycloak |
 
-**Comportamiento del login con el correo sin verificar.** Un usuario con la acción requerida `VERIFY_EMAIL`
+**Comportamiento del login con el correo sin verificar (desde v1.6.0).** Un paciente creado sin acción requerida
+entra por Direct Grant y recibe `emailVerified: false`, siempre que el realm tenga `verifyEmail: false`. Con
+`verifyEmail: true`, o en una cuenta creada antes de v1.6.0 que aún tenga `VERIFY_EMAIL`, sigue rigiendo lo
+que se describe a continuación.
+
+**Comportamiento anterior (hasta v1.5.1).** Un usuario con la acción requerida `VERIFY_EMAIL`
 pendiente no puede completar Direct Access Grants. `docs/dev/SEED-USERS.md:52-54` documenta el mismo
 mecanismo para el nutricionista demo, que no puede autenticarse por Direct Grant mientras tenga pendiente
 `UPDATE_PASSWORD`. Keycloak responde 400 o 401, y `KeycloakTokenClient.cs:61-65` lo colapsa a
@@ -973,6 +1055,7 @@ Recalcular el hash en el cliente sigue siendo válido como verificación defensi
 | US05 | POST | `/api/v1/auth/login` | Anónimo | 200, 400, 401, 423, 429, 500 |
 | US07 CA01 | POST | `/api/v1/auth/password-reset/request` | Anónimo | 200, 400, 429, 500 |
 | US07 CA02 | POST | `/api/v1/auth/password-reset/confirm` | Anónimo | 200, 400, 429, 502, 500 |
+| US07 #2 y #4 | POST | `/api/v1/auth/password-reset/validate` | Anónimo | 204, 400, 429, 500 |
 | US08 CA01 | POST | `/api/v1/auth/logout` | Bearer | 204, 400, 401, 500 |
 | US08 CA02 | POST | `/api/v1/auth/refresh` | Anónimo | 200, 400, 401, 429, 500 |
 | US05 (portal) | POST | `/api/v1/auth/portal/login` | Anónimo | 200, 400, 401, 423, 429, 500 |
@@ -990,6 +1073,8 @@ de espera (US05 CA02) y la renovación de token (US08 CA02) quedaron cubiertos e
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 1.0 | 2026-07-13 | Versión inicial. Levantada del código en el tag `v0.6.2-dev-seed` para habilitar Mobile-1b. |
+| 1.6.0 | 2026-10-29 | Sin cambio de esquema. El paciente se crea sin la acción `VERIFY_EMAIL` y puede iniciar sesión sin verificar (§2.1, §7). `POST /auth/refresh` sincroniza `emailVerified` si aún es `false` (§2.9). Nuevo 422 `email_not_verified` en `POST /patients/me/report`; la baja omite el correo de confirmación a un correo sin verificar. |
+| 1.5.0 | 2026-10-26 | Contrato v1.9.0. Nuevo §2.13 `POST /auth/password-reset/validate`: valida el token sin consumirlo, con las mismas condiciones que `confirm` y un solo `errorCode` para todos los casos no válidos. §2.4: las cuentas `Suspended` e `Inactive` no reciben enlace, con la misma respuesta 200. |
 | 1.4.1 | 2026-10-11 | Bloque Backend-Contract-1 (acta A72). Sin cambios en los endpoints de identidad. §2.11 suma el 409 `nutritionist_assignment_exists`. Se corrigen las citas `BaseApiController.cs:13` (§4.2) y `ExceptionHandlingMiddleware.cs:386-397` (§3). Nota inicial con los cambios de comportamiento del contrato v1.7.0: `from`, `to` y `q` obligatorios, fecha con zona horaria y desempate por id. |
 | 1.4.0 | 2026-09-26 | Bloque Portal listo 1 (acta A68). Nuevo §2.12 con la sesión del portal: tres rutas, cookie `HttpOnly` del refresh token, header `X-Cauce-Portal` contra CSRF, solo rol `nutritionist`. Las rutas del móvil conservan su esquema y solo aceptan `cauce-mobile` (400 `unsupported_client`). Auditoría de sesión con canal y causa interna; `ACCOUNT_LOCKED` y `FAILED_LOGOUT` nuevos. `unauthorized_client` / `invalid_client` de Keycloak pasan a 500 `identity_provider_misconfigured`. Se corrige el párrafo de §2.2 que negaba el 423. |
 | 1.3 | 2026-09-11 | Bloque Nutritionist-Activation-1 (acta A53). `POST /auth/register` valida el estado del nutricionista dueño del código con la misma regla que el canje de §2.11: responde 409 `nutritionist_not_available` con la extensión `reason`, antes de crear el usuario en Keycloak y sin consumir el código (§2.1). El cliente móvil todavía no mapea este `errorCode`. |
