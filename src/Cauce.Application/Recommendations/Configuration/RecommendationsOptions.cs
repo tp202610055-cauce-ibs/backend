@@ -14,7 +14,12 @@ public sealed class RecommendationsOptions
     public const string SectionName = "Recommendations";
 
     /// <summary>
-    /// Tipo de motor a usar ("Rule" o "Onnx").
+    /// Valor de <see cref="EngineKind"/> que selecciona el modelo real XGBoost.
+    /// </summary>
+    public const string XgboostEngineKind = "Xgboost";
+
+    /// <summary>
+    /// Tipo de motor a usar: "Rule" (por defecto), "Onnx" (modelo ficticio) o "Xgboost" (modelo real).
     /// </summary>
     public string EngineKind { get; init; } = "Rule";
 
@@ -23,6 +28,17 @@ public sealed class RecommendationsOptions
     /// directorio de ejecución. Si el archivo no existe, el motor ONNX cae al motor de regla (TS07).
     /// </summary>
     public string OnnxModelPath { get; init; } = "infrastructure/models/dummy_v0.0.1.onnx";
+
+    /// <summary>
+    /// Ruta al archivo ONNX del modelo real. Obligatoria con el motor Xgboost; las rutas relativas se
+    /// resuelven igual que <see cref="OnnxModelPath"/>, pero un archivo ausente hace fallar el arranque.
+    /// </summary>
+    public string XgboostModelPath { get; init; } = string.Empty;
+
+    /// <summary>
+    /// SHA-256 esperado de <see cref="XgboostModelPath"/>, sin distinguir mayúsculas. Obligatorio con Xgboost.
+    /// </summary>
+    public string XgboostModelSha256 { get; init; } = string.Empty;
 
     /// <summary>
     /// Tamaño en días de la ventana inicial de consumo para los candidatos.

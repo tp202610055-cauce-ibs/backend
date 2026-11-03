@@ -3,8 +3,8 @@
 Entrena una regresión logística sobre 5 features sintéticas y 3 clases dietéticas
 (0=suggest, 1=reduce, 2=avoid) y la exporta a ONNX con skl2onnx. El modelo es un
 PLACEHOLDER: sus pesos son aleatorios y no tienen validez clínica. Sirve para demostrar
-la infraestructura ONNX end-to-end; Mirian Contreras lo reemplaza dejando su .onnx real en
-el mismo path (o cambiando `Recommendations:OnnxModelPath`), sin cambios de código C#.
+la infraestructura ONNX end-to-end con `Recommendations:EngineKind=Onnx`. No es el modelo real:
+ese es xgboost-sii-v1.2.0, de 10 variables, que corre con `Recommendations:EngineKind=Xgboost`.
 
 Contrato de I/O esperado por `OnnxRecommendationEngine`:
   - Entrada  "input":  tensor float32 [N, 5]  (5 features del contexto del paciente)

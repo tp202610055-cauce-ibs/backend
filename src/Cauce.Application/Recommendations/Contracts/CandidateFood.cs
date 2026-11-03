@@ -16,6 +16,7 @@ namespace Cauce.Application.Recommendations.Contracts;
 /// <param name="PolyolsLevel">Nivel ordinal de polioles (0–2).</param>
 /// <param name="LactoseLevel">Nivel ordinal de lactosa (0–2).</param>
 /// <param name="QuantityGrams">Cantidad promedio consumida, aproximada en gramos.</param>
+/// <param name="FodmapTags">Etiquetas FODMAP separadas por comas, o <see langword="null"/> si no tiene.</param>
 public sealed record CandidateFood(
     Guid FoodId,
     string Name,
@@ -25,4 +26,5 @@ public sealed record CandidateFood(
     byte FructoseLevel,
     byte PolyolsLevel,
     byte LactoseLevel,
-    int QuantityGrams);
+    int QuantityGrams,
+    string? FodmapTags = null);

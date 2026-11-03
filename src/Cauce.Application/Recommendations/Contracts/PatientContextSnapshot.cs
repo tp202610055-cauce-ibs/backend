@@ -2,10 +2,9 @@ namespace Cauce.Application.Recommendations.Contracts;
 
 /// <summary>
 /// Instantánea del contexto clínico del paciente que alimenta al motor de recomendaciones
-/// y al orquestador de explicaciones. Algunos campos (actividad física, tabaquismo, consumo
-/// de alcohol) no tienen origen en el modelo actual de <c>PatientProfile</c> y se completan
-/// con valores neutros por defecto; se conservan para el vector de entrada del futuro modelo
-/// ONNX (ver "Deuda técnica conocida" en CLAUDE.md).
+/// y al orquestador de explicaciones. Actividad física, tabaquismo y consumo de alcohol no tienen
+/// origen en <c>PatientProfile</c> y llevan valores neutros por defecto. El modelo real
+/// xgboost-sii-v1.2.0 no los usa; solo el modelo ficticio de 5 variables lee los dos últimos.
 /// </summary>
 /// <param name="AgeYears">Edad cumplida del paciente.</param>
 /// <param name="Sex">Sexo del paciente ("Masculino" | "Femenino" | "Otro").</param>
