@@ -101,4 +101,11 @@ public interface IRecommendationRepository
     /// <param name="ct">Token de cancelación.</param>
     /// <returns>Tarea que representa la operación asíncrona.</returns>
     Task AddFeedbackAsync(RecommendationFeedback feedback, CancellationToken ct = default);
+
+    /// <summary>
+    /// Prepara el guardado de una recomendación ya rastreada cuyos ítems se reemplazaron: los ítems
+    /// nuevos se registran como inserciones y no como actualizaciones.
+    /// </summary>
+    /// <param name="recommendation">Recomendación modificada.</param>
+    void Update(Recommendation recommendation);
 }

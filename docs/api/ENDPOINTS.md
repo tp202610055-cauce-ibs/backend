@@ -1244,6 +1244,9 @@ texto de la nota (CP048).
 | Rate limit | `default-auth` |
 | Respuestas | **204** · 400 · 404 `recommendation_not_found` · 409 (`conflict_state`, `recommendation_expired`, `idempotency_mismatch`) · 401 · 403 `recommendation_access_denied` · 429 · 500 |
 
+Un `foodId` o `substituteFoodId` que no existe en el catálogo responde 400 `validation_error`, con el mensaje en
+`errors["items[i].foodId"]` o `errors["items[i].substituteFoodId"]`, y la recomendación sigue en revisión.
+
 ### `POST /api/v1/recommendations/manual`
 | Campo | Valor |
 | --- | --- |
