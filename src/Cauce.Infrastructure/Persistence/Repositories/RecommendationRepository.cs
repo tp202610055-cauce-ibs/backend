@@ -151,4 +151,20 @@ public sealed class RecommendationRepository : IRecommendationRepository
     {
         await _context.Set<RecommendationFeedback>().AddAsync(feedback, ct).ConfigureAwait(false);
     }
+
+    /// <inheritdoc />
+    public void Update(Recommendation recommendation)
+    {
+        ArgumentNullException.ThrowIfNull(recommendation);
+
+        // Un ítem nuevo trae su clave desde el dominio: sin marcarlo como alta, EF lo toma por una fila
+        // existente, emite un UPDATE que no afecta filas y el guardado falla por concurrencia.
+        foreach (var item in recommendation.Items)
+        {
+            if (_context.Entry(item).State == EntityState.Detached)
+            {
+                _context.Add(item);
+            }
+        }
+    }
 }
