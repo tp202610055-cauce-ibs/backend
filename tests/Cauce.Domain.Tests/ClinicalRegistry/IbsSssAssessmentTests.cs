@@ -1,3 +1,4 @@
+using System.Globalization;
 using Cauce.Domain.ClinicalRegistry;
 using Cauce.Domain.ClinicalRegistry.Enums;
 using Cauce.Domain.ClinicalRegistry.Exceptions;
@@ -24,6 +25,20 @@ public sealed class IbsSssAssessmentTests
 
         assessment.AssessmentType.Should().Be(AssessmentType.Baseline);
         assessment.NextAssessmentDate.Should().Be(DateOnly.FromDateTime(Now).AddDays(14));
+    }
+
+    [Theory]
+    [InlineData("2026-11-06T02:00:00Z", "2026-11-19")]
+    [InlineData("2026-11-06T04:59:59Z", "2026-11-19")]
+    [InlineData("2026-11-06T05:00:00Z", "2026-11-20")]
+    public void Submit_CompletedAroundUtcMidnight_DatesTheNextAssessmentFromTheLimaDay(string completedAt, string expectedNext)
+    {
+        var utcNow = DateTime.Parse(completedAt, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal);
+
+        var assessment = IbsSssAssessment.Submit(Guid.NewGuid(), PatientId, AssessmentType.Baseline, 0, 50, 50, 50, 50, 50, utcNow);
+
+        assessment.NextAssessmentDate.Should().Be(DateOnly.ParseExact(expectedNext, "yyyy-MM-dd", CultureInfo.InvariantCulture));
+        assessment.CompletedAt.Should().Be(utcNow);
     }
 
     [Fact]
