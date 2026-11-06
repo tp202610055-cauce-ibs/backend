@@ -95,6 +95,30 @@ public sealed class SeedQaProfilesAndLinksTests
     }
 
     [SkippableFact]
+    public async Task SeedQa_ProfileWithoutOnboarding_LeavesItAsASignUpThatOnlySavedTheProfile()
+    {
+        SkipIfUnavailable();
+        await SeedConsentDocumentAsync();
+        var manifest = WriteManifest(new QaManifestBuilder()
+            .Patient("paciente.qa.solo@ejemplo.com")
+            .Case("CP902", ["paciente.qa.solo@ejemplo.com"], """
+                [{"t":"profile","patient":"paciente.qa.solo@ejemplo.com","complete":true,"onboardingCompleted":false,"allergies":[]}]
+                """)
+            .Build());
+
+        (await RunCapturingAsync("seed-qa", "--manifest", manifest)).Should().Be(CommandRunner.Success, CauceLog);
+
+        var (scope, db) = CreateDbScope();
+        using var _ = scope;
+        var patient = await db.Users.AsNoTracking().SingleAsync(user => user.Email == "paciente.qa.solo@ejemplo.com");
+        var profile = await db.PatientProfiles.AsNoTracking().SingleAsync(candidate => candidate.UserId == patient.Id);
+        profile.OnboardingCompleted.Should().BeFalse();
+        (await db.IbsSssSchedules.AnyAsync(schedule => schedule.PatientId == patient.Id)).Should().BeFalse();
+        (await db.IbsSssAssessments.AnyAsync(assessment => assessment.PatientId == patient.Id)).Should().BeFalse();
+        (await RunCapturingAsync("verify-qa", "--manifest", manifest, "CP902")).Should().Be(CommandRunner.Success, CauceLog);
+    }
+
+    [SkippableFact]
     public async Task SeedQa_RunTwice_DoesNotDuplicateProfilesAllergiesOrLinks()
     {
         SkipIfUnavailable();

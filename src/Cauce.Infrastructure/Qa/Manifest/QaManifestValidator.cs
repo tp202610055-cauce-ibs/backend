@@ -129,6 +129,8 @@ public static class QaManifestValidator
                     errors.Add($"{cp}: subtipo desconocido «{profile.Subtype}».");
                 }
 
+                ValidateOnboarding(manifest, cp, profile, errors);
+
                 break;
             case QaLinkSeed link:
                 RequireSeeded(manifest, cp, link.Patient, QaRole.Patient, errors);
@@ -219,6 +221,26 @@ public static class QaManifestValidator
         if (recommendation.Steps.Any(step => string.IsNullOrWhiteSpace(step) || step.Length > RecommendationSteps.MaxLength))
         {
             errors.Add($"{cp}: cada paso debe tener texto y {RecommendationSteps.MaxLength} caracteres como máximo.");
+        }
+    }
+
+    // Sin onboarding solo cabe un perfil guardado y sin línea base: responderla es lo que cierra el onboarding.
+    private static void ValidateOnboarding(QaManifest manifest, string cp, QaProfileSeed profile, List<string> errors)
+    {
+        if (profile.OnboardingCompleted)
+        {
+            return;
+        }
+
+        if (!profile.Complete)
+        {
+            errors.Add($"{cp}: el perfil de {profile.Patient} no está completo y no admite onboardingCompleted.");
+        }
+
+        if (manifest.Cases.SelectMany(testCase => testCase.Seeds).OfType<QaIbsSeed>()
+            .Any(ibs => ibs.Baseline && string.Equals(ibs.Patient, profile.Patient, StringComparison.OrdinalIgnoreCase)))
+        {
+            errors.Add($"{cp}: {profile.Patient} tiene línea base IBS-SSS y su onboarding no puede quedar sin completar.");
         }
     }
 

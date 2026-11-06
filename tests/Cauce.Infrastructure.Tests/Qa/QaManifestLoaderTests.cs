@@ -101,6 +101,46 @@ public sealed class QaManifestLoaderTests
             "Alergia sin catálogo: «Maní».");
     }
 
+    [Theory]
+    [InlineData("""{"t":"profile","patient":"paciente.qa@ejemplo.com","complete":true,"onboardingCompleted":false}""", false)]
+    [InlineData("""{"t":"profile","patient":"paciente.qa@ejemplo.com","complete":true,"onboardingCompleted":true}""", true)]
+    [InlineData("""{"t":"profile","patient":"paciente.qa@ejemplo.com","complete":true}""", true)]
+    public void Parse_ProfileOnboardingFlag_IsReadAndDefaultsToCompleted(string seed, bool expected)
+    {
+        var manifest = QaManifestLoader.Parse(QaTestManifests.Minimal(seeds: $"[{seed}]"));
+
+        manifest.Cases[0].Seeds.OfType<QaProfileSeed>().Single().OnboardingCompleted.Should().Be(expected);
+    }
+
+    [Fact]
+    public void Parse_IncompleteProfileWithoutOnboarding_IsRejected()
+    {
+        var json = QaTestManifests.Minimal(seeds: """
+            [{"t":"profile","patient":"paciente.qa@ejemplo.com","complete":false,"onboardingCompleted":false}]
+            """);
+
+        var act = () => QaManifestLoader.Parse(json);
+
+        act.Should().Throw<QaManifestException>()
+            .Which.Errors.Should().ContainSingle(error => error.Contains("CP900") && error.Contains("onboardingCompleted"));
+    }
+
+    [Fact]
+    public void Parse_ProfileWithoutOnboardingAndABaseline_IsRejected()
+    {
+        var json = QaTestManifests.Minimal(seeds: """
+            [
+              {"t":"profile","patient":"paciente.qa@ejemplo.com","complete":true,"onboardingCompleted":false},
+              {"t":"ibs","patient":"paciente.qa@ejemplo.com","kind":"baseline","score":300,"ago":{"days":3}}
+            ]
+            """);
+
+        var act = () => QaManifestLoader.Parse(json);
+
+        act.Should().Throw<QaManifestException>()
+            .Which.Errors.Should().ContainSingle(error => error.Contains("CP900") && error.Contains("línea base"));
+    }
+
     [Fact]
     public void EngineFoods_RecommendationWithoutFoods_ReducesTheDefaultFood()
     {

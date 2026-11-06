@@ -84,6 +84,50 @@ public sealed class VerifyQaTests
     }
 
     [SkippableFact]
+    public async Task VerifyQa_Cp012Cp013AfterTheBaseline_FailUntilTheyAreResetWithoutOnboarding()
+    {
+        SkipIfUnavailable();
+        string[] patients = ["paciente.base@ejemplo.com", "paciente.base2@ejemplo.com"];
+        (await RunCapturingAsync("verify-qa", "CP012", "CP013")).Should().Be(CommandRunner.Success, CauceLog);
+        await CompleteOnboardingOfAsync(patients);
+
+        var code = await RunCapturingAsync("verify-qa", "CP012", "CP013");
+
+        code.Should().Be(CommandRunner.Failure);
+        CapturedLog.Should().Contain(line => line.Contains("CP012 FALLA") && line.Contains("paciente.base@ejemplo.com ya tiene el onboarding completo y no debe tenerlo"));
+        CapturedLog.Should().Contain(line => line.Contains("CP013 FALLA") && line.Contains("paciente.base2@ejemplo.com ya tiene el onboarding completo y no debe tenerlo"));
+
+        (await RunAsync("reset-qa", "CP012", "CP013")).Should().Be(CommandRunner.Success);
+        (await RunAsync("verify-qa", "CP012", "CP013")).Should().Be(CommandRunner.Success);
+        var (scope, db) = CreateDbScope();
+        using var _ = scope;
+        foreach (var email in patients)
+        {
+            var patient = await db.Users.AsNoTracking().SingleAsync(user => user.Email == email);
+            (await db.PatientProfiles.AsNoTracking().SingleAsync(profile => profile.UserId == patient.Id)).OnboardingCompleted.Should().BeFalse(email);
+            (await db.IbsSssSchedules.AnyAsync(schedule => schedule.PatientId == patient.Id)).Should().BeFalse(email);
+        }
+    }
+
+    [SkippableFact]
+    public async Task VerifyQa_OtherCompleteProfileWithoutOnboarding_StillFails()
+    {
+        SkipIfUnavailable();
+        var (scope, db) = CreateDbScope();
+        using (scope)
+        {
+            var patient = await db.Users.SingleAsync(user => user.Email == "paciente.diario2@ejemplo.com");
+            await db.PatientProfiles.Where(profile => profile.UserId == patient.Id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(profile => profile.OnboardingCompleted, false));
+        }
+
+        var code = await RunCapturingAsync("verify-qa", "CP076");
+
+        code.Should().Be(CommandRunner.Failure);
+        CapturedLog.Should().Contain(line => line.Contains("CP076 FALLA") && line.Contains("paciente.diario2@ejemplo.com no tiene el perfil completo"));
+    }
+
+    [SkippableFact]
     public async Task VerifyQa_PatientWithoutCurrentConsent_Fails()
     {
         SkipIfUnavailable();
@@ -144,6 +188,20 @@ public sealed class VerifyQaTests
         var recommendation = await db.Recommendations.SingleAsync(candidate => candidate.PatientId == patient.Id);
         recommendation.Status.Should().Be(RecommendationStatus.PendingReview);
         recommendation.Approve(nutritionist.Id, "Aprobada durante la prueba.", DateTime.UtcNow);
+        await db.SaveChangesAsync();
+    }
+
+    private async Task CompleteOnboardingOfAsync(IEnumerable<string> emails)
+    {
+        var (scope, db) = CreateDbScope();
+        using var _ = scope;
+        foreach (var email in emails)
+        {
+            var patient = await db.Users.SingleAsync(user => user.Email == email);
+            var profile = await db.PatientProfiles.SingleAsync(candidate => candidate.UserId == patient.Id);
+            profile.CompleteOnboarding(DateTime.UtcNow);
+        }
+
         await db.SaveChangesAsync();
     }
 

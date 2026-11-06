@@ -1,4 +1,7 @@
 using System.Text.Json;
+using Cauce.Domain.ClinicalRegistry;
+using Cauce.Domain.ClinicalRegistry.Enums;
+using Cauce.Domain.Common;
 using Cauce.Infrastructure.Qa;
 using Cauce.Infrastructure.Qa.Manifest;
 using Cauce.Infrastructure.Qa.Seeding;
@@ -59,6 +62,23 @@ public sealed class QaManifestPreconditionTests
     }
 
     [Fact]
+    public void Cp012Cp013_OnlyTheirPatientsSaveTheProfileWithoutOnboardingOrIbsSss()
+    {
+        var manifest = Manifest();
+        string[] patients = ["paciente.base@ejemplo.com", "paciente.base2@ejemplo.com"];
+
+        manifest.Cases.SelectMany(testCase => testCase.Seeds).OfType<QaProfileSeed>()
+            .Where(profile => !profile.OnboardingCompleted)
+            .Select(profile => profile.Patient)
+            .Should().BeEquivalentTo(patients);
+        manifest.FindAccount(patients[0])!.UsedBy.Should().Equal("CP012");
+        manifest.FindAccount(patients[1])!.UsedBy.Should().Equal("CP013");
+        manifest.Cases.SelectMany(testCase => testCase.Seeds)
+            .Where(seed => seed is QaIbsSeed or QaIbsDueSeed or QaIbsInvitationSeed)
+            .Should().NotContain(seed => patients.Contains(seed.ReferencedEmails().First()));
+    }
+
+    [Fact]
     public void Cp036_RecommendationProposesSubstitutesForTheReducedFoods()
     {
         var recommendation = SeedsOf("CP036").OfType<QaRecommendationSeed>().Single();
@@ -97,6 +117,38 @@ public sealed class QaManifestPreconditionTests
         });
         SeedsOf("CP089").OfType<QaGlossarySeed>().Should().ContainSingle()
             .Which.Should().Be(new QaGlossarySeed("disacaridasas", false, null));
+    }
+
+    [Fact]
+    public void Cp070_BaselineOnTheLinkDayAndPeriodicFourteenDaysLaterWithTheSameScores()
+    {
+        var manifest = Manifest();
+        var seeds = SeedsOf("CP070");
+        var periodicScores = new Dictionary<string, int>
+        {
+            ["paciente.vista@ejemplo.com"] = 250,
+            ["paciente.vista2@ejemplo.com"] = 290,
+            ["paciente.vista3@ejemplo.com"] = 270
+        };
+
+        foreach (var (patient, periodicScore) in periodicScores)
+        {
+            manifest.FindAccount(patient)!.UsedBy.Should().Equal("CP070");
+            var link = seeds.OfType<QaLinkSeed>().Single(candidate => candidate.Patient == patient);
+            var baseline = seeds.OfType<QaIbsSeed>().Single(candidate => candidate.Patient == patient && candidate.Baseline);
+            var periodic = seeds.OfType<QaIbsSeed>().Single(candidate => candidate.Patient == patient && !candidate.Baseline);
+
+            link.Since.Should().Be(QaOffset.DaysAgo(20), patient);
+            baseline.Ago.Should().Be(QaOffset.DaysAgo(20), patient);
+            periodic.Ago.Should().Be(QaOffset.DaysAgo(6), patient);
+            baseline.Score.Should().Be(320, patient);
+            periodic.Score.Should().Be(periodicScore, patient);
+
+            var baselineAt = Clock.Resolve(baseline.Ago);
+            var next = IbsSssAssessment.Submit(Guid.NewGuid(), Guid.NewGuid(), AssessmentType.Baseline, 0, 64, 64, 64, 64, 64, baselineAt)
+                .NextAssessmentDate;
+            LimaCalendar.DateOf(Clock.Resolve(periodic.Ago)).Should().Be(next, patient);
+        }
     }
 
     [Fact]

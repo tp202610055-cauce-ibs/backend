@@ -6,8 +6,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Cauce.Infrastructure.Qa.Seeding;
 
 /// <summary>
-/// Perfil clínico con el onboarding terminado y sus alergias declaradas. Un perfil incompleto no se siembra:
-/// el paciente queda sin ningún avance de onboarding guardado. Si el paciente ya tiene perfil, no se toca.
+/// Perfil clínico con sus alergias declaradas y, salvo que el manifiesto diga lo contrario, el onboarding terminado.
+/// Un perfil incompleto no se siembra. Si el paciente ya tiene perfil, no se toca.
 /// </summary>
 public sealed class QaProfileSeedApplier : IQaSeedApplier
 {
@@ -51,7 +51,11 @@ public sealed class QaProfileSeedApplier : IQaSeedApplier
             diagnosisDate: null,
             medications: null,
             now);
-        patientProfile.CompleteOnboarding(now);
+        if (profile.OnboardingCompleted)
+        {
+            patientProfile.CompleteOnboarding(now);
+        }
+
         context.Db.PatientProfiles.Add(patientProfile);
 
         foreach (var allergy in profile.Allergies)
