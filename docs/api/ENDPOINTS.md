@@ -1,6 +1,6 @@
 # Cauce API — Referencia de endpoints
 
-**Versión:** 1.12.0 · **Actualizado:** 2026-10-29 · **Contrato:** [`openapi-v1.10.0.json`](openapi-v1.10.0.json) (399 KB, 78 operaciones, 70 paths)
+**Versión:** 1.12.1 · **Actualizado:** 2026-11-05 · **Contrato:** [`openapi-v1.10.0.json`](openapi-v1.10.0.json) (399 KB, 78 operaciones, 70 paths)
 
 Referencia human-readable de detalle para el equipo frontend (mobile Flutter primero, web-portal React
 después), complementaria a la sección **"Endpoints por rol"** del [`CLAUDE.md`](../../CLAUDE.md) (resumen).
@@ -11,6 +11,17 @@ respuesta semánticos. **El OpenAPI es la fuente de verdad del contrato**; este 
 > el repo, así que los enlaces a `../../CLAUDE.md` solo resuelven en un checkout donde el archivo exista.
 > Para el detalle de los endpoints de identidad, la fuente autoritativa versionada es
 > [`CONTRACT-IDENTITY-v1.md`](CONTRACT-IDENTITY-v1.md) v1.5.1.
+
+**Novedades de la v1.12.1 (contrato v1.10.0, sin cambio de esquema).** Las fechas sin hora siguen el día de
+Lima (acta A79). Ninguna ruta, campo ni esquema cambia.
+- **`nextAssessmentDate`** (`POST /ibs-sss`, `GET /ibs-sss/latest`, `GET /ibs-sss/evolution` y
+  `GET /nutritionists/me/patients/{patientId}/evolution`) es el día de Lima de la respuesta más 14 días. Antes
+  se contaba desde el día UTC: una respuesta entre las 19:00 y las 24:00 de Lima quedaba un día después. Las
+  evaluaciones ya guardadas conservan su fecha.
+- **`pilotStartDate`** (`GET /patients/me/summary`) es el día de Lima de la línea base, del perfil o de la
+  cuenta, con la misma precedencia de antes.
+- La agenda no cambia: `dueDate` sigue a las 00:00 UTC de `nextAssessmentDate` y el 422
+  `ibs_sss_assessment_too_early` aplica la misma regla (`dueDate − 24 h`).
 
 **Novedades de la v1.12.0 (contrato v1.10.0, sin cambio de esquema).** Cambios de comportamiento; ninguna
 ruta, campo ni esquema cambia.
@@ -663,6 +674,9 @@ portal renueva primero y cierra después. Sin cookie responde igual 204.
 > misma forma que `GET /patients/allergies` (`PatientAllergySummary[]`), para que el cliente no
 > mantenga dos modelos del mismo dato; es una lista vacía, nunca `null`.
 
+> **`pilotStartDate`** es un día de Lima: el de la línea base IBS-SSS si existe; si no, el del perfil con el
+> onboarding completo; si no, el de la cuenta (acta A79).
+
 ### `POST /api/v1/patients/me/nutritionist-assignment`
 | Campo | Valor |
 | --- | --- |
@@ -846,6 +860,9 @@ responde 400 de binding sin `errorCode`; con una fecha sin zona o con `to` anter
 > `acceptedFrom` (ISO 8601 UTC) para que el cliente sepa cuándo puede reintentar. No aplica a la línea base
 > ni a un paciente sin agenda abierta. La tolerancia de 24 horas es un valor por defecto pendiente de
 > confirmación clínica (acta A62).
+
+> **`nextAssessmentDate`** es el día de Lima de la respuesta más 14 días (acta A79). La agenda que crea vence
+> a las 00:00 UTC de esa fecha, que en Lima son las 19:00 del día anterior.
 
 ### `GET /api/v1/ibs-sss/evolution`
 | Campo | Valor |

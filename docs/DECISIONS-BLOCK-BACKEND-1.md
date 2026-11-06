@@ -18,7 +18,7 @@ listo 1. El 2026-09-30 se agregó A70, del endurecimiento del registro tras el i
 2026-10-01 la A71, sobre la baja de cuenta en Keycloak. El 2026-10-12 se agregó A72, del bloque
 Backend-Contract-1, el 2026-10-15 la A74, del bloque Backend-Seed-Volume-1, y el 2026-10-19 la A75, del
 bloque Backend-Portal-B1. El 2026-10-21 se agregó A76, del bloque Backend-Deploy-D1, y el 2026-10-24 la A78, del
-bloque D-2c.
+bloque D-2c. El 2026-11-05 se agregó A79, del bloque B-Fechas.
 
 ---
 
@@ -63,6 +63,7 @@ bloque D-2c.
 | [A75](#acta-a75-contrato-del-portal-para-el-bloque-b-1) | Contrato del portal para el bloque B-1 | Propuesta. Implementada en Backend-Portal-B1. Queda abierta la expiración al leer sin evento |
 | [A76](#acta-a76-despliegue-en-una-vm-para-la-certificación-qa) | Despliegue en una VM para la certificación QA | Propuesta. Implementada en Backend-Deploy-D1. Pendiente la verificación en la VM |
 | [A78](#acta-a78-evidencias-y-disparos-a-demanda-para-los-pasos-del-operador-de-qa) | Evidencias y disparos a demanda para los pasos del operador de QA | Propuesta. Implementada en D-2c. Pendiente la medición de memoria en la VM |
+| [A79](#acta-a79-las-fechas-sin-hora-que-ve-el-usuario-siguen-el-día-de-lima) | Las fechas sin hora que ve el usuario siguen el día de Lima | Propuesta. Implementada en B-Fechas. Pendiente el `reset-qa` de los casos afectados tras el despliegue |
 
 ---
 
@@ -3316,5 +3317,84 @@ comandos de barrido dejan el mismo estado que sus workers.
    `RUNBOOK-QA.md`.
 2. Confirmar con `infrastructure` los comandos para apagar y encender la API en CP051 variante B.
 3. CP089 queda declarado como no ejecutable en el documento de entrega.
+
+---
+
+## Acta A79: Las fechas sin hora que ve el usuario siguen el día de Lima
+
+**Estado:** Propuesta. Implementada en B-Fechas. Pendiente el `reset-qa` de los casos afectados tras el despliegue
+**Fecha:** 2026-11-05
+**Aprobado por:** decide Trigo; aprueba Kiwicha
+**Aplicabilidad:** Backend (dominio IBS-SSS, resumen de perfil, reportes y manifiesto de QA). Rama
+`fix/backend-lima-dates`, sobre `31f362e` (tag `v0.22.2-modify-items-fix`).
+
+---
+
+### Contexto
+
+Los instantes se guardan en UTC, y eso no cambia. Dos fechas sin hora se sacaban con el día UTC del instante, y
+entre las 19:00 y las 24:00 de Lima el día UTC ya es el siguiente. En la Prueba 3, con la línea base respondida
+el 30-oct a las 21:55 de Lima, el perfil mostró «Inicio del piloto» 31/10 y el próximo cuestionario quedó para
+el 14-nov en vez del 13-nov. Los reportes ya cortaban el período por día de Lima desde `7eb1cd8`.
+
+Al cruzar la Parte Q con la hoja de casos salieron dos diferencias de datos en el manifiesto de QA:
+
+- CP012 y CP013 piden que el paciente reciba la invitación a la línea base al iniciar sesión. La siembra dejaba
+  el onboarding completo sin línea base, un estado que el flujo real nunca produce, y la app no los invitaba.
+- CP070 pide que el inicio del seguimiento sea la fecha de vinculación (hace 20 días), pero la línea base
+  sembrada era de hace 28 días y el servidor muestra la fecha de la línea base.
+
+### Decisión
+
+1. **`LimaCalendar`** en `Cauce.Domain/Common`: estático y puro, con desfase fijo de -5 h, porque Perú no usa
+   horario de verano. Da el día de Lima de un instante (`DateOf`) y los límites UTC de un día de Lima
+   (`StartOfDayUtc` y `EndOfDayUtc`, exclusivo). `ReportClock` delega en él.
+2. **`nextAssessmentDate`** es el día de Lima de la respuesta más 14 días (`IbsSssAssessment`).
+3. **`pilotStartDate`** es el día de Lima del instante que gana la precedencia, que no cambia: línea base, perfil
+   con onboarding completo o cuenta (M7 de trazabilidad).
+4. **Sin cambio de contrato.** El OpenAPI generado queda igual byte a byte que `openapi-v1.10.0.json`.
+   `ENDPOINTS.md` pasa a la v1.12.1.
+5. **Manifiesto de QA, perfil sin onboarding.** El perfil acepta `onboardingCompleted` (por omisión `true`). Solo
+   `paciente.base` y `paciente.base2` lo llevan en `false`: quedan como un alta real que solo guardó el perfil,
+   sin agenda IBS-SSS. El validador rechaza la marca en un perfil incompleto o en un paciente con línea base
+   sembrada. `verify-qa` exige ese estado en esas dos cuentas y el onboarding completo en los demás perfiles.
+6. **CP070.** En `paciente.vista`, `paciente.vista2` y `paciente.vista3` la línea base pasa a hace 20 días, el día
+   del vínculo, y la periódica a hace 6 días, a los 14 días del ciclo. Los puntajes no cambian.
+
+### Consecuencias
+
+1. **La agenda y la tolerancia no cambian.** `DueDate` sigue a las 00:00 UTC de `nextAssessmentDate`, y el
+   cuestionario se acepta desde `DueDate − 24 h`. Una respuesta entre las 19:00 y las 24:00 deja ahora el ciclo un
+   día antes, igual que una respuesta a las 18:00 del mismo día. La app abre el cuestionario a su medianoche de
+   `nextAssessmentDate`, que es posterior a `acceptedFrom`: no aparecen rechazos nuevos.
+2. **Lo guardado no se recalcula.** Una evaluación respondida en esa franja antes del despliegue conserva su
+   fecha. Lo sembrado se corrige con `reset-qa`, que también rearma CP012, CP013 y CP070 con los datos nuevos.
+   `seed-qa` sobre una cuenta que ya tiene perfil no lo toca.
+3. **Lo que muestra `DueDate` en hora de Lima cae el día anterior a `nextAssessmentDate`:** la «Fecha prevista»
+   de la ficha del portal (`ibs-sss-cycle`), el aviso del día del cuestionario y `inspect-qa --ibs`. La evolución
+   del portal usa `nextAssessmentDate` y muestra el día correcto, que es lo que revisa CP057.
+4. **Quedan con el día UTC, fuera de este bloque:** el «fin no futuro» de los dos validadores de reportes, la edad
+   y el «diagnóstico no futuro» de `PatientProfile`, el fin por omisión del autoreporte (la app siempre envía los
+   dos extremos) y los textos rotulados en UTC de correos, el PDF de consentimiento y el 422 de cuestionario
+   adelantado.
+5. **Siguen cinco definiciones de la hora de Lima:** `LimaCalendar`, `QaClock` y tres copias de
+   `ResolveLimaTimeZone` con `TimeZoneInfo` y respaldo fijo. Coinciden porque Lima no cambia de horario.
+
+### Verificación
+
+En la laptop, con Docker y la suite en secuencial: 1812 pruebas, 27 más que las 1785 de antes del bloque (Domain
+444, Application 417, Infrastructure 364, integración 587), sin fallidas ni omitidas, en 11 minutos. Build sin
+errores y con las 8 advertencias de siempre. Cada arreglo tiene una prueba que falló sin él; las del sembrador y
+del verificador de QA se vieron en rojo revirtiendo a mano esas dos líneas. El OpenAPI generado es idéntico byte a
+byte a `openapi-v1.10.0.json`. Una corrida anterior tardó 67 minutos y falló una prueba ya existente al preparar
+la base (`42P04`, la base ya existía); repetida sola y en la suite completa, pasó.
+
+### Pendientes
+
+1. Tras el despliegue, `reset-qa` de los casos con fechas del cuestionario o del piloto: CP012, CP013, CP030,
+   CP057, CP061, CP070 y CP087.
+2. Decidir si la «Fecha prevista» del portal muestra `nextAssessmentDate` (punto 3 de las consecuencias). Es
+   cosmético y no está en los pasos de ningún CP.
+3. Unificar las definiciones de la hora de Lima.
 
 ---
