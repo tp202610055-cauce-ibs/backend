@@ -178,6 +178,27 @@ public sealed class ClinicalReportDataApiTests
     }
 
     [SkippableFact]
+    public async Task ReportData_PeriodBounds_FollowTheStartAndEndOfTheLimaDay()
+    {
+        SkipIfUnavailable();
+        var patient = await SeedPatientAsync();
+        await SeedPatientProfileAsync(patient.Id);
+        // 01/10 00:00 de Lima es 01/10 05:00 UTC: un segundo antes todavía es 30/09.
+        await SeedMealAsync(patient.Id, new DateTime(2026, 10, 1, 4, 59, 59, DateTimeKind.Utc));
+        await SeedMealAsync(patient.Id, new DateTime(2026, 10, 1, 5, 0, 0, DateTimeKind.Utc));
+        // 05/10 23:59:59 de Lima es 06/10 04:59:59 UTC y entra; 06/10 05:00 UTC ya es 06/10 y queda fuera.
+        await SeedSymptomAsync(patient.Id, SymptomType.Bloating, 40, new DateTime(2026, 10, 6, 4, 59, 59, DateTimeKind.Utc));
+        await SeedSymptomAsync(patient.Id, SymptomType.Nausea, 30, new DateTime(2026, 10, 6, 5, 0, 0, DateTimeKind.Utc));
+
+        var data = await ReadPeriodAsync(patient.Id, new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 5));
+
+        data.PeriodDays.Should().Be(5);
+        data.Meals.Should().ContainSingle().Which.ConsumedAt.Should().Be(new DateTime(2026, 10, 1, 5, 0, 0, DateTimeKind.Utc));
+        data.SymptomEntries.Should().ContainSingle().Which.SymptomType.Should().Be(nameof(SymptomType.Bloating));
+        data.DaysWithRecords.Should().Be(2);
+    }
+
+    [SkippableFact]
     public async Task ReportData_ApprovedRecommendations_CarryFoodsWithActionTheNoteAndManualText()
     {
         SkipIfUnavailable();
