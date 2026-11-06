@@ -4,6 +4,7 @@ using Cauce.Application.Common.Interfaces.Identity;
 using Cauce.Application.Common.Interfaces.Patients;
 using Cauce.Application.Patients.Dtos;
 using Cauce.Application.Patients.Mapping;
+using Cauce.Domain.Common;
 using Cauce.Domain.Identity;
 using Cauce.Domain.Patients.Exceptions;
 using MediatR;
@@ -111,7 +112,7 @@ public sealed class GetMyProfileSummaryQueryHandler : IRequestHandler<GetMyProfi
     /// <summary>
     /// Resuelve la fecha de inicio en el piloto por precedencia explícita: la línea base IBS-SSS si
     /// existe; en su defecto, la creación del perfil si el onboarding está completo; en su defecto, la
-    /// creación de la cuenta.
+    /// creación de la cuenta. La fecha es el día de Lima de ese instante.
     /// </summary>
     private static DateOnly ResolvePilotStartDate(
         DateTime? baselineCompletedAt,
@@ -121,15 +122,15 @@ public sealed class GetMyProfileSummaryQueryHandler : IRequestHandler<GetMyProfi
     {
         if (baselineCompletedAt is not null)
         {
-            return DateOnly.FromDateTime(baselineCompletedAt.Value);
+            return LimaCalendar.DateOf(baselineCompletedAt.Value);
         }
 
         if (onboardingCompleted)
         {
-            return DateOnly.FromDateTime(profileCreatedAt);
+            return LimaCalendar.DateOf(profileCreatedAt);
         }
 
-        return DateOnly.FromDateTime(userCreatedAt);
+        return LimaCalendar.DateOf(userCreatedAt);
     }
 
     /// <summary>

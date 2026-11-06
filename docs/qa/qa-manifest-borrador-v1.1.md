@@ -244,14 +244,14 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 ### CP012 — LÍNEA BASE REGISTRADA EXITOSAMENTE
 *Plataforma:* mobile. *Banderas:* consumido.
 - Cuentas: nutricionista.demo, paciente.base
-- perfil completo paciente.base: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
+- perfil completo paciente.base: 62 kg, 165 cm, SII-D, alergias: ninguna declarada; onboarding **sin completar** y sin agenda IBS-SSS, como un alta real que solo guardó el perfil
 - vínculo paciente.base → nutricionista.demo
 - nota: Sin línea base IBS-SSS todavía.
 
 ### CP013 — BLOQUEO POR CUESTIONARIO INCOMPLETO
 *Plataforma:* mobile. *Banderas:* consumido.
 - Cuentas: paciente.base2
-- perfil completo paciente.base2: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
+- perfil completo paciente.base2: 62 kg, 165 cm, SII-D, alergias: ninguna declarada; onboarding **sin completar** y sin agenda IBS-SSS, como un alta real que solo guardó el perfil
 - nota: Sin línea base IBS-SSS; sin nutricionista.
 
 ### CP014 — AUTENTICACIÓN EXITOSA
@@ -738,16 +738,16 @@ Leyenda de banderas: `consumido` = la prueba gasta el dato (reset-qa antes de re
 - perfil completo paciente.vista: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
 - vínculo paciente.vista → nutricionista.demo desde hace 20 d
 - cuenta paciente.vista: patient, estado **active**, nombre «María Fernanda López Quispe»
-- IBS-SSS baseline paciente.vista: 320 puntos, hace 28 d
-- IBS-SSS periodic paciente.vista: 250 puntos, hace 14 d
+- IBS-SSS baseline paciente.vista: 320 puntos, hace 20 d (el día del vínculo)
+- IBS-SSS periodic paciente.vista: 250 puntos, hace 6 d (14 días después de la línea base)
 - perfil completo paciente.vista2: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
 - vínculo paciente.vista2 → nutricionista.demo desde hace 20 d
-- IBS-SSS baseline paciente.vista2: 320 puntos, hace 28 d
-- IBS-SSS periodic paciente.vista2: 290 puntos, hace 14 d
+- IBS-SSS baseline paciente.vista2: 320 puntos, hace 20 d (el día del vínculo)
+- IBS-SSS periodic paciente.vista2: 290 puntos, hace 6 d (14 días después de la línea base)
 - perfil completo paciente.vista3: 62 kg, 165 cm, SII-D, alergias: ninguna declarada
 - vínculo paciente.vista3 → nutricionista.demo desde hace 20 d
-- IBS-SSS baseline paciente.vista3: 320 puntos, hace 28 d
-- IBS-SSS periodic paciente.vista3: 270 puntos, hace 14 d
+- IBS-SSS baseline paciente.vista3: 320 puntos, hace 20 d (el día del vínculo)
+- IBS-SSS periodic paciente.vista3: 270 puntos, hace 6 d (14 días después de la línea base)
 
 ### CP071 — EDICIÓN DE INFORMACIÓN PERSONAL
 *Plataforma:* mobile. *Banderas:* consumido, operador.

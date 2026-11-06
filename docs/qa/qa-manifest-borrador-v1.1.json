@@ -1434,6 +1434,7 @@
      "t": "profile",
      "patient": "paciente.base@ejemplo.com",
      "complete": true,
+     "onboardingCompleted": false,
      "weightKg": 62,
      "heightCm": 165,
      "subtype": "SII-D",
@@ -1468,6 +1469,7 @@
      "t": "profile",
      "patient": "paciente.base2@ejemplo.com",
      "complete": true,
+     "onboardingCompleted": false,
      "weightKg": 62,
      "heightCm": 165,
      "subtype": "SII-D",
@@ -4449,7 +4451,7 @@
      "kind": "baseline",
      "score": 320,
      "ago": {
-      "days": 28
+      "days": 20
      }
     },
     {
@@ -4458,7 +4460,7 @@
      "kind": "periodic",
      "score": 250,
      "ago": {
-      "days": 14
+      "days": 6
      }
     },
     {
@@ -4484,7 +4486,7 @@
      "kind": "baseline",
      "score": 320,
      "ago": {
-      "days": 28
+      "days": 20
      }
     },
     {
@@ -4493,7 +4495,7 @@
      "kind": "periodic",
      "score": 290,
      "ago": {
-      "days": 14
+      "days": 6
      }
     },
     {
@@ -4519,7 +4521,7 @@
      "kind": "baseline",
      "score": 320,
      "ago": {
-      "days": 28
+      "days": 20
      }
     },
     {
@@ -4528,7 +4530,7 @@
      "kind": "periodic",
      "score": 270,
      "ago": {
-      "days": 14
+      "days": 6
      }
     }
    ]

@@ -27,6 +27,7 @@ public sealed record QaAccountSeed(string Email, QaRole Role, QaAccountStatus St
 
 /// <summary>
 /// Perfil clínico del paciente. Sin <see cref="Complete"/>, el paciente queda sin perfil (onboarding sin empezar).
+/// Con <see cref="OnboardingCompleted"/> en falso queda como un alta real que solo guardó el perfil.
 /// </summary>
 public sealed record QaProfileSeed(
     string Patient,
@@ -34,7 +35,8 @@ public sealed record QaProfileSeed(
     decimal? WeightKg,
     decimal? HeightCm,
     string? Subtype,
-    IReadOnlyList<string> Allergies) : QaSeed
+    IReadOnlyList<string> Allergies,
+    bool OnboardingCompleted) : QaSeed
 {
     /// <inheritdoc />
     public override IEnumerable<string> ReferencedEmails() => [Patient];

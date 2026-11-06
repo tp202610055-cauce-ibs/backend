@@ -159,7 +159,8 @@ public static class QaManifestLoader
                         OptionalDecimal(element, "weightKg"),
                         OptionalDecimal(element, "heightCm"),
                         OptionalString(element, "subtype"),
-                        StringList(element, "allergies", where, errors))
+                        StringList(element, "allergies", where, errors),
+                        OptionalBool(element, "onboardingCompleted") ?? true)
                     : null;
             case "link":
                 return RequiredString(element, "patient", where, errors) is { } linkPatient

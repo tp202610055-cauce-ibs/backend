@@ -72,7 +72,7 @@ public sealed class IbsSssAssessment : Entity, IAggregateRoot
     public DateTime CompletedAt { get; private set; }
 
     /// <summary>
-    /// Fecha sugerida de la próxima evaluación (14 días después), o <see langword="null"/>.
+    /// Fecha sugerida de la próxima evaluación (14 días después del día de Lima en que se completó), o <see langword="null"/>.
     /// </summary>
     public DateOnly? NextAssessmentDate { get; private set; }
 
@@ -106,7 +106,7 @@ public sealed class IbsSssAssessment : Entity, IAggregateRoot
         TotalScore = totalScore;
         SeverityCategory = severityCategory;
         CompletedAt = utcNow;
-        NextAssessmentDate = DateOnly.FromDateTime(utcNow).AddDays(AssessmentIntervalDays);
+        NextAssessmentDate = LimaCalendar.DateOf(utcNow).AddDays(AssessmentIntervalDays);
     }
 
     /// <summary>

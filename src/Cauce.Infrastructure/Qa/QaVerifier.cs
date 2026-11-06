@@ -351,9 +351,15 @@ public sealed class QaVerifier
             return;
         }
 
-        if (profile is not { OnboardingCompleted: true })
+        if (profile is null || (seed.OnboardingCompleted && !profile.OnboardingCompleted))
         {
             problems.Add($"{seed.Patient} no tiene el perfil completo");
+            return;
+        }
+
+        if (!seed.OnboardingCompleted && profile.OnboardingCompleted)
+        {
+            problems.Add($"{seed.Patient} ya tiene el onboarding completo y no debe tenerlo");
             return;
         }
 
